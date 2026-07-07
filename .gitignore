@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+.vite/
+
+# Environment
+.env
+.env.*
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+.idea/
+
+# --- Private project docs ("the juice") — kept OUT of the public repo. ---
+# These live locally and in the private backup repo only. Do not publish.
+CLAUDE.md
+IDEAS.md
+CHECKLIST.md
+checklists/
+.claude/
