@@ -1,19 +1,19 @@
 // On-screen player directions — every interactive beat must show one so the
 // player always knows what to do. Crisp text on a quiet pill near the
 // bottom, with a gentle attention pulse.
-const DPR = Math.min(Math.max(window.devicePixelRatio || 1, 1.5), 3);
+import { GW, GH, TEXT_RES } from '../config.js';
 
 export default class Directions {
   constructor(scene) {
     this.scene = scene;
     this.pill = scene.add.graphics().setDepth(899).setAlpha(0);
     this.text = scene.add
-      .text(scene.scale.width / 2, scene.scale.height - 36, '', {
+      .text(GW / 2, GH - 36, '', {
         fontFamily: "'Segoe UI', system-ui, sans-serif",
         fontSize: '16px',
         color: '#fdf6e3',
         align: 'center',
-        resolution: DPR,
+        resolution: TEXT_RES,
       })
       .setShadow(0, 1, 'rgba(15,12,26,0.9)', 4)
       .setOrigin(0.5)

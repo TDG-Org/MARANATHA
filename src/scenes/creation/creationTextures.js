@@ -23,16 +23,29 @@ export function createCreationTextures(scene) {
     grd.addColorStop(1, '#152c42');
     ctx.fillStyle = grd;
     ctx.fillRect(0, 0, w, h);
-    ctx.fillStyle = 'rgba(136,201,212,0.5)';
-    ctx.fillRect(0, 0, w, 2);
+    // Soft surface glow instead of a hard line.
+    const surf = ctx.createLinearGradient(0, 0, 0, 6);
+    surf.addColorStop(0, 'rgba(136,201,212,0.35)');
+    surf.addColorStop(1, 'rgba(136,201,212,0)');
+    ctx.fillStyle = surf;
+    ctx.fillRect(0, 0, w, 6);
+    // Highlight streaks with feathered ends — reads as light on water, not lines.
     const rnd = new Phaser.Math.RandomDataGenerator(['water']);
-    for (let i = 0; i < 30; i++) {
-      const sx = rnd.between(0, w);
-      const sw = rnd.between(30, 140);
-      const sy = rnd.between(8, h - 6);
-      ctx.fillStyle = `rgba(136,201,212,${rnd.realInRange(0.05, 0.14)})`;
+    const streak = (sx, sy, sw, a) => {
+      const sg = ctx.createLinearGradient(sx, 0, sx + sw, 0);
+      sg.addColorStop(0, 'rgba(136,201,212,0)');
+      sg.addColorStop(0.5, `rgba(136,201,212,${a})`);
+      sg.addColorStop(1, 'rgba(136,201,212,0)');
+      ctx.fillStyle = sg;
       ctx.fillRect(sx, sy, sw, 2);
-      if (sx + sw > w) ctx.fillRect(sx - w, sy, sw, 2); // wrap for seamless tiling
+    };
+    for (let i = 0; i < 16; i++) {
+      const sx = rnd.between(0, w);
+      const sw = rnd.between(50, 170);
+      const sy = rnd.between(10, h - 8);
+      const a = rnd.realInRange(0.04, 0.09);
+      streak(sx, sy, sw, a);
+      if (sx + sw > w) streak(sx - w, sy, sw, a); // wrap for seamless tiling
     }
     canvas.refresh();
   }
@@ -58,18 +71,6 @@ export function createCreationTextures(scene) {
       ctx.fillStyle = grd;
       ctx.fillRect(x - r, y - r, r * 2, r * 2);
     }
-    canvas.refresh();
-  }
-
-  // --- Soft-edged darkness strip (Day 1: darkness swept aside by light).
-  if (!t.exists('dark-edge')) {
-    const canvas = t.createCanvas('dark-edge', 256, 2);
-    const ctx = canvas.getContext();
-    const grd = ctx.createLinearGradient(0, 0, 256, 0);
-    grd.addColorStop(0, 'rgba(2,2,6,0)');
-    grd.addColorStop(1, 'rgba(2,2,6,1)');
-    ctx.fillStyle = grd;
-    ctx.fillRect(0, 0, 256, 2);
     canvas.refresh();
   }
 
@@ -172,29 +173,37 @@ export function createCreationTextures(scene) {
     gr.destroy();
   }
 
-  // --- Adam.
+  // --- Adam. Larger than the animals, with a faint warm rim so he reads
+  // clearly against the dark ground (he is the image of God, after all).
   if (!t.exists('adam-lying')) {
     const gr = g(scene);
     gr.fillStyle(SIL, 1);
-    gr.fillCircle(7, 9, 5);
-    gr.fillRoundedRect(13, 5, 36, 8, 4);
-    gr.generateTexture('adam-lying', 52, 16);
+    gr.fillCircle(9, 12, 6.5);
+    gr.fillRoundedRect(16, 7, 46, 10, 5);
+    gr.lineStyle(1.5, 0xf5e6c4, 0.35);
+    gr.strokeCircle(9, 12, 6.5);
+    gr.strokeRoundedRect(16, 7, 46, 10, 5);
+    gr.generateTexture('adam-lying', 66, 22);
     gr.destroy();
   }
   if (!t.exists('adam-standing')) {
     const gr = g(scene);
     gr.fillStyle(SIL, 1);
-    gr.fillCircle(12, 6, 5.5);
+    gr.fillCircle(13, 7, 6);
     // shoulders + torso tapering to the waist
-    gr.fillRoundedRect(6, 13, 12, 7, 3);
-    gr.fillRoundedRect(7.5, 16, 9, 16, 4);
+    gr.fillRoundedRect(6.5, 14, 13, 8, 3);
+    gr.fillRoundedRect(8, 18, 10, 17, 4);
     // arms
-    gr.fillRoundedRect(4.5, 15, 2.6, 14, 1.3);
-    gr.fillRoundedRect(16.9, 15, 2.6, 14, 1.3);
+    gr.fillRoundedRect(4.5, 16, 2.8, 15, 1.4);
+    gr.fillRoundedRect(18.7, 16, 2.8, 15, 1.4);
     // legs
-    gr.fillRoundedRect(8, 31, 3.6, 19, 1.8);
-    gr.fillRoundedRect(12.6, 31, 3.6, 19, 1.8);
-    gr.generateTexture('adam-standing', 24, 52);
+    gr.fillRoundedRect(8.5, 34, 3.8, 20, 1.9);
+    gr.fillRoundedRect(13.7, 34, 3.8, 20, 1.9);
+    // warm rim
+    gr.lineStyle(1.5, 0xf5e6c4, 0.3);
+    gr.strokeCircle(13, 7, 6);
+    gr.strokeRoundedRect(6.5, 14, 13, 8, 3);
+    gr.generateTexture('adam-standing', 26, 56);
     gr.destroy();
   }
 
@@ -209,17 +218,21 @@ export function createCreationTextures(scene) {
     gr.generateTexture('fish', 30, 18);
     gr.destroy();
   }
-  if (!t.exists('bird')) {
-    const gr = g(scene);
-    gr.lineStyle(2.5, 0x241f38, 1);
-    gr.beginPath();
-    gr.moveTo(1, 10);
-    gr.lineTo(6, 6);
-    gr.lineTo(13, 4);
-    gr.lineTo(20, 6);
-    gr.lineTo(25, 10);
-    gr.strokePath();
-    gr.generateTexture('bird', 26, 14);
-    gr.destroy();
-  }
+  ensureBirdTexture(scene);
+}
+
+// Shared with the home page (birds drift across its sky too).
+export function ensureBirdTexture(scene) {
+  if (scene.textures.exists('bird')) return;
+  const gr = g(scene);
+  gr.lineStyle(2.5, 0x241f38, 1);
+  gr.beginPath();
+  gr.moveTo(1, 10);
+  gr.lineTo(6, 6);
+  gr.lineTo(13, 4);
+  gr.lineTo(20, 6);
+  gr.lineTo(25, 10);
+  gr.strokePath();
+  gr.generateTexture('bird', 26, 14);
+  gr.destroy();
 }

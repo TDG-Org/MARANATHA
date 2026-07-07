@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { GW, GH } from '../config.js';
 
 // Generates every shared procedural texture, then routes to the right scene.
 // MARANATHA ships zero image assets — all textures are made in code (see art-style skill).
@@ -10,6 +11,7 @@ export default class BootScene extends Phaser.Scene {
   create() {
     this.makeGlow('glow', 128);
     this.makeGlow('dot', 16);
+    this.makeVignette();
     this.scene.start(this.pickStartScene());
   }
 
@@ -31,6 +33,19 @@ export default class BootScene extends Phaser.Scene {
     grd.addColorStop(1, 'rgba(255,255,255,0)');
     ctx.fillStyle = grd;
     ctx.fillRect(0, 0, size, size);
+    canvas.refresh();
+  }
+
+  // Gentle darkened corners — adds depth and pulls the eye to the scene.
+  makeVignette() {
+    if (this.textures.exists('vignette')) return;
+    const canvas = this.textures.createCanvas('vignette', GW, GH);
+    const ctx = canvas.getContext();
+    const grd = ctx.createRadialGradient(GW / 2, GH / 2, GH * 0.42, GW / 2, GH / 2, GW * 0.62);
+    grd.addColorStop(0, 'rgba(8,6,16,0)');
+    grd.addColorStop(1, 'rgba(8,6,16,0.4)');
+    ctx.fillStyle = grd;
+    ctx.fillRect(0, 0, GW, GH);
     canvas.refresh();
   }
 }

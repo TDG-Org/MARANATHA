@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { GW, GH } from '../config.js';
 
 let skyCounter = 0;
 
@@ -17,7 +18,7 @@ export default class GradientSky {
       .image(0, 0, this.key)
       .setOrigin(0, 0)
       .setDepth(depth);
-    this.image.setDisplaySize(scene.scale.width, scene.scale.height);
+    this.image.setDisplaySize(GW, GH);
 
     scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.destroy());
   }

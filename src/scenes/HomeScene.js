@@ -3,9 +3,11 @@ import GradientSky from '../systems/GradientSky.js';
 import ParallaxGroup from '../systems/Parallax.js';
 import { STORIES } from '../data/stories.js';
 import { statusOf, resetProgress } from '../systems/SaveSystem.js';
-import { Audio, attachAudioToggle } from '../systems/AudioSystem.js';
+import { Audio, attachVolumeControl } from '../systems/AudioSystem.js';
+import { GW, GH, TEXT_RES, setupCamera } from '../config.js';
+import { ensureBirdTexture } from './creation/creationTextures.js';
 
-const DPR = Math.min(Math.max(window.devicePixelRatio || 1, 1.5), 3);
+const DPR = TEXT_RES;
 
 // The story-path map: Creation → The Fall → Noah's Ark → Joseph.
 // Nodes show done ✓ / current (pulsing light) / locked 🔒; selecting a node
@@ -23,8 +25,9 @@ export default class HomeScene extends Phaser.Scene {
   }
 
   create() {
-    const W = this.scale.width;
-    const H = this.scale.height;
+    setupCamera(this);
+    const W = GW;
+    const H = GH;
 
     this.sky = new GradientSky(this, 0xf2b880, 0xffe9c9);
     this.add
@@ -38,19 +41,40 @@ export default class HomeScene extends Phaser.Scene {
     this.parallax = new ParallaxGroup(this);
     this.parallax.addRidge({
       key: 'home-ridge-far',
-      texture: { height: 260, color: 0x8a7f9e, baseline: 90, waves: [[1, 42], [2, 22], [5, 8]], seed: 5 },
-      y: H - 260, speed: 0.05, depth: 1, alpha: 0.8,
+      texture: { height: 300, color: 0x8a7f9e, baseline: 105, waves: [[1, 56], [2, 26], [5, 9]], seed: 5 },
+      y: H - 300, speed: 0.05, depth: 1, alpha: 0.8, k: 4,
     });
     this.parallax.addRidge({
       key: 'home-ridge-mid',
-      texture: { height: 210, color: 0x655a80, baseline: 74, waves: [[2, 34], [4, 15], [8, 6]], seed: 6 },
-      y: H - 210, speed: 0.11, depth: 2, alpha: 0.88,
+      texture: { height: 220, color: 0x655a80, baseline: 78, waves: [[2, 38], [4, 16], [8, 6]], seed: 6 },
+      y: H - 220, speed: 0.11, depth: 2, alpha: 0.88, k: 8,
     });
     this.parallax.addRidge({
       key: 'home-ridge-near',
       texture: { height: 170, color: 0x322a4e, baseline: 60, waves: [[2, 28], [5, 12], [9, 5]], seed: 8 },
-      y: H - 170, speed: 0.18, depth: 3, alpha: 0.95,
+      y: H - 170, speed: 0.18, depth: 3, alpha: 0.95, k: 14,
     });
+
+    // Birds drift across the sky now and then — the world feels lived-in.
+    ensureBirdTexture(this);
+    this.homeBirds = [];
+    const flyby = () => {
+      const fromLeft = Math.random() < 0.5;
+      const baseY = Phaser.Math.Between(110, 210);
+      const count = Phaser.Math.Between(3, 5);
+      for (let i = 0; i < count; i++) {
+        const b = this.add.image(
+          fromLeft ? -30 - i * 26 : W + 30 + i * 26,
+          baseY + Phaser.Math.Between(-16, 16),
+          'bird',
+        ).setDepth(2).setAlpha(0.8).setScale(Phaser.Math.FloatBetween(0.7, 1)).setFlipX(!fromLeft);
+        b.vx = (fromLeft ? 1 : -1) * Phaser.Math.FloatBetween(0.7, 1.05);
+        b.flapSeed = Math.random() * 10;
+        this.homeBirds.push(b);
+      }
+      this.time.delayedCall(Phaser.Math.Between(9000, 19000), flyby);
+    };
+    this.time.delayedCall(Phaser.Math.Between(2500, 6000), flyby);
 
     this.add
       .particles(0, 0, 'dot', {
@@ -87,7 +111,8 @@ export default class HomeScene extends Phaser.Scene {
       .setAlpha(0.6)
       .setDepth(10);
 
-    attachAudioToggle(this);
+    this.add.image(0, 0, 'vignette').setOrigin(0).setDepth(880).setAlpha(0.4);
+    attachVolumeControl(this);
     this.drawPath();
     this.buildNodes();
     this.buildPreviewPanel();
@@ -175,13 +200,14 @@ export default class HomeScene extends Phaser.Scene {
       this.add
         .text(x, y + 42, story.title, {
           fontFamily: "Georgia, 'Times New Roman', serif",
-          fontSize: '15px',
+          fontSize: '16px',
           color: '#fdf6e3',
           align: 'center',
           resolution: DPR,
         })
+        .setShadow(0, 1, 'rgba(20,16,33,0.8)', 4)
         .setOrigin(0.5)
-        .setAlpha(status === 'locked' ? 0.5 : 0.9)
+        .setAlpha(status === 'locked' ? 0.6 : 0.95)
         .setDepth(7);
 
       const hit = this.add
@@ -196,7 +222,7 @@ export default class HomeScene extends Phaser.Scene {
   }
 
   buildPreviewPanel() {
-    const W = this.scale.width;
+    const W = GW;
     this.panel = this.add.container(W / 2, 448).setDepth(20);
 
     const bg = this.add.graphics();
@@ -319,7 +345,24 @@ export default class HomeScene extends Phaser.Scene {
     });
   }
 
-  update(_, delta) {
+  update(time, delta) {
     this.parallax.update(delta);
+
+    // Gentle pointer depth-shift + passing birds.
+    const p = this.input.activePointer;
+    const nx = Phaser.Math.Clamp((p.worldX - GW / 2) / (GW / 2), -1, 1);
+    this.parallax.pointerShift(nx, delta);
+
+    const f = delta / 16.667;
+    for (let i = this.homeBirds.length - 1; i >= 0; i--) {
+      const b = this.homeBirds[i];
+      b.x += b.vx * f;
+      b.y += Math.sin(time * 0.002 + b.flapSeed) * 0.12 * f;
+      b.scaleY = (0.65 + Math.abs(Math.sin(time * 0.011 + b.flapSeed)) * 0.5) * b.scaleX;
+      if (b.x < -60 || b.x > GW + 60) {
+        b.destroy();
+        this.homeBirds.splice(i, 1);
+      }
+    }
   }
 }

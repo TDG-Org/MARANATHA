@@ -1,3 +1,5 @@
+import { GW, GH } from '../config.js';
+
 // Soft full-screen veil for beat/day transitions — never a hard cut.
 // Fades a colored cover in, runs `onHold` (swap world state while hidden),
 // holds, fades out. Resolves when fully clear again.
@@ -11,7 +13,7 @@ export function veil(scene, {
 } = {}) {
   return new Promise((resolve) => {
     const cover = scene.add
-      .rectangle(0, 0, scene.scale.width, scene.scale.height, color)
+      .rectangle(0, 0, GW, GH, color)
       .setOrigin(0)
       .setAlpha(0)
       .setDepth(950);

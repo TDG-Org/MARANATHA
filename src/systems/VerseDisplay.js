@@ -1,16 +1,15 @@
 import { Narrator } from './Narrator.js';
+import { GW, TEXT_RES } from '../config.js';
 
 // Scripture on screen — required on every beat, game-wide (see
 // scripture-accuracy skill). Rendered at device-pixel resolution (no blur),
 // on a soft dark panel so it stays legible over bright skies, and read
 // aloud by the narrator: show() resolves only after the full verse has
 // been read, so beats never advance mid-verse.
-const DPR = Math.min(Math.max(window.devicePixelRatio || 1, 1.5), 3);
-
 export default class VerseDisplay {
   constructor(scene) {
     this.scene = scene;
-    const W = scene.scale.width;
+    const W = GW;
     this.panel = scene.add.graphics().setDepth(899).setAlpha(0);
     this.text = scene.add
       .text(W / 2, 34, '', {
@@ -21,7 +20,7 @@ export default class VerseDisplay {
         align: 'center',
         wordWrap: { width: 680 },
         lineSpacing: 5,
-        resolution: DPR,
+        resolution: TEXT_RES,
       })
       .setShadow(0, 1, 'rgba(15,12,26,0.9)', 5)
       .setOrigin(0.5, 0)
@@ -33,7 +32,7 @@ export default class VerseDisplay {
         fontSize: '12px',
         color: '#f5e6c4',
         letterSpacing: 3,
-        resolution: DPR,
+        resolution: TEXT_RES,
       })
       .setShadow(0, 1, 'rgba(15,12,26,0.9)', 4)
       .setOrigin(0.5, 0)
@@ -42,7 +41,7 @@ export default class VerseDisplay {
   }
 
   redrawPanel() {
-    const W = this.scene.scale.width;
+    const W = GW;
     const w = Math.max(this.text.width, this.ref.width) + 56;
     const h = this.text.height + this.ref.height + 34;
     this.panel.clear();

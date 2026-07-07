@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import GradientSky from '../systems/GradientSky.js';
 import ParallaxGroup from '../systems/Parallax.js';
+import { GW, GH, setupCamera } from '../config.js';
 
 // Phase 1 proof scene: the Alto's Adventure pipeline.
 // Gradient sky (tweening through moods) + 3 sliding silhouette layers +
@@ -18,8 +19,9 @@ export default class ParallaxTestScene extends Phaser.Scene {
   }
 
   create() {
-    const W = this.scale.width;
-    const H = this.scale.height;
+    setupCamera(this);
+    const W = GW;
+    const H = GH;
 
     this.sky = new GradientSky(this, MOODS[0].top, MOODS[0].bottom);
 
