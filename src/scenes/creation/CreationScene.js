@@ -7,6 +7,8 @@ import Directions from '../../systems/Directions.js';
 import { veil } from '../../systems/Transitions.js';
 import { VERSES as V } from '../../data/verses.js';
 import { completeStory } from '../../systems/SaveSystem.js';
+import { Audio, attachAudioToggle } from '../../systems/AudioSystem.js';
+import { Narrator } from '../../systems/Narrator.js';
 import { createCreationTextures } from './creationTextures.js';
 
 // CREATION — Genesis 1–2, seven days in one persistent world so each day's
@@ -54,10 +56,14 @@ export default class CreationScene extends Phaser.Scene {
     this.sky = new GradientSky(this, ...SKY.void);
 
     this.stars = [];
-    this.sun = this.add.image(W * 0.7, H + 90, 'glow')
-      .setScale(2.6).setTint(0xfff3d6).setBlendMode(Phaser.BlendModes.ADD).setDepth(-60).setVisible(false);
-    this.moon = this.add.image(W * 0.3, H + 80, 'glow')
-      .setScale(1.5).setTint(0xd8e0f0).setBlendMode(Phaser.BlendModes.ADD).setDepth(-58).setVisible(false);
+    // Layered lights (tight bright core + faint wide halo) instead of one
+    // big blob — keeps the sky luminous without washing out text or world.
+    this.sun = this.makeLight(W * 0.7, H + 90, {
+      core: 1.15, halo: 2.6, coreAlpha: 0.95, haloAlpha: 0.28, depth: -60,
+    }).setVisible(false);
+    this.moon = this.makeLight(W * 0.3, H + 80, {
+      coreTint: 0xdfe6f5, haloTint: 0xd8e0f0, core: 0.7, halo: 1.5, coreAlpha: 0.85, haloAlpha: 0.2, depth: -58,
+    }).setVisible(false);
 
     this.clouds = [];
 
@@ -80,8 +86,9 @@ export default class CreationScene extends Phaser.Scene {
     this.birdTarget = new Phaser.Math.Vector2(W / 2, 150);
 
     // God's light — always from ABOVE, never the player's.
-    this.godLight = this.add.image(W / 2, -180, 'glow')
-      .setScale(4.4).setTint(0xfff3d6).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0).setDepth(600);
+    this.godLight = this.makeLight(W / 2, -180, {
+      core: 2.1, halo: 4.6, coreAlpha: 0.5, haloAlpha: 0.22, depth: 600,
+    }).setAlpha(0);
 
     // --- UI systems -------------------------------------------------------
     this.verse = new VerseDisplay(this);
@@ -94,8 +101,24 @@ export default class CreationScene extends Phaser.Scene {
     this.walking = false;
     this.walkDist = 0;
 
+    attachAudioToggle(this);
+    Audio.ambience({ wind: 0.1, water: 0, night: 0, birds: 0 }, 1);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      Audio.setBirds(0);
+      Narrator.cancel();
+    });
+
     this.cameras.main.fadeIn(900, 0, 0, 0);
     this.runStory();
+  }
+
+  // Tight core + wide faint halo, grouped so position/alpha/scale tweens
+  // treat it as one light.
+  makeLight(x, y, { coreTint = 0xfff3d6, haloTint = 0xfff3d6, core = 1, halo = 2.4, coreAlpha = 0.9, haloAlpha = 0.3, depth = 0 } = {}) {
+    const c = this.add.container(x, y).setDepth(depth);
+    c.add(this.add.image(0, 0, 'glow').setScale(halo).setTint(haloTint).setAlpha(haloAlpha).setBlendMode(Phaser.BlendModes.ADD));
+    c.add(this.add.image(0, 0, 'glow').setScale(core).setTint(coreTint).setAlpha(coreAlpha).setBlendMode(Phaser.BlendModes.ADD));
+    return c;
   }
 
   // =========================================================================
@@ -123,18 +146,21 @@ export default class CreationScene extends Phaser.Scene {
     darkness.add([edge, slab]);
 
     // "Let there be light" — the light descends from above, God's alone.
+    Audio.godChord();
     const versePromise = this.verse.show(V.gen_1_3, { hold: 600 });
     await this.tweenP({
       targets: this.godLight,
       y: 25,
       alpha: 1,
-      scale: 6.5,
+      scale: 1.35,
       duration: 2800,
       ease: 'Sine.easeOut',
     });
     await versePromise;
 
     // Light fills and sweeps the darkness aside — animated by God, not the user.
+    Audio.swellBright();
+    Audio.rumble(2.6);
     this.sky.tweenTo(...SKY.firstLight, { duration: 3200 });
     this.tweenSeaTint(0x2a4258, 3200);
     await this.tweenP({
@@ -144,11 +170,12 @@ export default class CreationScene extends Phaser.Scene {
       ease: 'Sine.easeInOut',
     });
     darkness.destroy();
+    Audio.ambience({ wind: 0.2 });
 
     await this.verse.show(V.gen_1_4, { hold: 2400 });
 
     // The light settles into a constant presence above the world.
-    this.tweenP({ targets: this.godLight, alpha: 0.22, scale: 4.4, duration: 1600, ease: 'Sine.easeInOut' });
+    this.tweenP({ targets: this.godLight, alpha: 0.28, scale: 1, duration: 1600, ease: 'Sine.easeInOut' });
 
     await this.sealDay(V.gen_1_5, '— Day One —');
     await veil(this, {
@@ -158,6 +185,7 @@ export default class CreationScene extends Phaser.Scene {
         // stays smooth as the veil lifts back off it.
         this.sky.tweenTo(...SKY.day2dim, { duration: 900 });
         this.tweenSeaTint(0x7e94a6, 900);
+        Audio.ambience({ water: 0.3, wind: 0.25 });
       },
     });
   }
@@ -171,6 +199,8 @@ export default class CreationScene extends Phaser.Scene {
     this.directions.hide();
 
     // Waters below settle; waters above become the clouds of the vault.
+    Audio.whooshUp();
+    Audio.splash();
     this.tweenP({ targets: this.sea, y: 300, duration: 3000, ease: 'Sine.easeInOut' });
     this.tweenSeaTint(0xffffff, 3000);
     this.sky.tweenTo(...SKY.day2, { duration: 3200 });
@@ -198,11 +228,14 @@ export default class CreationScene extends Phaser.Scene {
     this.directions.hide();
 
     // The seas gather; the dry land rises like Alto ridgelines.
+    Audio.whooshDown();
+    Audio.rumble(3);
     this.tweenP({ targets: this.sea, y: SEA_TOP, duration: 3000, ease: 'Sine.easeInOut' });
     this.sky.tweenTo(...SKY.day3, { duration: 3200 });
     this.tweens.add({ targets: this.ridgeFar, y: 240, duration: 2600, ease: 'Cubic.easeOut' });
     this.tweens.add({ targets: this.ridgeMid, y: 300, duration: 2800, delay: 220, ease: 'Cubic.easeOut' });
     await this.tweenP({ targets: this.ridgeGround, y: 350, duration: 3000, delay: 420, ease: 'Cubic.easeOut' });
+    Audio.ambience({ water: 0.25, wind: 0.3 });
 
     await Promise.all([this.godSpeak(), this.verse.show(V.gen_1_11, { hold: 2300 })]);
 
@@ -233,6 +266,7 @@ export default class CreationScene extends Phaser.Scene {
     this.directions.show('Tap the sky — bring up the sun.');
     await this.waitForTap();
     this.directions.hide();
+    Audio.swellBright();
     this.sun.setVisible(true);
     this.sky.tweenTo(...SKY.golden, { duration: 2800 });
     await this.tweenP({ targets: this.sun, y: 170, duration: 2600, ease: 'Cubic.easeOut' });
@@ -240,6 +274,8 @@ export default class CreationScene extends Phaser.Scene {
     this.directions.show('Tap again — bring up the moon.');
     await this.waitForTap();
     this.directions.hide();
+    Audio.swellSoft();
+    Audio.ambience({ night: 0.35, wind: 0.15, birds: 0 });
     this.moon.setVisible(true);
     this.sky.tweenTo(...SKY.night, { duration: 3000 });
     this.tweenSeaTint(0x8898b8, 3000);
@@ -251,6 +287,7 @@ export default class CreationScene extends Phaser.Scene {
     let starCount = 0;
     while (starCount < 20) {
       await this.waitForTap();
+      Audio.sparkle(5);
       this.addStars(5);
       starCount += 5;
       this.directions.set(`Tap the night sky — fill it with stars.  (${starCount}/20)`);
@@ -271,6 +308,7 @@ export default class CreationScene extends Phaser.Scene {
         this.sky.tweenTo(...SKY.dayBlue, { duration: 500 });
         this.tweenSeaTint(0xffffff, 600);
         this.clouds.forEach((c) => this.tweens.add({ targets: c, alpha: 0.7, duration: 700, ease: 'Sine.easeOut' }));
+        Audio.ambience({ night: 0, birds: 0.3, wind: 0.25, water: 0.3 });
       },
     });
     this.stars.forEach((s) => { this.tweens.killTweensOf(s); s.destroy(); });
@@ -282,6 +320,7 @@ export default class CreationScene extends Phaser.Scene {
     await Promise.all([this.godSpeak(), this.verse.show(V.gen_1_20, { hold: 2500 })]);
 
     // Fish first: they follow the player's hand through the sea.
+    Audio.splash();
     for (let i = 0; i < 8; i++) {
       const f = this.add.sprite(Phaser.Math.Between(80, this.W - 80), Phaser.Math.Between(420, 510), 'fish')
         .setAlpha(0).setDepth(4.2).setScale(Phaser.Math.FloatBetween(1.0, 1.5));
@@ -297,6 +336,8 @@ export default class CreationScene extends Phaser.Scene {
     this.fishFollow = false;
 
     // Then the birds swirl into the open sky.
+    Audio.chirp(0.8);
+    Audio.ambience({ birds: 0.45 });
     for (let i = 0; i < 8; i++) {
       const b = this.add.sprite(-30 - i * 26, Phaser.Math.Between(90, 220), 'bird')
         .setDepth(2.5).setScale(Phaser.Math.FloatBetween(0.8, 1.15));
@@ -348,8 +389,10 @@ export default class CreationScene extends Phaser.Scene {
     this.directions.hide();
 
     // The breath of life (Gen 2:7) — shown as the verse itself.
+    Audio.breath();
+    Audio.godChord();
     const versePromise = this.verse.show(V.gen_2_7, { hold: 2400 });
-    this.burst(ax, GROUND_Y - 20, 26, 0xfff3d6);
+    this.burst(ax, GROUND_Y - 20, 22, 0xfff3d6);
     this.adam = this.add.image(ax, GROUND_Y, 'adam-standing').setOrigin(0.5, 1).setAlpha(0).setDepth(3.5);
     this.tweens.add({ targets: this.adamLying, alpha: 0, duration: 900, ease: 'Sine.easeIn' });
     this.tweens.add({ targets: this.adam, alpha: 1, duration: 1200, ease: 'Sine.easeOut' });
@@ -370,6 +413,7 @@ export default class CreationScene extends Phaser.Scene {
 
   // --- DAY 7 — REST. A 2.5D parallax walk through everything God made. ----
   async day7() {
+    Audio.ambience({ birds: 0.5, water: 0.3, wind: 0.35 });
     await this.verse.show(V.gen_2_2, { hold: 2800 });
     this.directions.show('Walk through God’s creation — hold →, D, or the right side of the screen.');
 
@@ -382,11 +426,14 @@ export default class CreationScene extends Phaser.Scene {
     this.directions.hide();
 
     await this.verse.show(V.gen_2_3, { hold: 3000 });
+    Audio.swellSoft();
+    Audio.ambience({ birds: 0.2, wind: 0.15, water: 0.15 });
 
     // A warm stillness settles over the finished world.
     const warm = this.add.rectangle(0, 0, this.W, this.H, 0xfff3d6).setOrigin(0).setAlpha(0).setDepth(850);
     this.tweens.add({ targets: warm, alpha: 0.55, duration: 2200, ease: 'Sine.easeInOut' });
 
+    Audio.bell();
     await this.dialogue.show('Creation complete.', { hold: 2300 });
     completeStory('creation');
     await this.dialogue.show('A new story has been unlocked on the path.', { hold: 2000 });
@@ -402,6 +449,7 @@ export default class CreationScene extends Phaser.Scene {
   // =========================================================================
   plantTree(x) {
     this.ripple(x, GROUND_Y - 6);
+    Audio.pluck(380 + Math.random() * 260);
     const key = this.groundProps.length % 2 === 0 ? 'tree-pine' : 'tree-round';
     const tree = this.add.image(x + Phaser.Math.Between(-8, 8), GROUND_Y + 2, key)
       .setOrigin(0.5, 1).setScale(0);
@@ -409,22 +457,43 @@ export default class CreationScene extends Phaser.Scene {
     this.tweens.add({
       targets: tree,
       scale: Phaser.Math.FloatBetween(0.8, 1.2),
-      duration: 900,
+      duration: 1000,
       ease: 'Back.easeOut',
+      easeParams: [1.15], // gentle settle, not a bouncy pop
     });
   }
 
   plantGrass(x) {
+    Audio.pluck(720 + Math.random() * 220);
     const tuft = this.add.image(x, GROUND_Y + 3, 'grass').setOrigin(0.5, 1).setScale(0);
     this.groundProps.add(tuft);
-    this.tweens.add({ targets: tuft, scale: 1, duration: 500, ease: 'Back.easeOut' });
+    this.tweens.add({ targets: tuft, scale: 1, duration: 550, ease: 'Back.easeOut', easeParams: [1.15] });
   }
 
   spawnAnimal(kind, x) {
     this.ripple(x, GROUND_Y - 10);
+    Audio.thump();
     const a = this.add.image(x, GROUND_Y + 2, kind).setOrigin(0.5, 1).setScale(0);
     this.groundProps.add(a);
-    this.tweens.add({ targets: a, scale: 1, duration: 700, ease: 'Back.easeOut' });
+    this.tweens.add({
+      targets: a,
+      scale: 1,
+      duration: 750,
+      ease: 'Back.easeOut',
+      easeParams: [1.15],
+      onComplete: () => {
+        if (!a.active) return;
+        // Quiet idle breathing so the creatures feel alive.
+        this.tweens.add({
+          targets: a,
+          scaleY: 1.035,
+          duration: Phaser.Math.Between(1500, 2200),
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.easeInOut',
+        });
+      },
+    });
     // Gentle wandering, flipping to face the way it moves.
     const wander = () => {
       if (!a.active) return;
@@ -452,9 +521,10 @@ export default class CreationScene extends Phaser.Scene {
       this.tweens.add({
         targets: s,
         scale: Phaser.Math.FloatBetween(0.28, 0.55),
-        duration: 500,
+        duration: 550,
         delay: i * 70,
         ease: 'Back.easeOut',
+        easeParams: [1.3],
         onComplete: () => {
           this.tweens.add({
             targets: s,
@@ -481,13 +551,14 @@ export default class CreationScene extends Phaser.Scene {
   // God's action + small effects
   // =========================================================================
   godSpeak() {
-    // Every command begins with God: the light above flares as He speaks.
+    // Every command begins with God: the light above swells as He speaks.
+    Audio.godChord();
     return new Promise((resolve) => {
       this.tweens.add({
         targets: this.godLight,
-        alpha: 0.95,
-        scale: 5.6,
-        duration: 800,
+        alpha: 0.62,
+        scale: 1.12,
+        duration: 850,
         yoyo: true,
         ease: 'Sine.easeInOut',
         onComplete: resolve,
@@ -496,10 +567,10 @@ export default class CreationScene extends Phaser.Scene {
   }
 
   async sealDay(verseData, title) {
-    const p = this.verse.show(verseData, { hold: 2200 });
-    await this.wait(700);
-    await this.dialogue.show(title, { hold: 1700 });
-    await p;
+    // The narrator finishes the verse before the day is sealed.
+    await this.verse.show(verseData, { hold: 1400 });
+    Audio.bell();
+    await this.dialogue.show(title, { hold: 1600 });
   }
 
   ripple(x, y) {
@@ -520,7 +591,7 @@ export default class CreationScene extends Phaser.Scene {
     const emitter = this.add.particles(x, y, 'dot', {
       speed: { min: 30, max: 110 },
       scale: { start: 0.5, end: 0 },
-      alpha: { start: 0.9, end: 0 },
+      alpha: { start: 0.7, end: 0 },
       lifespan: 900,
       blendMode: Phaser.BlendModes.ADD,
       tint,
@@ -589,7 +660,8 @@ export default class CreationScene extends Phaser.Scene {
         .setScale(0.3).setAlpha(0).setTint(0xffe9b0).setBlendMode(Phaser.BlendModes.ADD).setDepth(3.6);
       let timer = null;
       zone.on('pointerdown', () => {
-        this.tweens.add({ targets: glow, alpha: 0.9, scale: 1.6, duration: ms, ease: 'Sine.easeIn' });
+        Audio.sparkle(2);
+        this.tweens.add({ targets: glow, alpha: 0.85, scale: 1.6, duration: ms, ease: 'Sine.easeIn' });
         timer = this.time.delayedCall(ms, () => {
           zone.destroy();
           resolve(glow);
@@ -641,6 +713,11 @@ export default class CreationScene extends Phaser.Scene {
     if (this.fishFollow && inSea) {
       this.fishTarget.set(p.x, p.y);
       this.fishTime += delta;
+      this.blipAcc = (this.blipAcc || 0) + delta;
+      if (this.blipAcc > 700) {
+        this.blipAcc = 0;
+        Audio.blip();
+      }
       if (this.fishTime > 3500 && this.fishDone) {
         const r = this.fishDone;
         this.fishDone = null;
@@ -672,6 +749,11 @@ export default class CreationScene extends Phaser.Scene {
     if (this.birdsFollow && inSky) {
       this.birdTarget.set(p.x, p.y);
       this.birdTime += delta;
+      this.chirpAcc = (this.chirpAcc || 0) + delta;
+      if (this.chirpAcc > 1100) {
+        this.chirpAcc = 0;
+        Audio.chirp(0.6);
+      }
       if (this.birdTime > 3500 && this.birdsDone) {
         const r = this.birdsDone;
         this.birdsDone = null;
@@ -706,6 +788,11 @@ export default class CreationScene extends Phaser.Scene {
       this.sea.tilePositionX += 1.15 * v;
       this.groundProps.x -= v;
       this.walkDist += v;
+      this.stepAcc = (this.stepAcc || 0) + v;
+      if (this.stepAcc > 36) {
+        this.stepAcc = 0;
+        Audio.footstep();
+      }
 
       // Fresh scenery keeps arriving as Adam walks east.
       if (this.walkDist > this.nextSpawn) {

@@ -104,46 +104,71 @@ export function createCreationTextures(scene) {
     gr.destroy();
   }
 
-  // --- Animals (facing right; flipX to face left).
+  // --- Animals (facing right; flipX to face left). Feet on bottom edge.
   if (!t.exists('deer')) {
     const gr = g(scene);
     gr.fillStyle(SIL, 1);
-    gr.fillEllipse(30, 32, 36, 17); // body
-    gr.fillRect(16, 38, 3, 20);
-    gr.fillRect(23, 38, 3, 20);
-    gr.fillRect(38, 38, 3, 20);
-    gr.fillRect(45, 38, 3, 20);
-    gr.fillTriangle(44, 30, 54, 12, 50, 34); // neck
-    gr.fillEllipse(55, 12, 13, 9); // head
-    gr.lineStyle(2, SIL, 1); // antlers
-    gr.lineBetween(53, 7, 48, 1);
-    gr.lineBetween(57, 7, 60, 0);
-    gr.generateTexture('deer', 64, 58);
+    // legs — slender, slightly tapered stance
+    gr.fillRect(20, 42, 3, 22);
+    gr.fillRect(28, 43, 2.5, 21);
+    gr.fillRect(46, 42, 3, 22);
+    gr.fillRect(53, 43, 2.5, 21);
+    // body — haunch, barrel, chest
+    gr.fillCircle(24, 36, 10);
+    gr.fillEllipse(37, 37, 30, 15);
+    gr.fillCircle(50, 36, 8);
+    // neck sweeping up to the head
+    gr.fillTriangle(48, 34, 57, 13, 62, 18);
+    gr.fillTriangle(48, 34, 62, 18, 54, 38);
+    // head + snout + ear
+    gr.fillEllipse(61, 14, 12, 8);
+    gr.fillEllipse(67, 16, 7, 4.5);
+    gr.fillTriangle(57, 9, 54, 3, 60, 7);
+    // tail
+    gr.fillTriangle(14, 32, 10, 28, 16, 36);
+    // antlers — branched
+    gr.lineStyle(2, SIL, 1);
+    gr.lineBetween(60, 8, 56, 0);
+    gr.lineBetween(58, 4, 54, 3);
+    gr.lineBetween(63, 8, 68, 1);
+    gr.lineBetween(65, 5, 69, 5);
+    gr.generateTexture('deer', 74, 64);
     gr.destroy();
   }
   if (!t.exists('sheep')) {
     const gr = g(scene);
     gr.fillStyle(SIL, 1);
-    gr.fillCircle(16, 18, 11);
-    gr.fillCircle(27, 15, 12);
-    gr.fillCircle(35, 19, 10);
-    gr.fillRect(12, 26, 3, 11);
-    gr.fillRect(20, 27, 3, 10);
-    gr.fillRect(30, 27, 3, 10);
-    gr.fillRect(38, 26, 3, 11);
-    gr.fillEllipse(43, 15, 11, 9); // head
-    gr.generateTexture('sheep', 50, 38);
+    // woolly body — cloud of circles
+    gr.fillCircle(15, 18, 9);
+    gr.fillCircle(24, 13, 10);
+    gr.fillCircle(33, 16, 9);
+    gr.fillCircle(27, 21, 10);
+    gr.fillCircle(18, 12, 7);
+    // legs
+    gr.fillRect(13, 28, 2.5, 12);
+    gr.fillRect(20, 29, 2.5, 11);
+    gr.fillRect(30, 29, 2.5, 11);
+    gr.fillRect(37, 28, 2.5, 12);
+    // head dipped slightly, ear
+    gr.fillEllipse(44, 17, 10, 8);
+    gr.fillEllipse(41, 12, 5, 3);
+    gr.generateTexture('sheep', 52, 40);
     gr.destroy();
   }
   if (!t.exists('rabbit')) {
     const gr = g(scene);
     gr.fillStyle(SIL, 1);
-    gr.fillCircle(11, 17, 8);
-    gr.fillCircle(19, 11, 5.5);
-    gr.fillEllipse(18, 3, 3, 9); // ears
-    gr.fillEllipse(22, 4, 3, 9);
-    gr.fillCircle(3, 15, 2.5); // tail
-    gr.generateTexture('rabbit', 28, 26);
+    // sitting: big haunch, chest, head up
+    gr.fillCircle(11, 19, 8.5);
+    gr.fillCircle(18, 20, 5.5);
+    gr.fillCircle(21, 12, 5);
+    // ears — two leaning blades
+    gr.fillTriangle(18, 10, 16, 0, 21, 9);
+    gr.fillTriangle(22, 10, 24, 0, 26, 10);
+    // tail + front paw
+    gr.fillCircle(3, 20, 2.8);
+    gr.fillRect(20, 24, 3, 4);
+    gr.generateTexture('rabbit', 30, 28);
     gr.destroy();
   }
 
@@ -159,13 +184,17 @@ export function createCreationTextures(scene) {
   if (!t.exists('adam-standing')) {
     const gr = g(scene);
     gr.fillStyle(SIL, 1);
-    gr.fillCircle(11, 6, 5.5);
-    gr.fillRoundedRect(7, 12, 8, 21, 4);
-    gr.fillRect(7.5, 32, 3, 15);
-    gr.fillRect(11.5, 32, 3, 15);
-    gr.fillRect(4.5, 14, 2.5, 13); // arms
-    gr.fillRect(15, 14, 2.5, 13);
-    gr.generateTexture('adam-standing', 22, 48);
+    gr.fillCircle(12, 6, 5.5);
+    // shoulders + torso tapering to the waist
+    gr.fillRoundedRect(6, 13, 12, 7, 3);
+    gr.fillRoundedRect(7.5, 16, 9, 16, 4);
+    // arms
+    gr.fillRoundedRect(4.5, 15, 2.6, 14, 1.3);
+    gr.fillRoundedRect(16.9, 15, 2.6, 14, 1.3);
+    // legs
+    gr.fillRoundedRect(8, 31, 3.6, 19, 1.8);
+    gr.fillRoundedRect(12.6, 31, 3.6, 19, 1.8);
+    gr.generateTexture('adam-standing', 24, 52);
     gr.destroy();
   }
 
@@ -173,18 +202,22 @@ export function createCreationTextures(scene) {
   if (!t.exists('fish')) {
     const gr = g(scene);
     gr.fillStyle(0x0e2438, 1);
-    gr.fillEllipse(14, 7, 18, 9);
-    gr.fillTriangle(22, 7, 28, 2, 28, 12); // tail
-    gr.generateTexture('fish', 28, 14);
+    gr.fillEllipse(12, 9, 18, 9);
+    gr.fillTriangle(19, 9, 28, 3, 28, 15); // tail
+    gr.fillTriangle(9, 5, 14, 5, 12, 1);   // dorsal fin
+    gr.fillTriangle(10, 12, 14, 12, 13, 16); // lower fin
+    gr.generateTexture('fish', 30, 18);
     gr.destroy();
   }
   if (!t.exists('bird')) {
     const gr = g(scene);
-    gr.lineStyle(3, 0x241f38, 1);
+    gr.lineStyle(2.5, 0x241f38, 1);
     gr.beginPath();
-    gr.moveTo(2, 10);
+    gr.moveTo(1, 10);
+    gr.lineTo(6, 6);
     gr.lineTo(13, 4);
-    gr.lineTo(24, 10);
+    gr.lineTo(20, 6);
+    gr.lineTo(25, 10);
     gr.strokePath();
     gr.generateTexture('bird', 26, 14);
     gr.destroy();

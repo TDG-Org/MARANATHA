@@ -3,6 +3,8 @@ import Phaser from 'phaser';
 // Reusable narration/dialogue card: a quiet rounded panel centered on
 // screen. Auto-hides after `hold` ms, or waits for a tap when
 // tapToContinue is set (future stories with real dialogue use that mode).
+const DPR = Math.min(Math.max(window.devicePixelRatio || 1, 1.5), 3);
+
 export default class DialogueBox {
   constructor(scene) {
     this.scene = scene;
@@ -13,11 +15,12 @@ export default class DialogueBox {
     this.text = scene.add
       .text(0, 0, '', {
         fontFamily: "Georgia, 'Times New Roman', serif",
-        fontSize: '20px',
+        fontSize: '21px',
         color: '#fdf6e3',
         align: 'center',
         wordWrap: { width: 560 },
         lineSpacing: 6,
+        resolution: DPR,
       })
       .setOrigin(0.5);
     this.hint = scene.add
@@ -25,6 +28,7 @@ export default class DialogueBox {
         fontFamily: "'Segoe UI', system-ui, sans-serif",
         fontSize: '11px',
         color: '#f5e6c4',
+        resolution: DPR,
       })
       .setOrigin(0.5)
       .setAlpha(0);
@@ -37,7 +41,7 @@ export default class DialogueBox {
     const w = this.text.width + padX * 2;
     const h = this.text.height + padY * 2;
     this.panel.clear();
-    this.panel.fillStyle(0x0d0b16, 0.72);
+    this.panel.fillStyle(0x0d0b16, 0.78);
     this.panel.fillRoundedRect(-w / 2, -h / 2, w, h, 14);
     this.panel.lineStyle(1, 0xf5e6c4, 0.28);
     this.panel.strokeRoundedRect(-w / 2, -h / 2, w, h, 14);

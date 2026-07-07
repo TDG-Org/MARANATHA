@@ -3,6 +3,9 @@ import GradientSky from '../systems/GradientSky.js';
 import ParallaxGroup from '../systems/Parallax.js';
 import { STORIES } from '../data/stories.js';
 import { statusOf, resetProgress } from '../systems/SaveSystem.js';
+import { Audio, attachAudioToggle } from '../systems/AudioSystem.js';
+
+const DPR = Math.min(Math.max(window.devicePixelRatio || 1, 1.5), 3);
 
 // The story-path map: Creation → The Fall → Noah's Ark → Joseph.
 // Nodes show done ✓ / current (pulsing light) / locked 🔒; selecting a node
@@ -69,6 +72,7 @@ export default class HomeScene extends Phaser.Scene {
         fontSize: '42px',
         color: '#fdf6e3',
         letterSpacing: 14,
+        resolution: DPR,
       })
       .setOrigin(0.5)
       .setDepth(10);
@@ -77,11 +81,13 @@ export default class HomeScene extends Phaser.Scene {
         fontFamily: "'Segoe UI', system-ui, sans-serif",
         fontSize: '14px',
         color: '#fdf6e3',
+        resolution: DPR,
       })
       .setOrigin(0.5)
       .setAlpha(0.6)
       .setDepth(10);
 
+    attachAudioToggle(this);
     this.drawPath();
     this.buildNodes();
     this.buildPreviewPanel();
@@ -160,6 +166,7 @@ export default class HomeScene extends Phaser.Scene {
           fontFamily: "'Segoe UI', system-ui, sans-serif",
           fontSize: status === 'locked' ? '16px' : '18px',
           color: status === 'current' ? '#3a3153' : '#241f38',
+          resolution: DPR,
         })
         .setOrigin(0.5)
         .setAlpha(status === 'locked' ? 0.75 : 0.95)
@@ -171,6 +178,7 @@ export default class HomeScene extends Phaser.Scene {
           fontSize: '15px',
           color: '#fdf6e3',
           align: 'center',
+          resolution: DPR,
         })
         .setOrigin(0.5)
         .setAlpha(status === 'locked' ? 0.5 : 0.9)
@@ -180,7 +188,10 @@ export default class HomeScene extends Phaser.Scene {
         .zone(x, y, 64, 64)
         .setOrigin(0.5)
         .setInteractive({ useHandCursor: true });
-      hit.on('pointerup', () => this.selectStory(story.id));
+      hit.on('pointerup', () => {
+        Audio.uiClick();
+        this.selectStory(story.id);
+      });
     });
   }
 
@@ -199,6 +210,7 @@ export default class HomeScene extends Phaser.Scene {
         fontFamily: "Georgia, 'Times New Roman', serif",
         fontSize: '22px',
         color: '#fdf6e3',
+        resolution: DPR,
       })
       .setOrigin(0, 0);
     this.pvPassage = this.add
@@ -207,6 +219,7 @@ export default class HomeScene extends Phaser.Scene {
         fontSize: '12px',
         color: '#f5e6c4',
         letterSpacing: 2,
+        resolution: DPR,
       })
       .setOrigin(0, 0)
       .setAlpha(0.7);
@@ -217,6 +230,7 @@ export default class HomeScene extends Phaser.Scene {
         color: '#fdf6e3',
         wordWrap: { width: 430 },
         lineSpacing: 4,
+        resolution: DPR,
       })
       .setOrigin(0, 0)
       .setAlpha(0.85);
@@ -229,6 +243,7 @@ export default class HomeScene extends Phaser.Scene {
         fontFamily: "'Segoe UI', system-ui, sans-serif",
         fontSize: '16px',
         color: '#241f38',
+        resolution: DPR,
       })
       .setOrigin(0.5);
     this.btn.add([this.btnBg, this.btnText]);
@@ -250,6 +265,7 @@ export default class HomeScene extends Phaser.Scene {
         color: '#f5e6c4',
         align: 'center',
         wordWrap: { width: 170 },
+        resolution: DPR,
       })
       .setOrigin(0.5)
       .setAlpha(0.7);
@@ -295,6 +311,8 @@ export default class HomeScene extends Phaser.Scene {
     if (!story?.sceneKey || !this.scene.manager.keys[story.sceneKey]) return;
     if (this.starting) return;
     this.starting = true;
+    Audio.unlock();
+    Audio.uiClick();
     this.cameras.main.fadeOut(550, 10, 10, 18);
     this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
       this.scene.start(story.sceneKey);
