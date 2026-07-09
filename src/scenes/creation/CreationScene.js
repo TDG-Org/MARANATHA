@@ -224,7 +224,8 @@ export default class CreationScene extends Phaser.Scene {
 
   // --- DAY 2 — SKY. Swipe up: lift the waters into the sky. ---------------
   async day2() {
-    await Promise.all([this.godSpeak(), this.verse.show(V.gen_1_6, { hold: 2500 })]);
+    await this.godSpeak();
+    await this.verse.show(V.gen_1_6, { hold: 2500 });
 
     this.directions.show('Swipe or drag upward — lift the waters into the sky.');
     await this.waitForSwipe('up');
@@ -253,7 +254,8 @@ export default class CreationScene extends Phaser.Scene {
 
   // --- DAY 3 — LAND & PLANTS. --------------------------------------------
   async day3() {
-    await Promise.all([this.godSpeak(), this.verse.show(V.gen_1_9, { hold: 2500 })]);
+    await this.godSpeak();
+    await this.verse.show(V.gen_1_9, { hold: 2500 });
 
     this.directions.show('Drag downward — pull the waters back and raise the land.');
     await this.waitForSwipe('down');
@@ -271,7 +273,8 @@ export default class CreationScene extends Phaser.Scene {
     await this.tweenP({ targets: this.ridgeGround, y: 350, duration: 3000, delay: 460, ease: 'Cubic.easeOut' });
     Audio.ambience({ water: 0.25, wind: 0.3 });
 
-    await Promise.all([this.godSpeak(), this.verse.show(V.gen_1_11, { hold: 2300 })]);
+    await this.godSpeak();
+    await this.verse.show(V.gen_1_11, { hold: 2300 });
 
     this.directions.show('Tap the bare earth — bring it to life.  (0/5)');
     let planted = 0;
@@ -295,7 +298,8 @@ export default class CreationScene extends Phaser.Scene {
 
   // --- DAY 4 — SUN, MOON, STARS. -----------------------------------------
   async day4() {
-    await Promise.all([this.godSpeak(), this.verse.show(V.gen_1_14, { hold: 2500 })]);
+    await this.godSpeak();
+    await this.verse.show(V.gen_1_14, { hold: 2500 });
 
     this.directions.show('Tap the sky — bring up the sun.');
     await this.waitForTap();
@@ -357,7 +361,8 @@ export default class CreationScene extends Phaser.Scene {
 
   // --- DAY 5 — SEA & SKY LIFE. --------------------------------------------
   async day5() {
-    await Promise.all([this.godSpeak(), this.verse.show(V.gen_1_20, { hold: 2500 })]);
+    await this.godSpeak();
+    await this.verse.show(V.gen_1_20, { hold: 2500 });
 
     // Fish first: they follow the player's hand through the sea.
     Audio.splash();
@@ -403,7 +408,8 @@ export default class CreationScene extends Phaser.Scene {
 
   // --- DAY 6 — ANIMALS & MANKIND. -----------------------------------------
   async day6() {
-    await Promise.all([this.godSpeak(), this.verse.show(V.gen_1_24, { hold: 2600 })]);
+    await this.godSpeak();
+    await this.verse.show(V.gen_1_24, { hold: 2600 });
 
     this.directions.show('Tap the hills — release the animals into the world.  (0/4)');
     const kinds = ['deer', 'sheep', 'rabbit', 'deer'];
@@ -415,7 +421,8 @@ export default class CreationScene extends Phaser.Scene {
     this.directions.hide();
     await this.wait(700);
 
-    await Promise.all([this.godSpeak(), this.verse.show(V.gen_1_26, { hold: 2600 })]);
+    await this.godSpeak();
+    await this.verse.show(V.gen_1_26, { hold: 2600 });
 
     // Adam formed from the dust — still and lifeless, lit softly so he is
     // clearly seen. Breathing life into him is GOD'S act alone (Gen 2:7),

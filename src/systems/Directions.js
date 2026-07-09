@@ -10,7 +10,7 @@ export default class Directions {
     this.text = scene.add
       .text(GW / 2, GH - 36, '', {
         fontFamily: "'Segoe UI', system-ui, sans-serif",
-        fontSize: '16px',
+        fontSize: '17px',
         color: '#fdf6e3',
         align: 'center',
         resolution: TEXT_RES,
@@ -28,7 +28,7 @@ export default class Directions {
     const x = this.text.x - w / 2;
     const y = this.text.y - h / 2;
     this.pill.clear();
-    this.pill.fillStyle(0x0d0b16, 0.4);
+    this.pill.fillStyle(0x0d0b16, 0.55);
     this.pill.fillRoundedRect(x, y, w, h, h / 2);
   }
 
@@ -55,16 +55,18 @@ export default class Directions {
   fadeIn(message) {
     this.text.setText(message);
     this.redrawPill();
-    this.scene.tweens.add({ targets: this.pill, alpha: 1, duration: 500, ease: 'Sine.easeOut' });
+    this.scene.tweens.add({ targets: this.text, alpha: 0.95, duration: 500, ease: 'Sine.easeOut' });
     this.scene.tweens.add({
-      targets: this.text,
-      alpha: 0.95,
+      targets: this.pill,
+      alpha: 1,
       duration: 500,
       ease: 'Sine.easeOut',
       onComplete: () => {
+        // Pulse the PILL for attention — the words themselves stay steady
+        // and readable (they used to dim to 0.6, ~2:1 contrast).
         this.pulse = this.scene.tweens.add({
-          targets: this.text,
-          alpha: 0.6,
+          targets: this.pill,
+          alpha: 0.72,
           duration: 950,
           yoyo: true,
           repeat: -1,

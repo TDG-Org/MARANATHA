@@ -26,7 +26,7 @@ export default class DialogueBox {
     this.hint = scene.add
       .text(0, 0, 'tap to continue', {
         fontFamily: "'Segoe UI', system-ui, sans-serif",
-        fontSize: '11px',
+        fontSize: '13px',
         color: '#f5e6c4',
         resolution: TEXT_RES,
       })
@@ -71,13 +71,14 @@ export default class DialogueBox {
             });
           };
           if (tapToContinue) {
-            this.hint.setAlpha(0.5);
+            this.hint.setAlpha(0.6);
             this.scene.tweens.add({
               targets: this.hint,
-              alpha: 0.15,
+              alpha: 0.45,
               duration: 800,
               yoyo: true,
               repeat: -1,
+              ease: 'Sine.easeInOut',
             });
             this.scene.input.once(Phaser.Input.Events.POINTER_UP, () => {
               this.scene.tweens.killTweensOf(this.hint);
