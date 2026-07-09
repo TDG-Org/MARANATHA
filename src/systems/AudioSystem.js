@@ -1,3 +1,4 @@
+import Phaser from 'phaser';
 import { GW, TEXT_RES } from '../config.js';
 
 // Procedural WebAudio — every sound is synthesized, zero audio files (same
@@ -26,9 +27,17 @@ class AudioSystem {
     this.noiseBuf = null;
     this.amb = null;
     this.birdTimer = null;
+    this.onMuted = null; // hook: the narrator stops mid-verse on mute
     const unlock = () => this.unlock();
     window.addEventListener('pointerdown', unlock);
     window.addEventListener('keydown', unlock);
+    // Battery care: stop the audio clock entirely when the tab is hidden
+    // (looping ambience isn't throttled in background tabs otherwise).
+    document.addEventListener('visibilitychange', () => {
+      if (!this.ctx) return;
+      if (document.hidden) this.ctx.suspend().catch(() => {});
+      else if (this.enabled) this.ctx.resume().catch(() => {});
+    });
   }
 
   get enabled() {
@@ -68,15 +77,29 @@ class AudioSystem {
       for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
       this.buildAmbience();
     }
-    if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
+    if (this.ctx.state === 'suspended' && this.enabled) this.ctx.resume().catch(() => {});
   }
 
   setVolume(v) {
+    const wasEnabled = this.enabled;
     this.volume = Math.min(1, Math.max(0, v));
     if (this.volume > 0.004) this.lastVolume = this.volume;
     try { localStorage.setItem(VOL_KEY, String(this.volume)); } catch { /* ignore */ }
     if (this.ctx && this.master) {
       this.master.gain.setTargetAtTime(0.9 * this.volume, this.ctx.currentTime, 0.06);
+    }
+    if (wasEnabled && !this.enabled) {
+      // Mute means SILENCE: stop the narrator mid-verse (speech synthesis
+      // is a separate output path the gain node can't touch), then suspend
+      // the context so muted play doesn't burn battery.
+      this.onMuted?.();
+      setTimeout(() => {
+        if (!this.enabled && this.ctx && this.ctx.state === 'running') {
+          this.ctx.suspend().catch(() => {});
+        }
+      }, 180);
+    } else if (!wasEnabled && this.enabled && this.ctx && this.ctx.state === 'suspended') {
+      this.ctx.resume().catch(() => {});
     }
   }
 
@@ -266,8 +289,10 @@ class AudioSystem {
 
 export const Audio = new AudioSystem();
 
-// Volume control: 🔊 icon (click = mute toggle) + draggable slider,
-// top-right of any scene. Everything in logical coordinates.
+// Volume control: 🔊 icon (click or M = mute toggle) + draggable slider,
+// top-right of any scene. Everything in logical coordinates. The VISUALS
+// stay small and quiet; the HIT AREAS are finger-sized (the knob used to
+// be a 12px target — ~5 CSS px on a phone, effectively untappable).
 export function attachVolumeControl(scene) {
   const trackX = GW - 104;
   const trackW = 72;
@@ -281,14 +306,22 @@ export function attachVolumeControl(scene) {
     })
     .setOrigin(1, 0.5)
     .setAlpha(0.6)
-    .setDepth(990)
-    .setInteractive({ useHandCursor: true });
+    .setDepth(990);
+  icon.setInteractive({
+    hitArea: new Phaser.Geom.Rectangle(-14, -14, icon.width + 28, icon.height + 28),
+    hitAreaCallback: Phaser.Geom.Rectangle.Contains,
+    useHandCursor: true,
+  });
 
   const track = scene.add.graphics().setDepth(990).setAlpha(0.6);
   const fill = scene.add.graphics().setDepth(991).setAlpha(0.75);
-  const knob = scene.add.circle(trackX + trackW * Audio.volume, y, 6, 0xf5e6c4, 0.95)
-    .setDepth(992)
-    .setInteractive({ useHandCursor: true, draggable: true });
+  const knob = scene.add.circle(trackX + trackW * Audio.volume, y, 6, 0xf5e6c4, 0.95).setDepth(992);
+  knob.setInteractive({
+    hitArea: new Phaser.Geom.Circle(6, 6, 26),
+    hitAreaCallback: Phaser.Geom.Circle.Contains,
+    useHandCursor: true,
+    draggable: true,
+  });
 
   const redraw = () => {
     track.clear();
@@ -309,24 +342,30 @@ export function attachVolumeControl(scene) {
   };
 
   knob.on('drag', (_p, dragX) => setFromX(dragX));
-  const trackZone = scene.add.zone(trackX + trackW / 2, y, trackW + 12, 22)
+  // The whole track is a tall, draggable zone: tap-then-slide anywhere on
+  // it follows the finger — fine control never requires grabbing the knob.
+  const trackZone = scene.add.zone(trackX + trackW / 2, y + 6, trackW + 20, 52)
     .setOrigin(0.5)
     .setDepth(990)
-    .setInteractive({ useHandCursor: true });
+    .setInteractive({ useHandCursor: true, draggable: true });
   trackZone.on('pointerdown', (p) => setFromX(p.worldX));
-  icon.on('pointerup', () => {
+  trackZone.on('drag', (p) => setFromX(p.worldX));
+  const toggleMute = () => {
     Audio.unlock();
     Audio.toggleMute();
     knob.x = trackX + trackW * Audio.volume;
     redraw();
     if (Audio.enabled) Audio.uiClick();
-  });
+  };
+  icon.on('pointerup', toggleMute);
+  scene.input.keyboard?.on('keydown-M', toggleMute);
 
   redraw();
 }
 
 // True when a pointer position sits inside the volume-control corner —
 // story input gates use this so slider drags never count as gameplay taps.
+// (Matches the enlarged hit zones above.)
 export function overVolumeUI(worldX, worldY) {
-  return worldX > GW - 200 && worldY < 46;
+  return worldX > GW - 200 && worldY < 56;
 }

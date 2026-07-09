@@ -16,6 +16,9 @@ class NarratorSystem {
       pick();
       window.speechSynthesis.onvoiceschanged = pick;
     }
+    // Mute means silence NOW: speech synthesis is its own output path, so
+    // the master gain can't stop a verse already being read.
+    Audio.onMuted = () => this.cancel();
   }
 
   pickVoice() {
