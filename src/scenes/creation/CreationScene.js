@@ -67,10 +67,12 @@ export default class CreationScene extends Phaser.Scene {
     this.stars = [];
     // Layered lights (tight bright core + faint wide halo) instead of one
     // big blob — keeps the sky luminous without washing out text or world.
-    this.sun = this.makeLight(W * 0.7, H + 90, {
+    // Parked far enough below the screen that even their wide halos stay
+    // fully offscreen (halo radius ≈166px for the sun) until they rise.
+    this.sun = this.makeLight(W * 0.7, H + 200, {
       core: 1.15, halo: 2.6, coreAlpha: 0.95, haloAlpha: 0.28, depth: -60,
     }).setVisible(false);
-    this.moon = this.makeLight(W * 0.3, H + 80, {
+    this.moon = this.makeLight(W * 0.3, H + 140, {
       coreTint: 0xdfe6f5, haloTint: 0xd8e0f0, core: 0.7, halo: 1.5, coreAlpha: 0.85, haloAlpha: 0.2, depth: -58,
     }).setVisible(false);
 
@@ -122,6 +124,7 @@ export default class CreationScene extends Phaser.Scene {
 
     this.walking = false;
     this.walkDist = 0;
+    this.walkV = 0; // eased walk speed (px/frame), see updateWalk
 
     this.add.image(0, 0, 'vignette').setOrigin(0).setDepth(880).setAlpha(0.55);
     attachVolumeControl(this);
@@ -303,7 +306,7 @@ export default class CreationScene extends Phaser.Scene {
     this.moon.setVisible(true);
     this.sky.tweenTo(...SKY.night, { duration: 3000 });
     this.tweenSeaTint(0x8898b8, 3000);
-    this.tweens.add({ targets: this.sun, y: this.H + 120, duration: 2600, ease: 'Sine.easeIn' });
+    this.tweens.add({ targets: this.sun, y: this.H + 200, duration: 2600, ease: 'Sine.easeIn' });
     this.clouds.forEach((c) => this.tweens.add({ targets: c, alpha: 0.22, duration: 2600, ease: 'Sine.easeInOut' }));
     await this.tweenP({ targets: this.moon, y: 130, duration: 2800, ease: 'Cubic.easeOut' });
 
@@ -325,9 +328,15 @@ export default class CreationScene extends Phaser.Scene {
       inMs: 900,
       outMs: 1100,
       onHold: () => {
-        // A new morning: stars and moon give way to the risen sun.
-        this.stars.forEach((s) => this.tweens.add({ targets: s, alpha: 0, duration: 600, ease: 'Sine.easeIn' }));
-        this.moon.setPosition(this.W * 0.3, this.H + 80).setVisible(false);
+        // A new morning: stars and moon give way to the risen sun. Kill the
+        // twinkle tweens FIRST — otherwise they resume after the fade ends
+        // and the stars pop back on through the thinning veil.
+        this.stars.forEach((s) => {
+          this.tweens.killTweensOf(s);
+          this.tweens.add({ targets: s, alpha: 0, duration: 600, ease: 'Sine.easeIn', onComplete: () => s.destroy() });
+        });
+        this.stars = [];
+        this.moon.setPosition(this.W * 0.3, this.H + 140).setVisible(false);
         this.sun.setPosition(this.W * 0.72, 170).setVisible(true);
         this.sky.tweenTo(...SKY.dayBlue, { duration: 500 });
         this.tweenSeaTint(0xffffff, 600);
@@ -335,8 +344,6 @@ export default class CreationScene extends Phaser.Scene {
         Audio.ambience({ night: 0, birds: 0.3, wind: 0.25, water: 0.3 });
       },
     });
-    this.stars.forEach((s) => { this.tweens.killTweensOf(s); s.destroy(); });
-    this.stars = [];
   }
 
   // --- DAY 5 — SEA & SKY LIFE. --------------------------------------------
@@ -432,8 +439,10 @@ export default class CreationScene extends Phaser.Scene {
     await versePromise;
 
     await this.sealDay(V.gen_1_31, '— Day Six —');
+    // Full veil: Adam is repositioned in onHold, and a 0.6 veil would let
+    // the player watch him teleport through it.
     await veil(this, {
-      maxAlpha: 0.6,
+      maxAlpha: 1,
       onHold: () => {
         this.adamLying?.destroy();
         // Adam steps to the west edge, ready to walk through creation.
@@ -798,11 +807,18 @@ export default class CreationScene extends Phaser.Scene {
   }
 
   updateWalk(delta, f, p, time) {
-    if (!this.walking || !this.adam) return;
+    if (!this.adam) return;
     const keyRight = (this.cursors?.right?.isDown) || (this.keys?.D?.isDown);
     const touchRight = p.isDown && p.worldX > this.W * 0.55 && p.worldY > 120;
-    if (keyRight || touchRight) {
-      const v = 2.6 * f;
+    const wants = this.walking && (keyRight || touchRight);
+
+    // Eased walk speed: ramps up as the player holds and coasts gently to a
+    // stop on release or completion — the scroll never halts in one frame,
+    // and Adam always settles back onto the ground instead of freezing
+    // mid-stride when the walk ends.
+    this.walkV += ((wants ? 2.6 : 0) - this.walkV) * Math.min(0.14 * f, 1);
+    if (this.walkV > 0.05) {
+      const v = this.walkV * f;
       this.ridgeVeryFar.tilePositionX += 0.07 * v;
       this.ridgeFar.tilePositionX += 0.14 * v;
       this.ridgeMid.tilePositionX += 0.4 * v;
@@ -831,9 +847,10 @@ export default class CreationScene extends Phaser.Scene {
         }
       }
 
-      // Walk bob.
-      this.adam.y = GROUND_Y - Math.abs(Math.sin(time * 0.013)) * 5;
-      this.adam.setRotation(Math.sin(time * 0.013) * 0.045);
+      // Walk bob, scaled by speed so it melts away as he slows to rest.
+      const stride = this.walkV / 2.6;
+      this.adam.y = GROUND_Y - Math.abs(Math.sin(time * 0.013)) * 5 * stride;
+      this.adam.setRotation(Math.sin(time * 0.013) * 0.045 * stride);
 
       if (this.walkDist > 300 && !this.walkHintHidden) {
         this.walkHintHidden = true;

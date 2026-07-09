@@ -34,6 +34,25 @@ export default class Directions {
 
   show(message) {
     this.scene.tweens.killTweensOf([this.text, this.pill]);
+    if (this.pulse) {
+      this.pulse.stop();
+      this.pulse = null;
+    }
+    // Crossfade when a message is already up — never snap text/pill width.
+    if (this.text.alpha > 0.05) {
+      this.scene.tweens.add({
+        targets: [this.text, this.pill],
+        alpha: 0,
+        duration: 260,
+        ease: 'Sine.easeIn',
+        onComplete: () => this.fadeIn(message),
+      });
+    } else {
+      this.fadeIn(message);
+    }
+  }
+
+  fadeIn(message) {
     this.text.setText(message);
     this.redrawPill();
     this.scene.tweens.add({ targets: this.pill, alpha: 1, duration: 500, ease: 'Sine.easeOut' });
