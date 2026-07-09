@@ -3,7 +3,10 @@ import Phaser from 'phaser';
 // Every Creation texture is generated in code (art-style rule: zero image
 // assets). All living things are flat silhouettes, per the Alto look.
 
-const SIL = 0x1a1428; // silhouette ink
+const SIL = 0x1a1428; // silhouette ink (trees, grass)
+// Living things get a slightly lighter ink: when an animal wanders across a
+// tree, the two planes stay readable instead of fusing into one black blob.
+const SIL_LIFE = 0x2e2545;
 
 function g(scene) {
   return scene.make.graphics({ add: false });
@@ -100,7 +103,7 @@ export function createCreationTextures(scene) {
   if (!t.exists('tree-round')) {
     const gr = g(scene);
     gr.fillStyle(SIL, 1);
-    gr.fillRect(20, 40, 4, 18);
+    gr.fillRect(20, 40, 4, 20); // trunk reaches the bottom edge
     gr.fillCircle(22, 24, 17);
     gr.fillCircle(11, 31, 10);
     gr.fillCircle(33, 31, 10);
@@ -120,7 +123,7 @@ export function createCreationTextures(scene) {
   // --- Animals (facing right; flipX to face left). Feet on bottom edge.
   if (!t.exists('deer')) {
     const gr = g(scene);
-    gr.fillStyle(SIL, 1);
+    gr.fillStyle(SIL_LIFE, 1);
     // legs — slender, slightly tapered stance
     gr.fillRect(20, 42, 3, 22);
     gr.fillRect(28, 43, 2.5, 21);
@@ -140,7 +143,7 @@ export function createCreationTextures(scene) {
     // tail
     gr.fillTriangle(14, 32, 10, 28, 16, 36);
     // antlers — branched
-    gr.lineStyle(2, SIL, 1);
+    gr.lineStyle(2, SIL_LIFE, 1);
     gr.lineBetween(60, 8, 56, 0);
     gr.lineBetween(58, 4, 54, 3);
     gr.lineBetween(63, 8, 68, 1);
@@ -150,7 +153,7 @@ export function createCreationTextures(scene) {
   }
   if (!t.exists('sheep')) {
     const gr = g(scene);
-    gr.fillStyle(SIL, 1);
+    gr.fillStyle(SIL_LIFE, 1);
     // woolly body — cloud of circles
     gr.fillCircle(15, 18, 9);
     gr.fillCircle(24, 13, 10);
@@ -170,7 +173,7 @@ export function createCreationTextures(scene) {
   }
   if (!t.exists('rabbit')) {
     const gr = g(scene);
-    gr.fillStyle(SIL, 1);
+    gr.fillStyle(SIL_LIFE, 1);
     // sitting: big haunch, chest, head up
     gr.fillCircle(11, 19, 8.5);
     gr.fillCircle(18, 20, 5.5);
@@ -208,9 +211,10 @@ export function createCreationTextures(scene) {
     // arms
     gr.fillRoundedRect(4.5, 16, 2.8, 15, 1.4);
     gr.fillRoundedRect(18.7, 16, 2.8, 15, 1.4);
-    // legs
-    gr.fillRoundedRect(8.5, 34, 3.8, 20, 1.9);
-    gr.fillRoundedRect(13.7, 34, 3.8, 20, 1.9);
+    // legs — down to the texture's bottom edge so his feet touch the
+    // ground exactly like the animals' do (he floated ~4px before)
+    gr.fillRoundedRect(8.5, 34, 3.8, 22, 1.9);
+    gr.fillRoundedRect(13.7, 34, 3.8, 22, 1.9);
     // warm rim
     gr.lineStyle(1.5, 0xf5e6c4, 0.3);
     gr.strokeCircle(13, 7, 6);

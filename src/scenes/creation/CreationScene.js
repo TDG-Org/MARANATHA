@@ -29,7 +29,12 @@ const SKY = {
 };
 
 const GROUND_Y = 384; // where feet stand (the shoreline)
+const FEET_Y = GROUND_Y + 2; // shared baseline for every living thing
 const SEA_TOP = 390;
+
+// Believable relative sizes — every texture is drawn at its own scale, so
+// spawning everything at 1 made the rabbit nearly half a deer's height.
+const KIND_SCALE = { deer: 0.92, sheep: 0.85, rabbit: 0.58 };
 
 export default class CreationScene extends Phaser.Scene {
   constructor() {
@@ -106,6 +111,9 @@ export default class CreationScene extends Phaser.Scene {
     this.groundProps = this.add.container(0, 0).setDepth(3.4); // planted trees, grass, animals
     this.walkX = 0; // world scroll of planted props during the Day 7 walk
     this.passing = []; // Day 7 scenery that walks past
+    // Passing scenery lives in a container so it takes the same pointer-
+    // parallax shift as the planted props on the same ground plane.
+    this.passingLayer = this.add.container(0, 0).setDepth(3.45);
 
     this.fish = [];
     this.birds = [];
@@ -430,7 +438,7 @@ export default class CreationScene extends Phaser.Scene {
     const ax = this.W * 0.52;
     const spotlight = this.add.image(ax, GROUND_Y - 8, 'glow')
       .setScale(1.1).setAlpha(0).setTint(0xffe9b0).setBlendMode(Phaser.BlendModes.ADD).setDepth(3.3);
-    this.adamLying = this.add.image(ax, GROUND_Y + 2, 'adam-lying').setOrigin(0.5, 1).setAlpha(0);
+    this.adamLying = this.add.image(ax, FEET_Y, 'adam-lying').setOrigin(0.5, 1).setAlpha(0);
     this.adamLying.setDepth(3.5);
     this.burst(ax, GROUND_Y - 6, 14, 0xd8c9a8);
     this.tweens.add({ targets: spotlight, alpha: 0.35, duration: 1400, ease: 'Sine.easeOut' });
@@ -447,7 +455,7 @@ export default class CreationScene extends Phaser.Scene {
 
     Audio.breath();
     this.burst(ax, GROUND_Y - 20, 22, 0xfff3d6);
-    this.adam = this.add.image(ax, GROUND_Y, 'adam-standing').setOrigin(0.5, 1).setAlpha(0).setDepth(3.5);
+    this.adam = this.add.image(ax, FEET_Y, 'adam-standing').setOrigin(0.5, 1).setAlpha(0).setDepth(3.5);
     this.tweens.add({ targets: this.adamLying, alpha: 0, duration: 900, ease: 'Sine.easeIn' });
     this.tweens.add({ targets: this.adam, alpha: 1, duration: 1200, ease: 'Sine.easeOut' });
     this.tweens.add({ targets: orb, alpha: 0, scale: 3, duration: 1700, ease: 'Sine.easeOut' });
@@ -462,7 +470,7 @@ export default class CreationScene extends Phaser.Scene {
       onHold: () => {
         this.adamLying?.destroy();
         // Adam steps to the west edge, ready to walk through creation.
-        this.adam.setPosition(this.W * 0.28, GROUND_Y);
+        this.adam.setPosition(this.W * 0.28, FEET_Y);
         this.sky.tweenTo(...SKY.rest, { duration: 900 });
       },
     });
@@ -530,20 +538,22 @@ export default class CreationScene extends Phaser.Scene {
   spawnAnimal(kind, x) {
     this.ripple(x, GROUND_Y - 10);
     Audio.thump();
-    const a = this.add.image(x, GROUND_Y + 2, kind).setOrigin(0.5, 1).setScale(0);
+    const base = KIND_SCALE[kind] ?? 1;
+    const a = this.add.image(x, FEET_Y, kind).setOrigin(0.5, 1).setScale(0);
     this.groundProps.add(a);
     this.tweens.add({
       targets: a,
-      scale: 1,
+      scale: base,
       duration: 750,
       ease: 'Back.easeOut',
       easeParams: [1.15],
       onComplete: () => {
         if (!a.active) return;
-        // Quiet idle breathing so the creatures feel alive.
+        // Quiet idle breathing so the creatures feel alive (relative to the
+        // kind's base scale — an absolute value would stretch small kinds).
         this.tweens.add({
           targets: a,
-          scaleY: 1.035,
+          scaleY: base * 1.035,
           duration: Phaser.Math.Between(1500, 2200),
           yoyo: true,
           repeat: -1,
@@ -551,17 +561,35 @@ export default class CreationScene extends Phaser.Scene {
         });
       },
     });
-    // Gentle wandering, flipping to face the way it moves.
+    // Gentle wandering with a real gait: deer/sheep bob softly with their
+    // steps, the rabbit HOPS. Flip only on a true direction change (it used
+    // to snap-flip even for a zero-distance wander).
+    const hop = kind === 'rabbit';
     const wander = () => {
-      if (!a.active) return;
-      const dx = Phaser.Math.Between(-45, 45);
-      a.setFlipX(dx > 0 ? false : true);
+      if (!a.active || !a.visible) return;
+      const dir = Math.random() < 0.5 ? -1 : 1;
+      const targetX = Phaser.Math.Clamp(a.x + dir * Phaser.Math.Between(16, 45), 40, this.W - 40);
+      const dist = Math.abs(targetX - a.x);
+      if (dist < 8) {
+        this.time.delayedCall(700, wander);
+        return;
+      }
+      const facingLeft = targetX < a.x;
+      if (a.flipX !== facingLeft) a.setFlipX(facingLeft);
+      const steps = hop ? Math.max(1, Math.round(dist / 22)) : Math.max(2, Math.round(dist / 12));
+      const amp = hop ? 4.5 : 1.8;
       this.tweens.add({
         targets: a,
-        x: Phaser.Math.Clamp(a.x + dx, 40, this.W - 40),
-        duration: Phaser.Math.Between(1800, 3200),
+        x: targetX,
+        duration: hop ? 500 * steps : Phaser.Math.Between(1800, 3200),
         ease: 'Sine.easeInOut',
-        onComplete: () => this.time.delayedCall(Phaser.Math.Between(600, 1800), wander),
+        onUpdate: (tw) => {
+          a.y = FEET_Y - Math.abs(Math.sin(tw.progress * Math.PI * steps)) * amp;
+        },
+        onComplete: () => {
+          a.y = FEET_Y;
+          this.time.delayedCall(Phaser.Math.Between(600, 1800), wander);
+        },
       });
     };
     this.time.delayedCall(Phaser.Math.Between(500, 1500), wander);
@@ -597,10 +625,25 @@ export default class CreationScene extends Phaser.Scene {
   }
 
   spawnPassing() {
-    const kinds = ['tree-pine', 'tree-round', 'sheep', 'deer', 'grass', 'tree-pine'];
+    const kinds = ['tree-pine', 'tree-round', 'sheep', 'deer', 'grass', 'rabbit', 'tree-pine'];
     const key = Phaser.Math.RND.pick(kinds);
-    const s = this.add.image(this.W + 80, GROUND_Y + 2, key).setOrigin(0.5, 1).setDepth(3.45);
-    if (key === 'deer' || key === 'sheep') s.setFlipX(true); // face the walker
+    const animal = key === 'deer' || key === 'sheep' || key === 'rabbit';
+    // Same size variance and life as the world the player planted — the
+    // walk used to pass uniform, frozen statues.
+    const base = (KIND_SCALE[key] ?? 1) * (animal ? Phaser.Math.FloatBetween(0.9, 1.1) : Phaser.Math.FloatBetween(0.8, 1.2));
+    const s = this.add.image(this.W + 80, FEET_Y, key).setOrigin(0.5, 1).setScale(base);
+    if (animal) {
+      s.setFlipX(true); // face the walker
+      this.tweens.add({
+        targets: s,
+        scaleY: base * 1.035,
+        duration: Phaser.Math.Between(1500, 2200),
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+      });
+    }
+    this.passingLayer.add(s);
     this.passing.push(s);
   }
 
@@ -775,6 +818,7 @@ export default class CreationScene extends Phaser.Scene {
       layer.x = -40 - this.pointerNX * k;
     }
     this.groundProps.x = this.walkX - this.pointerNX * 12;
+    this.passingLayer.x = -this.pointerNX * 12;
 
     this.updateFish(delta, f, p, time);
     this.updateBirds(delta, f, p, time);
@@ -813,6 +857,12 @@ export default class CreationScene extends Phaser.Scene {
       fish.vy = Phaser.Math.Clamp(fish.vy * 0.94, -2.4, 2.4);
       fish.x += fish.vx * f;
       fish.y += fish.vy * f;
+      // Hard surface clamp: spring overshoot could carry a fish above the
+      // waterline into open air during an upward sweep.
+      if (fish.y < SEA_TOP + 16) {
+        fish.y = SEA_TOP + 16;
+        if (fish.vy < 0) fish.vy = 0;
+      }
       if (Math.abs(fish.vx) > 0.25) fish.setFlipX(fish.vx > 0); // texture faces left
     }
   }
@@ -886,14 +936,25 @@ export default class CreationScene extends Phaser.Scene {
         const s = this.passing[i];
         s.x -= v;
         if (s.x < -110) {
+          this.tweens.killTweensOf(s); // breathing tween would leak otherwise
           s.destroy();
           this.passing.splice(i, 1);
         }
       }
 
+      // Cull planted props once they scroll far past the left edge — they
+      // never return (Day 7 ends the scene), so stop drawing and animating
+      // them. Their wander loops check visibility and stop themselves.
+      for (const prop of this.groundProps.list) {
+        if (prop.visible && prop.x + this.groundProps.x < -110) {
+          this.tweens.killTweensOf(prop);
+          prop.setVisible(false);
+        }
+      }
+
       // Walk bob, scaled by speed so it melts away as he slows to rest.
       const stride = this.walkV / 2.6;
-      this.adam.y = GROUND_Y - Math.abs(Math.sin(time * 0.013)) * 5 * stride;
+      this.adam.y = FEET_Y - Math.abs(Math.sin(time * 0.013)) * 5 * stride;
       this.adam.setRotation(Math.sin(time * 0.013) * 0.045 * stride);
 
       if (this.walkDist > 300 && !this.walkHintHidden) {
@@ -906,7 +967,7 @@ export default class CreationScene extends Phaser.Scene {
         r();
       }
     } else {
-      this.adam.y += (GROUND_Y - this.adam.y) * 0.2 * f;
+      this.adam.y += (FEET_Y - this.adam.y) * 0.2 * f;
       this.adam.setRotation(this.adam.rotation * 0.85);
     }
   }
