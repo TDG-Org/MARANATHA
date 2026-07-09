@@ -236,7 +236,16 @@ export default class CreationScene extends Phaser.Scene {
     await this.verse.show(V.gen_1_6, { hold: 2500 });
 
     this.directions.show('Swipe or drag upward — lift the waters into the sky.');
-    await this.waitForSwipe('up');
+    // The waters strain upward with the drag itself — the swipe IS the act,
+    // not just a hidden trigger for a cutscene.
+    const seaRest2 = this.sea.y;
+    await this.waitForSwipe('up', {
+      onProgress: (t) => {
+        this.tweens.killTweensOf(this.sea);
+        if (t > 0) this.sea.y = seaRest2 - t * 14;
+        else this.tweens.add({ targets: this.sea, y: seaRest2, duration: 350, ease: 'Sine.easeOut' });
+      },
+    });
     this.directions.hide();
 
     // Waters below settle; waters above become the clouds of the vault.
@@ -266,7 +275,14 @@ export default class CreationScene extends Phaser.Scene {
     await this.verse.show(V.gen_1_9, { hold: 2500 });
 
     this.directions.show('Drag downward — pull the waters back and raise the land.');
-    await this.waitForSwipe('down');
+    const seaRest3 = this.sea.y;
+    await this.waitForSwipe('down', {
+      onProgress: (t) => {
+        this.tweens.killTweensOf(this.sea);
+        if (t > 0) this.sea.y = seaRest3 + t * 14;
+        else this.tweens.add({ targets: this.sea, y: seaRest3, duration: 350, ease: 'Sine.easeOut' });
+      },
+    });
     this.directions.hide();
 
     // The seas gather; the dry land rises range behind range.
@@ -289,7 +305,7 @@ export default class CreationScene extends Phaser.Scene {
     while (planted < 5) {
       const p = await this.waitForTap((pt) => pt.worldY > 290 && pt.worldY < 520);
       planted += 1;
-      this.plantTree(Phaser.Math.Clamp(p.worldX, 50, this.W - 50));
+      this.plantTree(Phaser.Math.Clamp(p.worldX, 50, this.W - 50), p.worldY);
       this.directions.set(`Tap the bare earth — bring it to life.  (${planted}/5)`);
     }
     this.directions.hide();
@@ -310,16 +326,20 @@ export default class CreationScene extends Phaser.Scene {
     await this.verse.show(V.gen_1_14, { hold: 2500 });
 
     this.directions.show('Tap the sky — bring up the sun.');
-    await this.waitForTap();
+    const pSun = await this.waitForTap((pt) => pt.worldY < 320, { worldX: this.W / 2, worldY: 180 });
     this.directions.hide();
+    // Instant light at the fingertip; the sunrise is the slow payoff.
+    this.burst(pSun.worldX, pSun.worldY, 10, 0xffe9c9);
+    Audio.sparkle(2);
     Audio.swellBright();
     this.sun.setVisible(true);
     this.sky.tweenTo(...SKY.golden, { duration: 2800 });
     await this.tweenP({ targets: this.sun, y: 170, duration: 2600, ease: 'Cubic.easeOut' });
 
     this.directions.show('Tap again — bring up the moon.');
-    await this.waitForTap();
+    const pMoon = await this.waitForTap((pt) => pt.worldY < 320, { worldX: this.W / 2, worldY: 180 });
     this.directions.hide();
+    this.burst(pMoon.worldX, pMoon.worldY, 8, 0xdfe6f5);
     Audio.swellSoft();
     Audio.ambience({ night: 0.35, wind: 0.15, birds: 0 });
     this.moon.setVisible(true);
@@ -333,9 +353,11 @@ export default class CreationScene extends Phaser.Scene {
     this.directions.show('Tap the night sky — fill it with stars.  (0/20)');
     let starCount = 0;
     while (starCount < 20) {
-      await this.waitForTap();
+      const pStar = await this.waitForTap((pt) => pt.worldY < 320, { worldX: this.W / 2, worldY: 140 });
       Audio.sparkle(5);
-      this.addStars(5);
+      // Constellations bloom under the finger — one star exactly at the
+      // tap, the rest clustered loosely around it.
+      this.addStars(5, pStar.worldX, pStar.worldY);
       starCount += 5;
       this.directions.set(`Tap the night sky — fill it with stars.  (${starCount}/20)`);
     }
@@ -423,7 +445,7 @@ export default class CreationScene extends Phaser.Scene {
     const kinds = ['deer', 'sheep', 'rabbit', 'deer'];
     for (let i = 0; i < 4; i++) {
       const p = await this.waitForTap((pt) => pt.worldY > 260 && pt.worldY < 520);
-      this.spawnAnimal(kinds[i], Phaser.Math.Clamp(p.worldX, 60, this.W - 60));
+      this.spawnAnimal(kinds[i], Phaser.Math.Clamp(p.worldX, 60, this.W - 60), p.worldY);
       this.directions.set(`Tap the hills — release the animals into the world.  (${i + 1}/4)`);
     }
     this.directions.hide();
@@ -489,6 +511,8 @@ export default class CreationScene extends Phaser.Scene {
     await new Promise((resolve) => { this.walkDone = resolve; });
     this.walking = false;
     this.directions.hide();
+    // Arrival: a soft warmth at his feet as the walk eases to rest.
+    this.burst(this.adam.x, FEET_Y - 12, 10, 0xffe9c9);
 
     await this.verse.show(V.gen_2_3, { hold: 3000 });
     Audio.swellSoft();
@@ -512,20 +536,26 @@ export default class CreationScene extends Phaser.Scene {
   // =========================================================================
   // World builders
   // =========================================================================
-  plantTree(x) {
-    this.ripple(x, GROUND_Y - 6);
-    Audio.grow();
-    const key = this.groundProps.length % 2 === 0 ? 'tree-pine' : 'tree-round';
-    const tree = this.add.image(x + Phaser.Math.Between(-8, 8), GROUND_Y + 2, key)
-      .setOrigin(0.5, 1).setScale(0);
-    this.groundProps.add(tree);
-    this.tweens.add({
-      targets: tree,
-      scale: Phaser.Math.FloatBetween(0.8, 1.2),
-      duration: 1000,
-      ease: 'Back.easeOut',
-      easeParams: [1.15], // gentle settle, not a bouncy pop
-    });
+  plantTree(x, fromY) {
+    const grow = () => {
+      this.ripple(x, GROUND_Y - 6);
+      Audio.grow();
+      const key = this.groundProps.length % 2 === 0 ? 'tree-pine' : 'tree-round';
+      const tree = this.add.image(x + Phaser.Math.Between(-8, 8), FEET_Y, key)
+        .setOrigin(0.5, 1).setScale(0);
+      this.groundProps.add(tree);
+      this.tweens.add({
+        targets: tree,
+        scale: Phaser.Math.FloatBetween(0.8, 1.2),
+        duration: 1000,
+        ease: 'Back.easeOut',
+        easeParams: [1.15], // gentle settle, not a bouncy pop
+      });
+    };
+    // Taps high on the hills drop a seed of light down to the ground first,
+    // bridging the finger to the result.
+    if (fromY !== undefined && fromY < GROUND_Y - 40) this.seedFall(x, fromY, GROUND_Y - 6, grow);
+    else grow();
   }
 
   plantGrass(x) {
@@ -535,7 +565,11 @@ export default class CreationScene extends Phaser.Scene {
     this.tweens.add({ targets: tuft, scale: 1, duration: 550, ease: 'Back.easeOut', easeParams: [1.15] });
   }
 
-  spawnAnimal(kind, x) {
+  spawnAnimal(kind, x, fromY) {
+    if (fromY !== undefined && fromY < GROUND_Y - 40) {
+      this.seedFall(x, fromY, GROUND_Y - 10, () => this.spawnAnimal(kind, x));
+      return;
+    }
     this.ripple(x, GROUND_Y - 10);
     Audio.thump();
     const base = KIND_SCALE[kind] ?? 1;
@@ -595,13 +629,18 @@ export default class CreationScene extends Phaser.Scene {
     this.time.delayedCall(Phaser.Math.Between(500, 1500), wander);
   }
 
-  addStars(n) {
+  // Anchored at (ax, ay) when given: first star lands exactly on the tap,
+  // the rest scatter loosely around it. Unanchored falls back to random sky.
+  addStars(n, ax, ay) {
     for (let i = 0; i < n; i++) {
-      const s = this.add.image(
-        Phaser.Math.Between(30, this.W - 30),
-        Phaser.Math.Between(28, 245),
-        'dot',
-      ).setScale(0).setTint(0xfff8e7).setBlendMode(Phaser.BlendModes.ADD).setDepth(-90);
+      const sx = ax === undefined
+        ? Phaser.Math.Between(30, this.W - 30)
+        : Phaser.Math.Clamp(ax + (i === 0 ? 0 : Phaser.Math.Between(-95, 95)), 30, this.W - 30);
+      const sy = ay === undefined
+        ? Phaser.Math.Between(28, 245)
+        : Phaser.Math.Clamp(ay + (i === 0 ? 0 : Phaser.Math.Between(-65, 65)), 28, 245);
+      const s = this.add.image(sx, sy, 'dot')
+        .setScale(0).setTint(0xfff8e7).setBlendMode(Phaser.BlendModes.ADD).setDepth(-90);
       this.stars.push(s);
       this.tweens.add({
         targets: s,
@@ -645,6 +684,29 @@ export default class CreationScene extends Phaser.Scene {
     }
     this.passingLayer.add(s);
     this.passing.push(s);
+
+    // Every few trees, a bird startles up and away — the long walk keeps
+    // offering small living moments instead of a repeating diorama.
+    this.passCount = (this.passCount || 0) + 1;
+    if (!animal && key !== 'grass' && this.passCount % 3 === 0) {
+      this.time.delayedCall(650, () => {
+        if (!s.active) return;
+        Audio.chirp(0.7);
+        const b = this.add.image(s.x + this.passingLayer.x, FEET_Y - 66, 'bird')
+          .setDepth(3.5).setScale(0.9);
+        this.tweens.add({
+          targets: b,
+          x: b.x - 340,
+          y: b.y - 140,
+          duration: 2600,
+          ease: 'Sine.easeOut',
+          onUpdate: (tw) => {
+            b.scaleY = (0.45 + Math.abs(Math.sin(tw.progress * Math.PI * 9)) * 0.6) * 0.9;
+          },
+          onComplete: () => b.destroy(),
+        });
+      });
+    }
   }
 
   // =========================================================================
@@ -673,15 +735,17 @@ export default class CreationScene extends Phaser.Scene {
     await this.dialogue.show(title, { hold: 1600 });
   }
 
-  ripple(x, y) {
+  // small: the quiet "heard you — not there" acknowledgment for taps that
+  // land outside a gate's valid zone.
+  ripple(x, y, { small = false } = {}) {
     const g = this.add.graphics({ x, y }).setDepth(8);
-    g.lineStyle(2, 0xf5e6c4, 0.8);
-    g.strokeCircle(0, 0, 10);
+    g.lineStyle(small ? 1.5 : 2, 0xf5e6c4, small ? 0.45 : 0.8);
+    g.strokeCircle(0, 0, small ? 7 : 10);
     this.tweens.add({
       targets: g,
-      scale: 3,
+      scale: small ? 2 : 3,
       alpha: 0,
-      duration: 650,
+      duration: small ? 480 : 650,
       ease: 'Sine.easeOut',
       onComplete: () => g.destroy(),
     });
@@ -747,42 +811,116 @@ export default class CreationScene extends Phaser.Scene {
   }
 
   // =========================================================================
-  // Input gates (touch + mouse, see game-scene skill)
+  // Input gates (touch + mouse + keyboard, see game-scene skill)
   // =========================================================================
-  // All gates use world coordinates (camera-zoom aware) and ignore anything
-  // happening over the volume control.
-  waitForTap(filter) {
+  // All gates use world coordinates (camera-zoom aware), ignore the volume
+  // corner, acknowledge taps that land outside the valid zone (a quiet
+  // "heard you — not there" ripple), gently re-nudge the directions if the
+  // player is idle, and accept keyboard equivalents so no one is stranded:
+  // Enter/Space "acts" at the gate's natural point.
+  waitForTap(filter, keyPoint = { worldX: GW / 2, worldY: 400 }) {
     return new Promise((resolve) => {
-      const handler = (p) => {
-        if (overVolumeUI(p.worldX, p.worldY)) return;
-        if (filter && !filter(p)) return;
+      const keyboard = this.input.keyboard;
+      const idle = this.time.addEvent({
+        delay: 12000, loop: true, callback: () => this.directions.nudge(),
+      });
+      const finish = (p) => {
+        idle.remove();
         this.input.off(Phaser.Input.Events.POINTER_UP, handler);
+        keyboard?.off('keydown-ENTER', onKey);
+        keyboard?.off('keydown-SPACE', onKey);
         resolve(p);
       };
+      const handler = (p) => {
+        if (overVolumeUI(p.worldX, p.worldY)) return;
+        if (filter && !filter(p)) {
+          this.ripple(p.worldX, p.worldY, { small: true });
+          Audio.blip();
+          return;
+        }
+        finish(p);
+      };
+      const onKey = () => finish(keyPoint);
       this.input.on(Phaser.Input.Events.POINTER_UP, handler);
+      keyboard?.on('keydown-ENTER', onKey);
+      keyboard?.on('keydown-SPACE', onKey);
     });
   }
 
-  waitForSwipe(dir) {
+  // onProgress(t 0..1) fires while the player drags toward the threshold so
+  // the world can respond DURING the gesture (t returns to 0 on release).
+  // Arrow keys / W / S complete the swipe for keyboard players.
+  waitForSwipe(dir, { onProgress } = {}) {
     return new Promise((resolve) => {
       let startY = null;
+      let trailAcc = 0;
+      const keyboard = this.input.keyboard;
+      const keyNames = dir === 'up' ? ['keydown-UP', 'keydown-W'] : ['keydown-DOWN', 'keydown-S'];
+      const idle = this.time.addEvent({
+        delay: 12000, loop: true, callback: () => this.directions.nudge(),
+      });
+      const cleanup = () => {
+        idle.remove();
+        this.input.off(Phaser.Input.Events.POINTER_DOWN, down);
+        this.input.off(Phaser.Input.Events.POINTER_MOVE, move);
+        this.input.off(Phaser.Input.Events.POINTER_UP, up);
+        keyNames.forEach((k) => keyboard?.off(k, onKey));
+      };
       const down = (p) => {
         startY = overVolumeUI(p.worldX, p.worldY) ? null : p.worldY;
       };
       const move = (p) => {
         if (startY === null || !p.isDown) return;
         const dy = p.worldY - startY;
-        if ((dir === 'up' && dy < -70) || (dir === 'down' && dy > 70)) {
+        const toward = dir === 'up' ? -dy : dy;
+        if (toward > 0) {
+          onProgress?.(Math.min(toward / 70, 1));
+          trailAcc += 1;
+          if (trailAcc % 3 === 0) this.swipeTrail(p.worldX, p.worldY);
+        }
+        if (toward > 70) {
           cleanup();
           resolve();
         }
       };
-      const cleanup = () => {
-        this.input.off(Phaser.Input.Events.POINTER_DOWN, down);
-        this.input.off(Phaser.Input.Events.POINTER_MOVE, move);
+      const up = () => {
+        startY = null;
+        onProgress?.(0);
+      };
+      const onKey = () => {
+        cleanup();
+        resolve();
       };
       this.input.on(Phaser.Input.Events.POINTER_DOWN, down);
       this.input.on(Phaser.Input.Events.POINTER_MOVE, move);
+      this.input.on(Phaser.Input.Events.POINTER_UP, up);
+      keyNames.forEach((k) => keyboard?.on(k, onKey));
+    });
+  }
+
+  // Faint mote of light shed by the finger mid-swipe.
+  swipeTrail(x, y) {
+    const d = this.add.image(x, y, 'dot')
+      .setBlendMode(Phaser.BlendModes.ADD).setTint(0xd8ecf5)
+      .setAlpha(0.5).setScale(0.7).setDepth(8);
+    this.tweens.add({
+      targets: d, alpha: 0, scale: 0.2, duration: 450, ease: 'Sine.easeOut',
+      onComplete: () => d.destroy(),
+    });
+  }
+
+  // A falling mote of light bridges a high tap down to its landing point,
+  // so the result never appears disconnected from the finger.
+  seedFall(x, fromY, toY, onLand) {
+    const d = this.add.image(x, fromY, 'dot')
+      .setBlendMode(Phaser.BlendModes.ADD).setTint(0xf5e6c4)
+      .setAlpha(0.85).setScale(0.8).setDepth(8);
+    this.tweens.add({
+      targets: d, y: toY, alpha: 0.45, duration: 280, ease: 'Sine.easeIn',
+      onComplete: () => {
+        d.destroy();
+        onLand();
+      },
     });
   }
 
@@ -823,22 +961,61 @@ export default class CreationScene extends Phaser.Scene {
     this.updateFish(delta, f, p, time);
     this.updateBirds(delta, f, p, time);
     this.updateWalk(delta, f, p, time);
+
+    // Remembered for the guide beats' "did the hand actually move" check.
+    this.lastPX = p.worldX;
+    this.lastPY = p.worldY;
+  }
+
+  // The player's pointer must actually MOVE (or the arrows steer) for the
+  // guiding clock to run — "guide the fish" used to complete hands-free if
+  // the pointer merely rested inside the sea band.
+  pointerMoved(p) {
+    return Math.abs(p.worldX - (this.lastPX ?? p.worldX))
+      + Math.abs(p.worldY - (this.lastPY ?? p.worldY)) > 0.8;
+  }
+
+  keySteer(f, minY, maxY) {
+    const k = this.cursors;
+    if (!k || !(k.left.isDown || k.right.isDown || k.up.isDown || k.down.isDown)) return null;
+    if (!this.kbHand) this.kbHand = new Phaser.Math.Vector2(this.W / 2, (minY + maxY) / 2);
+    this.kbHand.x = Phaser.Math.Clamp(
+      this.kbHand.x + ((k.right.isDown ? 1 : 0) - (k.left.isDown ? 1 : 0)) * 4.5 * f, 40, this.W - 40,
+    );
+    this.kbHand.y = Phaser.Math.Clamp(
+      this.kbHand.y + ((k.down.isDown ? 1 : 0) - (k.up.isDown ? 1 : 0)) * 4.5 * f, minY, maxY,
+    );
+    return this.kbHand;
   }
 
   updateFish(delta, f, p, time) {
     if (this.fish.length === 0) return;
     const inSea = p.worldY > SEA_TOP + 10 && p.worldY < this.H - 40;
-    if (this.fishFollow && inSea) {
-      this.fishTarget.set(p.worldX, p.worldY);
-      this.fishTime += delta;
-      this.blipAcc = (this.blipAcc || 0) + delta;
-      if (this.blipAcc > 700) {
-        this.blipAcc = 0;
-        Audio.blip();
+    const steer = this.fishFollow ? this.keySteer(f, SEA_TOP + 16, this.H - 58) : null;
+    if (this.fishFollow && (steer || inSea)) {
+      if (steer) this.fishTarget.copy(steer);
+      else this.fishTarget.set(p.worldX, p.worldY);
+      if (steer || this.pointerMoved(p)) {
+        this.fishTime += delta;
+        // Quiet progress: a dot joins the instruction for each third done.
+        const third = Math.min(3, Math.floor(this.fishTime / 1200));
+        if (third !== this.fishThird) {
+          this.fishThird = third;
+          this.directions.set('Move your hand through the sea — guide the fish.' + '  ·'.repeat(third));
+        }
+        this.blipAcc = (this.blipAcc || 0) + delta;
+        if (this.blipAcc > 700) {
+          this.blipAcc = 0;
+          Audio.blip();
+        }
       }
       if (this.fishTime > 3500 && this.fishDone) {
         const r = this.fishDone;
         this.fishDone = null;
+        // The blessing lands: a glad scatter of light through the school.
+        Audio.splash();
+        Audio.sparkle(4);
+        this.burst(this.fishTarget.x, this.fishTarget.y, 12, 0x9adcf0);
         r();
       }
     } else {
@@ -870,19 +1047,33 @@ export default class CreationScene extends Phaser.Scene {
   updateBirds(delta, f, p, time) {
     if (this.birds.length === 0) return;
     const inSky = p.worldY > 20 && p.worldY < 300 && !overVolumeUI(p.worldX, p.worldY);
-    if (this.birdsFollow && inSky) {
-      this.birdTarget.set(p.worldX, p.worldY);
-      this.birdTime += delta;
-      this.chirpAcc = (this.chirpAcc || 0) + delta;
-      if (this.chirpAcc > 1100) {
-        this.chirpAcc = 0;
-        Audio.chirp(0.6);
+    const steer = this.birdsFollow ? this.keySteer(f, 30, 300) : null;
+    if (this.birdsFollow && (steer || inSky)) {
+      if (steer) this.birdTarget.copy(steer);
+      else this.birdTarget.set(p.worldX, p.worldY);
+      if (steer || this.pointerMoved(p)) {
+        this.birdTime += delta;
+        const third = Math.min(3, Math.floor(this.birdTime / 1200));
+        if (third !== this.birdThird) {
+          this.birdThird = third;
+          this.directions.set('Now sweep the sky — send the birds.' + '  ·'.repeat(third));
+        }
+        this.chirpAcc = (this.chirpAcc || 0) + delta;
+        if (this.chirpAcc > 1100) {
+          this.chirpAcc = 0;
+          Audio.chirp(0.6);
+        }
       }
       if (this.birdTime > 3500 && this.birdsDone) {
         const r = this.birdsDone;
         this.birdsDone = null;
+        // Sent: the flock wheels joyfully upward once.
+        Audio.chirp(1);
+        this.birdCelebrateUntil = time + 1500;
         r();
       }
+    } else if (time < (this.birdCelebrateUntil || 0)) {
+      this.birdTarget.set(this.W / 2, 70);
     } else {
       this.birdTarget.set(
         this.W / 2 + Math.sin(time * 0.00028) * this.W * 0.3,

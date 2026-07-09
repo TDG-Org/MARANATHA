@@ -82,6 +82,21 @@ export default class Directions {
     this.redrawPill();
   }
 
+  // Stronger attention beat for idle players — a gentle double breath of
+  // the pill plus a tiny text lift. Called by input gates every ~12s of
+  // inactivity; never changes the wording.
+  nudge() {
+    if (this.text.alpha < 0.1) return;
+    this.scene.tweens.add({
+      targets: this.text,
+      scale: 1.06,
+      duration: 260,
+      yoyo: true,
+      repeat: 1,
+      ease: 'Sine.easeInOut',
+    });
+  }
+
   hide() {
     if (this.pulse) {
       this.pulse.stop();
