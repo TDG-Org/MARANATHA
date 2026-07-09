@@ -12,10 +12,14 @@ function g(scene) {
 export function createCreationTextures(scene) {
   const t = scene.textures;
 
-  // --- Water: deep Alto blue with faint highlight streaks; tiles both ways.
+  // --- Water: deep Alto blue with faint highlight streaks; tiles horizontally.
+  // 300px tall = exactly one tile inside the sea sprite. (It used to be 150
+  // and repeated vertically, painting a bright second waterline mid-sea.)
+  // The top edge is alpha-feathered so the waterline melts into whatever is
+  // behind it — sky on Days 1–2, the shore ridge after — never a hard line.
   if (!t.exists('water')) {
     const w = 960;
-    const h = 150;
+    const h = 300;
     const canvas = t.createCanvas('water', w, h);
     const ctx = canvas.getContext();
     const grd = ctx.createLinearGradient(0, 0, 0, h);
@@ -23,12 +27,12 @@ export function createCreationTextures(scene) {
     grd.addColorStop(1, '#152c42');
     ctx.fillStyle = grd;
     ctx.fillRect(0, 0, w, h);
-    // Soft surface glow instead of a hard line.
-    const surf = ctx.createLinearGradient(0, 0, 0, 6);
-    surf.addColorStop(0, 'rgba(136,201,212,0.35)');
+    // Soft surface glow, peaking just below the feathered edge.
+    const surf = ctx.createLinearGradient(0, 2, 0, 14);
+    surf.addColorStop(0, 'rgba(136,201,212,0.32)');
     surf.addColorStop(1, 'rgba(136,201,212,0)');
     ctx.fillStyle = surf;
-    ctx.fillRect(0, 0, w, 6);
+    ctx.fillRect(0, 2, w, 12);
     // Highlight streaks with feathered ends — reads as light on water, not lines.
     const rnd = new Phaser.Math.RandomDataGenerator(['water']);
     const streak = (sx, sy, sw, a) => {
@@ -39,14 +43,22 @@ export function createCreationTextures(scene) {
       ctx.fillStyle = sg;
       ctx.fillRect(sx, sy, sw, 2);
     };
-    for (let i = 0; i < 16; i++) {
+    for (let i = 0; i < 30; i++) {
       const sx = rnd.between(0, w);
       const sw = rnd.between(50, 170);
-      const sy = rnd.between(10, h - 8);
+      const sy = rnd.between(16, h - 8);
       const a = rnd.realInRange(0.04, 0.09);
       streak(sx, sy, sw, a);
       if (sx + sw > w) streak(sx - w, sy, sw, a); // wrap for seamless tiling
     }
+    // Feather the very top to transparent (soft 8px alpha ramp).
+    ctx.globalCompositeOperation = 'destination-out';
+    const feather = ctx.createLinearGradient(0, 0, 0, 8);
+    feather.addColorStop(0, 'rgba(0,0,0,0.95)');
+    feather.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = feather;
+    ctx.fillRect(0, 0, w, 8);
+    ctx.globalCompositeOperation = 'source-over';
     canvas.refresh();
   }
 

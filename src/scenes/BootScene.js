@@ -12,6 +12,7 @@ export default class BootScene extends Phaser.Scene {
     this.makeGlow('glow', 128);
     this.makeGlow('dot', 16);
     this.makeVignette();
+    this.makeGrain();
     this.scene.start(this.pickStartScene());
   }
 
@@ -33,6 +34,27 @@ export default class BootScene extends Phaser.Scene {
     grd.addColorStop(1, 'rgba(255,255,255,0)');
     ctx.fillStyle = grd;
     ctx.fillRect(0, 0, size, size);
+    canvas.refresh();
+  }
+
+  // Static balanced noise, laid over scenes at very low alpha to dither the
+  // faint banding that 8-bit gradients show on large dark skies. One tile,
+  // one draw call — imperceptible as texture, but it breaks up the bands.
+  makeGrain() {
+    if (this.textures.exists('grain')) return;
+    const size = 128;
+    const canvas = this.textures.createCanvas('grain', size, size);
+    const ctx = canvas.getContext();
+    const img = ctx.createImageData(size, size);
+    const rnd = new Phaser.Math.RandomDataGenerator(['grain']);
+    for (let i = 0; i < img.data.length; i += 4) {
+      const v = rnd.frac() < 0.5 ? 0 : 255;
+      img.data[i] = v;
+      img.data[i + 1] = v;
+      img.data[i + 2] = v;
+      img.data[i + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
     canvas.refresh();
   }
 

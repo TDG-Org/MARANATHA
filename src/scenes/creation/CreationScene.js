@@ -79,9 +79,10 @@ export default class CreationScene extends Phaser.Scene {
     this.clouds = [];
 
     // The sea — "the deep" of Gen 1:2, nearly black until God's light.
-    // Layers are 80px wider than the screen so pointer-parallax (the gentle
-    // 2.5D depth shift) never exposes an edge.
-    this.sea = this.add.tileSprite(-40, 240, W + 80, 300, 'water').setOrigin(0, 0).setDepth(4);
+    // Starts invisible and FADES softly into being during the opening verses
+    // (nothing in this world slides in as a shape). Layers are 80px wider
+    // than the screen so pointer-parallax never exposes an edge.
+    this.sea = this.add.tileSprite(-40, 240, W + 80, 300, 'water').setOrigin(0, 0).setDepth(4).setAlpha(0);
     this.sea.setTint(0x1a2530);
     this.seaTint = 0x1a2530;
 
@@ -99,6 +100,8 @@ export default class CreationScene extends Phaser.Scene {
       [this.ridgeGround, 14], [this.sea, 18], [this.fore, 26],
     ];
     this.pointerNX = 0;
+
+    this.ridgeTint = 0xffffff; // day haze; darkened at night (tweenRidgeTint)
 
     this.groundProps = this.add.container(0, 0).setDepth(3.4); // planted trees, grass, animals
     this.walkX = 0; // world scroll of planted props during the Day 7 walk
@@ -127,6 +130,8 @@ export default class CreationScene extends Phaser.Scene {
     this.walkV = 0; // eased walk speed (px/frame), see updateWalk
 
     this.add.image(0, 0, 'vignette').setOrigin(0).setDepth(880).setAlpha(0.55);
+    // Whisper of static grain dithers gradient banding on big dark skies.
+    this.add.tileSprite(0, 0, W, H, 'grain').setOrigin(0).setDepth(881).setAlpha(0.025);
     attachVolumeControl(this);
     Audio.ambience({ wind: 0.1, water: 0, night: 0, birds: 0 }, 1);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
@@ -165,9 +170,12 @@ export default class CreationScene extends Phaser.Scene {
   async day1() {
     await this.verse.show(V.gen_1_1, { hold: 2800 });
 
-    // Darkness lies over everything, waiting for the light.
-    const darkness = this.add.rectangle(0, 0, this.W, this.H, 0x020206)
-      .setOrigin(0, 0).setDepth(500).setAlpha(1);
+    // "Darkness was over the surface of the deep" — the dark sea fades
+    // softly into being under the void sky while the Spirit hovers over
+    // the waters (Gen 1:2 — the very role the player is about to take).
+    const deepPromise = this.verse.show(V.gen_1_2, { hold: 2400 });
+    this.tweens.add({ targets: this.sea, alpha: 1, duration: 4200, ease: 'Sine.easeInOut' });
+    await deepPromise;
 
     // "Let there be light" — the light descends from above, God's alone.
     Audio.godChord();
@@ -188,11 +196,10 @@ export default class CreationScene extends Phaser.Scene {
     Audio.rumble(2.6);
     const bloom = this.add.image(this.W / 2, 40, 'glow')
       .setScale(1).setAlpha(0).setTint(0xfff3d6).setBlendMode(Phaser.BlendModes.ADD).setDepth(501);
-    this.tweens.add({ targets: bloom, scale: 17, alpha: 0.8, duration: 3200, ease: 'Sine.easeInOut' });
+    this.tweens.add({ targets: bloom, scale: 17, alpha: 0.55, duration: 3600, ease: 'Sine.easeInOut' });
     this.sky.tweenTo(...SKY.firstLight, { duration: 3600 });
     this.tweenSeaTint(0x2a4258, 3600);
-    await this.tweenP({ targets: darkness, alpha: 0, duration: 3600, ease: 'Sine.easeInOut' });
-    darkness.destroy();
+    await this.wait(3600);
     await this.tweenP({ targets: bloom, alpha: 0, duration: 1600, ease: 'Sine.easeOut' });
     bloom.destroy();
     Audio.ambience({ wind: 0.2 });
@@ -306,6 +313,7 @@ export default class CreationScene extends Phaser.Scene {
     this.moon.setVisible(true);
     this.sky.tweenTo(...SKY.night, { duration: 3000 });
     this.tweenSeaTint(0x8898b8, 3000);
+    this.tweenRidgeTint(0x55608c, 3000); // mountains sink into the night with the sky
     this.tweens.add({ targets: this.sun, y: this.H + 200, duration: 2600, ease: 'Sine.easeIn' });
     this.clouds.forEach((c) => this.tweens.add({ targets: c, alpha: 0.22, duration: 2600, ease: 'Sine.easeInOut' }));
     await this.tweenP({ targets: this.moon, y: 130, duration: 2800, ease: 'Cubic.easeOut' });
@@ -340,6 +348,7 @@ export default class CreationScene extends Phaser.Scene {
         this.sun.setPosition(this.W * 0.72, 170).setVisible(true);
         this.sky.tweenTo(...SKY.dayBlue, { duration: 500 });
         this.tweenSeaTint(0xffffff, 600);
+        this.setRidgeTint(0xffffff); // behind the opaque veil — safe to restore instantly
         this.clouds.forEach((c) => this.tweens.add({ targets: c, alpha: 0.7, duration: 700, ease: 'Sine.easeOut' }));
         Audio.ambience({ night: 0, birds: 0.3, wind: 0.25, water: 0.3 });
       },
@@ -640,6 +649,34 @@ export default class CreationScene extends Phaser.Scene {
     }).setDepth(8);
     emitter.explode(count);
     this.time.delayedCall(1200, () => emitter.destroy());
+  }
+
+  // The ridge silhouettes bake golden-hour haze colors into their textures;
+  // at night they must darken WITH the sky or the mountains glow brighter
+  // than the sky behind them (an inverted silhouette).
+  ridgeLayers() {
+    return [this.ridgeVeryFar, this.ridgeFar, this.ridgeMid, this.ridgeGround, this.fore];
+  }
+
+  setRidgeTint(color) {
+    this.ridgeTint = color;
+    this.ridgeLayers().forEach((l) => l.setTint(color));
+  }
+
+  tweenRidgeTint(to, duration) {
+    const from = Phaser.Display.Color.IntegerToColor(this.ridgeTint);
+    const target = Phaser.Display.Color.IntegerToColor(to);
+    const state = { t: 0 };
+    this.tweens.add({
+      targets: state,
+      t: 100,
+      duration,
+      ease: 'Sine.easeInOut',
+      onUpdate: () => {
+        const c = Phaser.Display.Color.Interpolate.ColorWithColor(from, target, 100, state.t);
+        this.setRidgeTint(Phaser.Display.Color.GetColor(c.r, c.g, c.b));
+      },
+    });
   }
 
   tweenSeaTint(to, duration) {
