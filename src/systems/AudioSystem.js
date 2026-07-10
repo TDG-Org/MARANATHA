@@ -1,11 +1,11 @@
-import Phaser from 'phaser';
-import { GW, TEXT_RES } from '../config.js';
-
 // Procedural WebAudio — every sound is synthesized, zero audio files (same
 // rule as the visuals). One shared context, gentle gain staging, a soft
 // echo "space" send for atmosphere, and ambient beds with slow LFO motion
 // so the world feels alive but calm. Notes stay on a pentatonic scale so
 // nothing the player triggers can ever sound sour.
+//
+// Engine-agnostic: no rendering-library imports. UI (volume slider/mute)
+// lives in the DOM — see src/ui/volume.js.
 const VOL_KEY = 'maranatha-volume';
 
 // C-major pentatonic — always consonant.
@@ -28,6 +28,7 @@ class AudioSystem {
     this.amb = null;
     this.birdTimer = null;
     this.onMuted = null; // hook: the narrator stops mid-verse on mute
+    this.onVolume = null; // hook: DOM UI stays in sync
     const unlock = () => this.unlock();
     window.addEventListener('pointerdown', unlock);
     window.addEventListener('keydown', unlock);
@@ -101,6 +102,7 @@ class AudioSystem {
     } else if (!wasEnabled && this.enabled && this.ctx && this.ctx.state === 'suspended') {
       this.ctx.resume().catch(() => {});
     }
+    this.onVolume?.(this.volume);
   }
 
   toggleMute() {
@@ -288,84 +290,3 @@ class AudioSystem {
 }
 
 export const Audio = new AudioSystem();
-
-// Volume control: 🔊 icon (click or M = mute toggle) + draggable slider,
-// top-right of any scene. Everything in logical coordinates. The VISUALS
-// stay small and quiet; the HIT AREAS are finger-sized (the knob used to
-// be a 12px target — ~5 CSS px on a phone, effectively untappable).
-export function attachVolumeControl(scene) {
-  const trackX = GW - 104;
-  const trackW = 72;
-  const y = 24;
-
-  const icon = scene.add
-    .text(trackX - 14, y, Audio.enabled ? '🔊' : '🔇', {
-      fontFamily: "'Segoe UI', system-ui, sans-serif",
-      fontSize: '15px',
-      resolution: TEXT_RES,
-    })
-    .setOrigin(1, 0.5)
-    .setAlpha(0.6)
-    .setDepth(990);
-  icon.setInteractive({
-    hitArea: new Phaser.Geom.Rectangle(-14, -14, icon.width + 28, icon.height + 28),
-    hitAreaCallback: Phaser.Geom.Rectangle.Contains,
-    useHandCursor: true,
-  });
-
-  const track = scene.add.graphics().setDepth(990).setAlpha(0.6);
-  const fill = scene.add.graphics().setDepth(991).setAlpha(0.75);
-  const knob = scene.add.circle(trackX + trackW * Audio.volume, y, 6, 0xf5e6c4, 0.95).setDepth(992);
-  knob.setInteractive({
-    hitArea: new Phaser.Geom.Circle(6, 6, 26),
-    hitAreaCallback: Phaser.Geom.Circle.Contains,
-    useHandCursor: true,
-    draggable: true,
-  });
-
-  const redraw = () => {
-    track.clear();
-    track.fillStyle(0xfdf6e3, 0.28);
-    track.fillRoundedRect(trackX, y - 2, trackW, 4, 2);
-    fill.clear();
-    fill.fillStyle(0xf2b880, 0.9);
-    const w = Math.max(0, knob.x - trackX);
-    if (w > 1) fill.fillRoundedRect(trackX, y - 2, w, 4, 2);
-    icon.setText(Audio.enabled ? '🔊' : '🔇');
-  };
-
-  const setFromX = (x) => {
-    knob.x = Math.min(trackX + trackW, Math.max(trackX, x));
-    Audio.unlock();
-    Audio.setVolume((knob.x - trackX) / trackW);
-    redraw();
-  };
-
-  knob.on('drag', (_p, dragX) => setFromX(dragX));
-  // The whole track is a tall, draggable zone: tap-then-slide anywhere on
-  // it follows the finger — fine control never requires grabbing the knob.
-  const trackZone = scene.add.zone(trackX + trackW / 2, y + 6, trackW + 20, 52)
-    .setOrigin(0.5)
-    .setDepth(990)
-    .setInteractive({ useHandCursor: true, draggable: true });
-  trackZone.on('pointerdown', (p) => setFromX(p.worldX));
-  trackZone.on('drag', (p) => setFromX(p.worldX));
-  const toggleMute = () => {
-    Audio.unlock();
-    Audio.toggleMute();
-    knob.x = trackX + trackW * Audio.volume;
-    redraw();
-    if (Audio.enabled) Audio.uiClick();
-  };
-  icon.on('pointerup', toggleMute);
-  scene.input.keyboard?.on('keydown-M', toggleMute);
-
-  redraw();
-}
-
-// True when a pointer position sits inside the volume-control corner —
-// story input gates use this so slider drags never count as gameplay taps.
-// (Matches the enlarged hit zones above.)
-export function overVolumeUI(worldX, worldY) {
-  return worldX > GW - 200 && worldY < 56;
-}

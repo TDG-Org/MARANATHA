@@ -1,65 +1,41 @@
-import Phaser from 'phaser';
-import { GW, GH, RENDER_SCALE, refreshRenderScale } from './config.js';
-import BootScene from './scenes/BootScene.js';
-import HomeScene from './scenes/HomeScene.js';
-import CreationScene from './scenes/creation/CreationScene.js';
-import ParallaxTestScene from './scenes/ParallaxTestScene.js';
+import * as THREE from 'three';
+import { createRenderer, startLoop } from './core/renderer.js';
+import { detectTier, AdaptiveQuality, DebugHud } from './core/quality.js';
+import { buildFoundation } from './scenes/foundation.js';
+import { Audio } from './systems/AudioSystem.js';
+import { mountVolumeControl } from './ui/volume.js';
 
-const game = new Phaser.Game({
-  type: Phaser.AUTO,
-  parent: 'game',
-  backgroundColor: '#0a0a12',
-  scale: {
-    mode: Phaser.Scale.FIT,
-    autoCenter: Phaser.Scale.CENTER_BOTH,
-    // Real framebuffer is the logical 960x540 world times RENDER_SCALE;
-    // every scene's camera zooms by the same factor (see config.js), so
-    // gameplay code stays in 960x540 coordinates while rendering sharp.
-    width: GW * RENDER_SCALE,
-    height: GH * RENDER_SCALE,
-  },
-  render: {
-    antialias: true,
-    // Snap final quads to whole device pixels — origin-0.5 text otherwise
-    // lands on half-pixels and bilinear filtering smears every glyph.
-    roundPixels: true,
-  },
-  scene: [BootScene, HomeScene, CreationScene, ParallaxTestScene],
-});
+// MARANATHA — HD-2D engine (Three.js). Flat Alto-style sprites living in a
+// 3D world with a real moving camera. Phase A: the foundation scene that
+// proves the look and the performance pipeline.
 
-// The ideal framebuffer scale depends on the window; if the player resizes,
-// rotates, or re-zooms enough that the frozen buffer would be visibly
-// resampled, rebuild it, re-zoom the live cameras, and re-render text at
-// the new density. Without this, loading small and maximizing meant
-// permanent blur until a manual reload.
-let appliedScale = RENDER_SCALE;
-let resizeTimer;
-const rescale = () => {
-  const next = refreshRenderScale();
-  if (Math.abs(next - appliedScale) / appliedScale < 0.08) return;
-  appliedScale = next;
-  game.scale.resize(GW * next, GH * next);
-  const applyTextRes = (list) => list.forEach((child) => {
-    if (child.style && child.style.setResolution) child.style.setResolution(next);
-    if (child.list) applyTextRes(child.list); // containers
-  });
-  for (const scene of game.scene.getScenes(true)) {
-    const cam = scene.cameras && scene.cameras.main;
-    if (cam) {
-      cam.setZoom(next);
-      cam.centerOn(GW / 2, GH / 2);
-    }
-    if (scene.children && scene.children.list) applyTextRes(scene.children.list);
-  }
-};
+const container = document.getElementById('app');
+const renderer = createRenderer(container);
+const { tier, basePixelRatio } = detectTier();
+const quality = new AdaptiveQuality(renderer, { basePixelRatio });
+const hud = new DebugHud(renderer);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(46, window.innerWidth / window.innerHeight, 0.1, 900);
+
+const foundation = buildFoundation({ scene, camera });
+
 window.addEventListener('resize', () => {
-  clearTimeout(resizeTimer);
-  resizeTimer = setTimeout(rescale, 350);
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
 });
-window.addEventListener('orientationchange', () => {
-  clearTimeout(resizeTimer);
-  resizeTimer = setTimeout(rescale, 350);
+
+mountVolumeControl();
+// Gentle golden-hour ambience once the first gesture unlocks audio.
+window.addEventListener('pointerdown', () => Audio.ambience({ wind: 0.25, birds: 0.25 }), { once: true });
+
+const loop = startLoop((dt, now) => {
+  foundation.update(dt, now);
+  renderer.render(scene, camera);
+  quality.frame(dt);
+  hud.frame(dt);
 });
 
 // Debug/testing handle (harmless in production; used by automated playtests).
-window.__MARANATHA = game;
+window.__MARANATHA = { renderer, scene, camera, loop, tier, quality, foundation };
