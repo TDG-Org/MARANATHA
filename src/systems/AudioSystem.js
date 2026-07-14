@@ -28,6 +28,9 @@ class AudioSystem {
     this.sfx = null;   // sfx sub-bus (ambient beds + one-shots + UI)
     this.channels = { music: 1, sfx: 1, voice: 1 }; // 0..1, driven by Settings
     this._pad = null;  // placeholder music pad (real loops arrive via manifest)
+    this.samples = {}; // decoded real audio buffers, keyed by manifest key
+    this._manifest = null;
+    this._loaded = false;
     this.noiseBuf = null;
     this.amb = null;
     this.birdTimer = null;
@@ -91,6 +94,7 @@ class AudioSystem {
       const data = this.noiseBuf.getChannelData(0);
       for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
       this.buildAmbience();
+      this.loadSamples(); // fetch any real files marked available (none → no-op)
     }
     if (this.ctx.state === 'suspended' && this.enabled) this.ctx.resume().catch(() => {});
   }
@@ -171,6 +175,60 @@ class AudioSystem {
   stopMusic() {
     if (this._pad && this.ctx) this._pad.gain.setTargetAtTime(0, this.ctx.currentTime, 1.2);
   }
+
+  // --- File-ready sound layer (see sound-design skill + audio manifest) -----
+  registerManifest(list) {
+    this._manifest = new Map(list.map((e) => [e.key, e]));
+  }
+
+  async loadSamples() {
+    if (this._loaded || !this._manifest || !this.ctx) return;
+    this._loaded = true;
+    for (const e of this._manifest.values()) {
+      if (!e.available || e.loop) continue; // loops stay procedural until fetched explicitly
+      const buf = await this._fetchDecode(e.key);
+      if (buf) this.samples[e.key] = buf;
+    }
+  }
+
+  async _fetchDecode(key) {
+    for (const ext of ['mp3', 'ogg', 'webm']) {
+      try {
+        const res = await fetch(`audio/${key}.${ext}`);
+        if (!res.ok) continue;
+        const arr = await res.arrayBuffer();
+        return await this.ctx.decodeAudioData(arr);
+      } catch { /* try next extension */ }
+    }
+    return null;
+  }
+
+  // Play a manifest sound by KEY: the real file if loaded, else the labeled
+  // procedural placeholder. One-shot; routes to the entry's bus.
+  play(key, { gain = 1 } = {}) {
+    const e = this._manifest?.get(key);
+    const buf = this.samples[key];
+    if (this.on && buf) {
+      const src = this.ctx.createBufferSource();
+      src.buffer = buf;
+      const g = this.ctx.createGain();
+      g.gain.value = gain;
+      const bus = e?.bus === 'music' ? this.music : this.sfx;
+      src.connect(g).connect(bus || this.master);
+      src.start();
+      return;
+    }
+    const fb = e?.fallback;
+    if (fb && typeof this[fb] === 'function') this[fb]();
+    else if (!e) console.warn('[audio] unknown sound key', key);
+  }
+
+  // Procedural bed fallbacks named by the manifest (used until real loops drop
+  // in). They just drive the existing procedural ambience / music systems.
+  ambientCampBed() { this.ambience({ wind: 0.24, birds: 0.22 }); }
+  ambientNightBed() { this.ambience({ wind: 0.12, birds: 0, night: 0.5 }); }
+  musicWarmBed() { this.musicPad(0.03, [130.81, 196.0, 261.63]); }
+  musicWonderBed() { this.musicPad(0.028, [146.83, 220.0, 293.66]); }
 
   // --- Ambient beds: wind, water, night pad, birdsong ---------------------
   buildAmbience() {

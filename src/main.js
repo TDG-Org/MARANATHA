@@ -4,6 +4,7 @@ import { buildJoseph } from './scenes/joseph/index.js';
 import { Audio } from './systems/AudioSystem.js';
 import { Settings } from './systems/Settings.js';
 import { Narrator } from './systems/Narrator.js';
+import { AUDIO_MANIFEST } from './data/audioManifest.js';
 import { mountVolumeControl } from './ui/volume.js';
 
 // MARANATHA — HD-2D engine (Three.js). Flat Alto-style sprites living in a 3D
@@ -16,6 +17,7 @@ const app = createApp(container);
 app.register('home', buildHome);
 app.register('joseph', buildJoseph);
 
+Audio.registerManifest(AUDIO_MANIFEST);
 mountVolumeControl();
 app.navigate('home');
 
