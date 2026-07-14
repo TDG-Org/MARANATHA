@@ -182,7 +182,12 @@ export function makeRidges(pal = {}) {
 
 // --- Ground: a gently rolling unlit heightfield, flattened near the origin --
 
-export function makeGround({ color = 0x4c4066, seed = 77, width = 320, depth = 130, flattenRadius = 14, z = -25 } = {}) {
+// The walkable area stays dead flat (a `flatCore` radius around WORLD origin,
+// where the camp/player live); swells only ramp in beyond it, toward the
+// horizon. Flattening is computed in WORLD space so the mesh's z offset can't
+// push the flat spot off the play area (that bug made the ground rise up and
+// occlude the character).
+export function makeGround({ color = 0x4c4066, seed = 77, width = 320, depth = 130, flatCore = 17, falloff = 46, z = -25, flattenWorldZ = 0 } = {}) {
   const geo = new THREE.PlaneGeometry(width, depth, 64, 20);
   geo.rotateX(-Math.PI / 2);
   const pos = geo.attributes.position;
@@ -192,7 +197,9 @@ export function makeGround({ color = 0x4c4066, seed = 77, width = 320, depth = 1
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i);
     const zz = pos.getZ(i);
-    const d = Math.min(1, Math.hypot(x, zz) / flattenRadius);
+    const worldZ = zz + z; // this vertex's world z (mesh is offset by z)
+    const dist = Math.hypot(x, worldZ - flattenWorldZ);
+    const d = Math.min(1, Math.max(0, (dist - flatCore) / falloff));
     const y = (Math.sin(x * 0.055 + p1) * 1.6 + Math.sin(x * 0.021 + zz * 0.045 + p2) * 2.4) * d * d;
     pos.setY(i, y - 0.02);
   }
