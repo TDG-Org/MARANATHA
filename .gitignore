@@ -29,3 +29,6 @@ IDEAS.md
 CHECKLIST.md
 checklists/
 .claude/
+# Anti-loop experiment ledger — a workflow doc like CHECKLIST/checklists, so it
+# stays local-only too (the public repo is code only). Flagged to the user.
+TRIED.md
