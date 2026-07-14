@@ -70,15 +70,26 @@ export class AdaptiveQuality {
 // Tiny on-screen perf readout, enabled with #debug in the URL. This is how
 // real frame rate gets reported honestly from real devices.
 export class DebugHud {
-  constructor(renderer) {
+  constructor(renderer, { enabled = true } = {}) {
     this.el = document.getElementById('debug');
     this.renderer = renderer;
-    this.enabled = /debug/.test(window.location.hash);
-    if (this.enabled && this.el) this.el.style.display = 'block';
+    // Perf HUD is ON by default (performance mandate: honest fps visible at all
+    // times); Settings can hide it. #debug in the URL still forces it on.
+    this.enabled = enabled || /debug/.test(window.location.hash);
+    this._applyVisibility();
     this.acc = 0;
     this.frames = 0;
     this.fps = 0;
     this.ms = 0;
+  }
+
+  setEnabled(on) {
+    this.enabled = !!on;
+    this._applyVisibility();
+  }
+
+  _applyVisibility() {
+    if (this.el) this.el.style.display = this.enabled ? 'block' : 'none';
   }
 
   frame(dtMs) {

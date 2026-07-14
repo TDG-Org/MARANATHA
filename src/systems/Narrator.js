@@ -77,9 +77,9 @@ class NarratorSystem {
         this.nudge();
         const u = new SpeechSynthesisUtterance(clean);
         if (this.voice) u.voice = this.voice;
-        u.rate = 0.88; // unhurried, audiobook pace
+        u.rate = 1.0; // a touch quicker than before (was 0.88) — still calm
         u.pitch = 0.82; // deeper, calm
-        u.volume = Math.min(1, Math.max(0, Audio.volume));
+        u.volume = Math.min(1, Math.max(0, Audio.voiceLevel)); // narrator channel × master
         u.onend = finish;
         u.onerror = finish;
         window.speechSynthesis.speak(u);

@@ -24,6 +24,10 @@ class AudioSystem {
     this.ctx = null;
     this.master = null;
     this.space = null; // echo send bus
+    this.music = null; // music sub-bus (emotional score)
+    this.sfx = null;   // sfx sub-bus (ambient beds + one-shots + UI)
+    this.channels = { music: 1, sfx: 1, voice: 1 }; // 0..1, driven by Settings
+    this._pad = null;  // placeholder music pad (real loops arrive via manifest)
     this.noiseBuf = null;
     this.amb = null;
     this.birdTimer = null;
@@ -58,6 +62,16 @@ class AudioSystem {
       this.master.gain.value = 0.9 * this.volume;
       this.master.connect(this.ctx.destination);
 
+      // Sub-buses under master: music (score) and sfx (ambient beds + one-shots
+      // + UI). The narrator ("voice") is speechSynthesis — a separate browser
+      // output — so its level is applied per-utterance (voiceLevel), not here.
+      this.sfx = this.ctx.createGain();
+      this.sfx.gain.value = this.channels.sfx;
+      this.sfx.connect(this.master);
+      this.music = this.ctx.createGain();
+      this.music.gain.value = this.channels.music;
+      this.music.connect(this.master);
+
       // Space: a soft filtered feedback echo the one-shots are sent into.
       const delay = this.ctx.createDelay(1);
       delay.delayTime.value = 0.31;
@@ -69,7 +83,7 @@ class AudioSystem {
       const wet = this.ctx.createGain();
       wet.gain.value = 0.4;
       delay.connect(damp).connect(fb).connect(delay);
-      delay.connect(wet).connect(this.master);
+      delay.connect(wet).connect(this.sfx);
       this.space = delay;
 
       const len = this.ctx.sampleRate * 2;
@@ -109,6 +123,55 @@ class AudioSystem {
     this.setVolume(this.enabled ? 0 : this.lastVolume);
   }
 
+  // Per-channel level (0..1). Master is `volume`; music/sfx are sub-buses;
+  // voice is baked into narrator utterances via voiceLevel.
+  setChannel(name, v) {
+    v = Math.min(1, Math.max(0, v));
+    if (!(name in this.channels)) return;
+    this.channels[name] = v;
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    if (name === 'sfx' && this.sfx) this.sfx.gain.setTargetAtTime(v, t, 0.05);
+    if (name === 'music' && this.music) this.music.gain.setTargetAtTime(v, t, 0.05);
+  }
+
+  // Effective narrator loudness = narrator channel × master. speechSynthesis
+  // can't be gain-routed, so the Narrator bakes this into utterance.volume.
+  get voiceLevel() {
+    return this.volume * this.channels.voice;
+  }
+
+  // Placeholder emotional pad on the MUSIC bus so the Music slider is real and
+  // scenes have a bed. Real loops drop in later via the audio manifest.
+  musicPad(level = 0.03, chord = [130.81, 196.0, 261.63]) {
+    if (!this.on) return;
+    if (!this._pad) {
+      this._pad = this.ctx.createGain();
+      this._pad.gain.value = 0;
+      this._pad.connect(this.music);
+      chord.forEach((f) => {
+        const o = this.ctx.createOscillator();
+        o.type = 'sine';
+        o.frequency.value = f;
+        const og = this.ctx.createGain();
+        og.gain.value = 0.5 / chord.length;
+        const lfo = this.ctx.createOscillator(); // slow detune shimmer = "alive"
+        lfo.frequency.value = 0.05 + Math.random() * 0.05;
+        const lg = this.ctx.createGain();
+        lg.gain.value = 1.4;
+        lfo.connect(lg).connect(o.detune);
+        o.connect(og).connect(this._pad);
+        o.start();
+        lfo.start();
+      });
+    }
+    this._pad.gain.setTargetAtTime(level, this.ctx.currentTime, 1.6);
+  }
+
+  stopMusic() {
+    if (this._pad && this.ctx) this._pad.gain.setTargetAtTime(0, this.ctx.currentTime, 1.2);
+  }
+
   // --- Ambient beds: wind, water, night pad, birdsong ---------------------
   buildAmbience() {
     const mkNoiseBed = (type, freq, q) => {
@@ -121,7 +184,7 @@ class AudioSystem {
       filt.Q.value = q;
       const g = this.ctx.createGain();
       g.gain.value = 0;
-      src.connect(filt).connect(g).connect(this.master);
+      src.connect(filt).connect(g).connect(this.sfx);
       src.start();
       return { filt, g };
     };
@@ -149,7 +212,7 @@ class AudioSystem {
       o.connect(og).connect(pg);
       o.start();
     });
-    pg.connect(this.master);
+    pg.connect(this.sfx);
     this.amb.night = { g: pg };
   }
 
@@ -195,7 +258,7 @@ class AudioSystem {
     g.gain.setValueAtTime(0, t);
     g.gain.linearRampToValueAtTime(gain, t + attack);
     g.gain.linearRampToValueAtTime(0, t + attack + dur + release);
-    node.connect(g).connect(this.master);
+    node.connect(g).connect(this.sfx);
     if (send > 0 && this.space) {
       const sg = this.ctx.createGain();
       sg.gain.value = send;
@@ -220,7 +283,7 @@ class AudioSystem {
     g.gain.setValueAtTime(0, t);
     g.gain.linearRampToValueAtTime(gain, t + attack);
     g.gain.linearRampToValueAtTime(0, t + dur);
-    s.connect(f).connect(g).connect(this.master);
+    s.connect(f).connect(g).connect(this.sfx);
     if (send > 0 && this.space) {
       const sg = this.ctx.createGain();
       sg.gain.value = send;

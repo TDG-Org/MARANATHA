@@ -26,7 +26,7 @@ export const STORIES = [
     id: 'joseph',
     title: 'Joseph',
     passage: 'Genesis 37–50',
-    sceneKey: null,
+    sceneKey: 'joseph', // Phase C: the first playable story (built now)
     blurb: 'Betrayed, enslaved, forgotten — yet what others meant for evil, God meant for good.',
   },
 ];
