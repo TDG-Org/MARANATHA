@@ -37,9 +37,26 @@ export function statusOf(storyId) {
 }
 
 export function completeStory(storyId) {
-  const completed = getCompleted();
+  const data = read();
+  const completed = Array.isArray(data.completed) ? data.completed : [];
   if (!completed.includes(storyId)) completed.push(storyId);
-  write({ completed });
+  data.completed = completed;
+  write(data);
+}
+
+// Furthest scene reached within a story (0 = none). Lets a partly-built story
+// like Joseph record progress without marking the whole story complete.
+export function getSceneProgress(storyId) {
+  const { scenes } = read();
+  return (scenes && typeof scenes === 'object' && scenes[storyId]) || 0;
+}
+
+export function setSceneProgress(storyId, n) {
+  const data = read();
+  const scenes = data.scenes && typeof data.scenes === 'object' ? data.scenes : {};
+  scenes[storyId] = Math.max(n, scenes[storyId] || 0);
+  data.scenes = scenes;
+  write(data);
 }
 
 export function resetProgress() {

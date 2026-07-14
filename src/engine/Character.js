@@ -25,44 +25,22 @@ export class Character {
     this.strideLen = strideLen;
     this.bobAmp = bobAmp;
 
-    const poses = [0, ...walkPoses]; // 0 = idle
-    this.frameCount = poses.length;
-    const atlasW = frameW * this.frameCount;
-
-    const canvas = document.createElement('canvas');
-    canvas.width = atlasW;
-    canvas.height = frameH;
-    const ctx = canvas.getContext('2d');
-    poses.forEach((swing, i) => {
-      ctx.save();
-      ctx.translate(i * frameW, 0);
-      ctx.beginPath();
-      ctx.rect(0, 0, frameW, frameH);
-      ctx.clip();
-      draw(ctx, frameW, frameH, swing);
-      ctx.restore();
-    });
-
-    const tex = new THREE.CanvasTexture(canvas);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    tex.anisotropy = 1;
-    tex.magFilter = THREE.LinearFilter;
-    tex.minFilter = THREE.LinearFilter;
-    tex.wrapS = THREE.ClampToEdgeWrapping;
-    tex.wrapT = THREE.ClampToEdgeWrapping;
-    tex.repeat.x = 1 / this.frameCount;
-    tex.offset.x = 0;
-    this.texture = tex;
+    this._frameW = frameW;
+    this._frameH = frameH;
+    this._poses = [0, ...walkPoses]; // 0 = idle
+    this.frameCount = this._poses.length;
 
     const w = height * (frameW / frameH);
     this.sprite = new THREE.Mesh(
       new THREE.PlaneGeometry(w, height),
       new THREE.MeshBasicMaterial({
-        map: tex, transparent: true, alphaTest: 0.02, depthWrite: false, fog: true,
+        transparent: true, alphaTest: 0.02, depthWrite: false, fog: true,
       }),
     );
     this.sprite.position.y = height / 2;
     this._baseY = height / 2;
+    this.texture = null;
+    this._buildAtlas(draw); // sets this.texture + material.map
 
     this.shadow = blobShadow(w * 1.05);
 
@@ -76,6 +54,40 @@ export class Character {
     this._faceTarget = 1;
     this._right = new THREE.Vector3();
   }
+
+  // Draw all frames into one atlas canvas → texture. Rebuildable so a
+  // character can be re-skinned mid-scene (e.g. Joseph receiving the coat).
+  _buildAtlas(draw) {
+    const fw = this._frameW, fh = this._frameH, poses = this._poses;
+    const canvas = document.createElement('canvas');
+    canvas.width = fw * this.frameCount;
+    canvas.height = fh;
+    const ctx = canvas.getContext('2d');
+    poses.forEach((swing, i) => {
+      ctx.save();
+      ctx.translate(i * fw, 0);
+      ctx.beginPath();
+      ctx.rect(0, 0, fw, fh);
+      ctx.clip();
+      draw(ctx, fw, fh, swing);
+      ctx.restore();
+    });
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 1;
+    tex.magFilter = THREE.LinearFilter;
+    tex.minFilter = THREE.LinearFilter;
+    tex.wrapS = THREE.ClampToEdgeWrapping;
+    tex.wrapT = THREE.ClampToEdgeWrapping;
+    tex.repeat.x = 1 / this.frameCount;
+    tex.offset.x = 0;
+    if (this.texture) this.texture.dispose();
+    this.texture = tex;
+    this.sprite.material.map = tex;
+    this.sprite.material.needsUpdate = true;
+  }
+
+  setDraw(draw) { this._buildAtlas(draw); }
 
   addTo(scene) { scene.add(this.root); return this; }
 
@@ -97,13 +109,12 @@ export class Character {
       camera.position.z - this.root.position.z,
     );
 
-    // Frame selection.
+    // Frame selection (single-frame actors like sheep stay on frame 0).
     let frame = 0;
-    if (moving) {
+    if (moving && this.frameCount > 1) {
       this.walkDist += speed * dt * 0.001;
-      const step = 1 + (Math.floor(this.walkDist / this.strideLen) % (this.frameCount - 1));
-      frame = step;
-    } else {
+      frame = 1 + (Math.floor(this.walkDist / this.strideLen) % (this.frameCount - 1));
+    } else if (!moving) {
       this.walkDist = 0;
     }
     this.texture.offset.x = frame / this.frameCount;

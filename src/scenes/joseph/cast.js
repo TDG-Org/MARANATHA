@@ -115,18 +115,88 @@ export function drawRobedFigure(ctx, w, h, swing, opts = {}) {
   ctx.stroke();
 }
 
-// The player. Youthful, no beard, wearing the ornate robe (his identity until
-// the pit). Muted jewel bands so he's recognizable at a glance.
+// The player. Youthful, no beard. He starts in a plain shepherd's robe and
+// receives the robe of many colors at the gift (giveCoat) — so the coat is
+// truly *given*, not worn from the start.
+const josephPlain = { robe: '#cdbf9e', robeShade: '#ad9f78', skin: '#cf9a63', hair: '#2f2620' };
+const josephCoat = { ...josephPlain, bands: ['#b5643c', '#cf9a4e', '#6f8256', '#8a5a72', '#3f7a86'] };
+
 export function makeJoseph() {
   return new Character({
     name: 'Joseph',
     height: 2.0,
+    draw: (ctx, w, h, swing) => drawRobedFigure(ctx, w, h, swing, josephPlain),
+  });
+}
+
+// Give Joseph the robe of many colors (called at the coat beat, Gen 37:3).
+export function giveCoat(joseph) {
+  joseph.setDraw((ctx, w, h, swing) => drawRobedFigure(ctx, w, h, swing, josephCoat));
+}
+
+// Jacob / Israel — older, grey-bearded, deep russet robe, leaning on a staff.
+export function makeJacob() {
+  return new Character({
+    name: 'Jacob',
+    height: 2.06,
     draw: (ctx, w, h, swing) => drawRobedFigure(ctx, w, h, swing, {
-      robe: '#e2d3ac',
-      robeShade: '#c3b183',
-      skin: '#cf9a63',
-      hair: '#2f2620',
-      bands: ['#b5643c', '#cf9a4e', '#6f8256', '#8a5a72', '#3f7a86'],
+      robe: '#8a5a3c', robeShade: '#6e4630', skin: '#b98a55',
+      hair: '#8f8a82', beard: '#c3bdb0', staff: true,
     }),
   });
+}
+
+// Reuben — the eldest: tallest, broad, muted blue, steadier bearing.
+export function makeReuben() {
+  return new Character({
+    name: 'Reuben',
+    height: 2.12,
+    draw: (ctx, w, h, swing) => drawRobedFigure(ctx, w, h, swing, {
+      robe: '#5a6b86', robeShade: '#47566e', skin: '#c98d5a',
+      hair: '#3a2c22', beard: '#4a3a2c',
+    }),
+  });
+}
+
+// Judah — strong, plain, ochre/brown; stands a little forward of the group.
+export function makeJudah() {
+  return new Character({
+    name: 'Judah',
+    height: 2.0,
+    draw: (ctx, w, h, swing) => drawRobedFigure(ctx, w, h, swing, {
+      robe: '#a9773f', robeShade: '#8a5f31', skin: '#c07d45',
+      hair: '#2f2620', beard: '#3a2c1e',
+    }),
+  });
+}
+
+// A believable knot of other brothers — vary tone/height so they aren't clones.
+const BROTHER_LOOKS = [
+  { robe: '#7a6a56', robeShade: '#5f5344', skin: '#c1854e', hair: '#2f2620', beard: '#3a2c1e', height: 1.98 },
+  { robe: '#6b5d6e', robeShade: '#544857', skin: '#b87c46', hair: '#241f1a', beard: null, height: 1.92 },
+  { robe: '#8a7a5a', robeShade: '#6d6046', skin: '#cf9a63', hair: '#3a2c22', beard: '#4a3a2c', height: 2.03 },
+];
+export function makeBrother(i = 0) {
+  const o = BROTHER_LOOKS[i % BROTHER_LOOKS.length];
+  return new Character({ name: `Brother ${i + 1}`, height: o.height, draw: (ctx, w, h, s) => drawRobedFigure(ctx, w, h, s, o) });
+}
+
+// --- Sheep: a woolly, idle camp animal (single frame + breath) --------------
+function drawSheep(ctx, w, h) {
+  const cx = w / 2, groundY = h - 6;
+  ctx.strokeStyle = '#4a4034'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+  [-14, -5, 6, 15].forEach((dx) => { ctx.beginPath(); ctx.moveTo(cx + dx, groundY - 16); ctx.lineTo(cx + dx, groundY); ctx.stroke(); });
+  // woolly body — several soft cream lumps
+  ctx.fillStyle = '#efe9dc';
+  [[-12, -20, 12], [0, -24, 15], [13, -20, 12], [-4, -14, 14], [8, -14, 12]].forEach(([dx, dy, r]) => {
+    ctx.beginPath(); ctx.arc(cx + dx, groundY + dy, r, 0, Math.PI * 2); ctx.fill();
+  });
+  // head
+  ctx.fillStyle = '#5a4d3f';
+  ctx.beginPath(); ctx.ellipse(cx + 20, groundY - 20, 6.5, 8, 0.2, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#efe9dc'; // little forehead tuft
+  ctx.beginPath(); ctx.arc(cx + 18, groundY - 27, 4, 0, Math.PI * 2); ctx.fill();
+}
+export function makeSheep() {
+  return new Character({ name: 'sheep', height: 0.9, frameW: 96, frameH: 64, walkPoses: [], strideLen: 1, bobAmp: 0.02, draw: drawSheep });
 }

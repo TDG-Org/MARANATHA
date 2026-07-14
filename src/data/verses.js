@@ -89,4 +89,32 @@ export const VERSES = {
     ref: 'Genesis 2:7',
     text: 'Then the LORD God formed man from the dust of the ground and breathed the breath of life into his nostrils, and the man became a living being.',
   },
+
+  // --- Joseph, Scene 1: the coat & the dreams (Gen 37:1-11) ---
+  // Verified verbatim against the published BSB (berean.bible / biblehub.com)
+  // on 2026-07-13. Trims drop only whole clauses, marked with an ellipsis.
+  gen_37_3: {
+    ref: 'Genesis 37:3',
+    text: 'Now Israel loved Joseph more than his other sons, because Joseph had been born to him in his old age; so he made him a robe of many colors.',
+  },
+  gen_37_4: {
+    ref: 'Genesis 37:4',
+    text: 'When Joseph’s brothers saw that their father loved him more than any of them, they hated him and could not speak a kind word to him.',
+  },
+  gen_37_7: {
+    ref: 'Genesis 37:7',
+    text: 'We were binding sheaves of grain in the field, and suddenly my sheaf rose and stood upright, while your sheaves gathered around and bowed down to mine.',
+  },
+  gen_37_8: {
+    ref: 'Genesis 37:8',
+    text: '“Do you intend to reign over us?” his brothers asked. “Will you actually rule us?” So they hated him even more because of his dream and his statements.',
+  },
+  gen_37_9: {
+    ref: 'Genesis 37:9',
+    text: '… and this time the sun and moon and eleven stars were bowing down to me.',
+  },
+  gen_37_11: {
+    ref: 'Genesis 37:11',
+    text: 'And his brothers were jealous of him, but his father kept in mind what he had said.',
+  },
 };
