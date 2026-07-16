@@ -46,8 +46,9 @@ it — the real verse (Berean Standard Bible) shown on screen and read aloud on 
 
 - **Creation** — Genesis 1–2 · a short cinematic prologue *(planned)*
 - **Joseph** — Genesis 37–50 · the first playable story.
-  **Scene 1 — The Coat & the Dreams** (Genesis 37:1‑11) is playable now: the robe of many
-  colors, the brothers’ jealousy, and the two dreams by night. More scenes are on the way.
+  **Scene 1 — The Coat & the Dreams** (Genesis 37:1‑11) is playable now in full 3D: herd the
+  flock, receive the coat of many colors, live the two dreams by night, and face the brothers’
+  jealousy. More scenes are on the way.
 
 ## 🚀 Run locally
 
@@ -65,8 +66,8 @@ The HD‑2D technique: yaw‑billboarded canvas‑texture sprites living in unli
 environments, one dithered shader‑gradient sky dome, fog for depth, instanced props, and a
 device‑tier DPR clamp with adaptive quality that sheds resolution only when a device is
 actually struggling. The UI is a DOM overlay, so text stays crisp at any resolution. Audio is
-a channel‑mixed WebAudio graph (**Master / Music / SFX / Narrator**); drop real sound files
-into [`/audio`](audio/README.md) and they replace the procedural placeholders automatically.
+a channel‑mixed WebAudio graph (**Master / Music / SFX / Narrator**) with file‑first narration
+and a graceful procedural fallback.
 
 ## 📁 Project layout
 
@@ -79,12 +80,15 @@ src/screens/home.js   the story-map home screen
 src/scenes/joseph/    the Joseph story
 src/systems/          audio, narrator, save, settings
 src/ui/               dialogue, verse panel, settings, confirm modal, HUD
-src/data/             verses (BSB), story registry, audio manifest
+src/data/             verses (WEB / BSB), story registry, audio manifest
+src/scenes/joseph3d/  the 3D Scene 1: assembly, beats, props, sheep, cast
+public/models/        rigged character GLBs (CC0 — see CREDITS.md)
 ```
 
 ## 📜 Notes
 
-- Scripture is the **Berean Standard Bible** (public domain).
+- Displayed scripture is the **World English Bible** (public domain), verified against the
+  canonical text. Character models are **CC0** (credits in `public/models/CREDITS.md`).
 - The earlier Phaser 3 version (a full playable Creation story) is preserved on the
   [`phaser-archive`](https://github.com/TDG-Org/MARANATHA/tree/phaser-archive) branch.
 

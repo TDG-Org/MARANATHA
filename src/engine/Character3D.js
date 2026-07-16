@@ -27,12 +27,6 @@ const CLIP_CANDIDATES = {
 const HIDE_RE = /spellbook|wand|hat\b|_hat|knife|crossbow|throwable|sword|shield|axe|dagger|quiver|arrow|smokebomb|mug|1h_|2h_(?!staff)/i;
 const CAPE_RE = /cape|coat/i;
 const STAFF_RE = /2h_staff|staff/i;
-const PART_COLOR = [
-  { re: /head/i, key: 'headOverride' }, // hooded head = cloth; bare head = skin (resolved below)
-  { re: /arm/i, key: 'robe' },          // sleeves
-  { re: /body|torso/i, key: 'robe' },
-  { re: /leg/i, key: 'robeShade' },
-];
 
 const ANIM = { // capsule-mode procedural params
   idle: { swing: 0.06, speed: 1.6, bob: 0.010 },
@@ -83,43 +77,51 @@ export class Character3D {
     this.rig.scale.setScalar(scale);
     this.facing.add(this.rig);
 
-    // 1) classify nodes
+    // 1) classify meshes. Hide fantasy accessories; keep the HEAD aside so it
+    //    can keep its painted face (real eyes) instead of being merged flat.
     const parts = [];
+    let headNode = null;
     this.rig.traverse((o) => {
       if (!o.isMesh && !o.isSkinnedMesh) return;
       const n = o.name || '';
       if (STAFF_RE.test(n)) { this.staffMesh = o; o.visible = !!staff; return; }
       if (CAPE_RE.test(n)) { this.capeMesh = o; o.visible = false; return; } // coat equips later
       if (HIDE_RE.test(n)) { o.visible = false; return; }
+      if (/head|face/i.test(n) && !headNode) headNode = o;
       parts.push(o);
     });
 
-    // 2) per-part Alto colors (flat toon; the source texture is not used)
+    // 2) per-part Alto colors for the BODY (flat toon; source texture unused)
     const colorOf = (node) => {
       const n = node.name || '';
-      for (const rule of PART_COLOR) {
-        if (rule.re.test(n)) {
-          if (rule.key === 'headOverride') return /hood/i.test(n) || hoodIsCloth ? this.colors.robe : this.colors.skin;
-          return this.colors[rule.key] ?? this.colors.robe;
-        }
-      }
-      return this.colors.robe;
+      if (/leg/i.test(n)) return this.colors.robeShade;
+      if (/sash|belt/i.test(n)) return this.colors.sash ?? this.colors.robe;
+      return this.colors.robe; // arms, body, torso, cloth, anything unnamed
     };
 
-    // 3) merge every skinned part into ONE vertex-colored SkinnedMesh (1 draw).
-    //    Falls back to per-part toon materials if the merge isn't possible.
-    const skinned = parts.filter((p) => p.isSkinnedMesh);
+    // 3) merge the BODY (everything but the head) into ONE vertex-colored
+    //    SkinnedMesh (1 draw); the head stays separate + textured (+1 draw/char).
+    const bodyParts = parts.filter((p) => p.isSkinnedMesh && p !== headNode);
     let merged = null;
-    if (skinned.length > 1) merged = this._mergeSkinnedParts(skinned, colorOf);
+    if (bodyParts.length > 1) merged = this._mergeSkinnedParts(bodyParts, colorOf);
     if (merged) {
-      skinned.forEach((p) => { p.visible = false; });
+      bodyParts.forEach((p) => { p.visible = false; });
       this.bodyMesh = merged;
     } else {
-      parts.forEach((p) => { p.material = this._toon(colorOf(p)); });
-      this.bodyMesh = skinned[0] || parts[0];
+      bodyParts.forEach((p) => { p.material = this._toon(colorOf(p)); });
+      this.bodyMesh = bodyParts[0] || parts[0];
     }
 
-    // 4) accessories get their own toon materials
+    // 4) the HEAD keeps its painted face (toon-shaded, zero shine) so nobody is
+    //    faceless. Falls back to a flat skin tone if the rig has no map.
+    if (headNode) {
+      const faceMap = headNode.material && headNode.material.map ? headNode.material.map : null;
+      headNode.visible = true;
+      headNode.material = faceMap ? this._toon(0xffffff, { map: faceMap }) : this._toon(this.colors.skin);
+    }
+    this.headNode = headNode;
+
+    // 5) accessories get their own toon materials
     if (this.capeMesh) {
       this.capeMesh.material = this.colors.coat && this.colors.coat.length
         ? this._coatMaterial(this.colors.coat)
@@ -127,16 +129,20 @@ export class Character3D {
     }
     if (this.staffMesh) this.staffMesh.material = this._toon(0x6b4a2c);
 
-    // 5) size + animation. Height from the merged BODY geometry (bind pose) —
-    // Box3.setFromObject would count hidden accessory meshes (the wizard hat
-    // inflated headHeight to 3.1 before this).
-    let rawTop = 2.0;
-    const geoOf = this.bodyMesh?.geometry;
-    if (geoOf) {
-      geoOf.computeBoundingBox();
-      rawTop = geoOf.boundingBox.max.y;
+    // 6) head height from the HEAD BONE (hidden accessories can't inflate it)
+    this.rig.updateWorldMatrix(true, true);
+    const headBone = this.rig.getObjectByName('head');
+    if (headBone) {
+      const hp = new THREE.Vector3();
+      headBone.getWorldPosition(hp);
+      this.headHeight = Math.max(1.3, hp.y) + 0.3;
+    } else {
+      let top = 1.8;
+      const g = this.bodyMesh?.geometry;
+      if (g) { g.computeBoundingBox(); top = g.boundingBox.max.y * scale; }
+      this.headHeight = Math.max(1.3, top) + 0.2;
     }
-    this.headHeight = Math.max(1.2, rawTop * scale) + 0.12;
+
     this.mixer = new THREE.AnimationMixer(this.rig);
     this.actions = {};
     for (const s of CHARACTER_STATES) {

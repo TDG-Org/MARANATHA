@@ -190,11 +190,15 @@ class AudioSystem {
   async loadSamples() {
     if (this._loaded || !this._manifest || !this.ctx) return;
     this._loaded = true;
-    for (const e of this._manifest.values()) {
-      if (!e.available || e.bus === 'voice') continue; // voice VO has its own loader
-      const buf = await this._fetchDecode(e.key);
-      if (buf) this.samples[e.key] = buf;
-    }
+    // DROP-AND-GO: try to load EVERY non-voice sound by name — no manifest
+    // editing needed. Missing files 404 once (harmless), are negatively cached
+    // as null, and fall back to the labeled procedural placeholder or silence.
+    // Voice VO is handled by the Narrator's own file-first loader.
+    await Promise.all(
+      [...this._manifest.values()]
+        .filter((e) => e.bus !== 'voice')
+        .map(async (e) => { this.samples[e.key] = (await this._fetchDecode(e.key)) || null; }),
+    );
   }
 
   // Looping bed/music by manifest key. Real file → looped source with a live
