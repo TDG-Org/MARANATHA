@@ -1,5 +1,6 @@
 import { Audio } from '../systems/AudioSystem.js';
 import { Narrator } from '../systems/Narrator.js';
+import { isModalOpen } from './modal.js';
 
 // The PAUSE layer: Esc (or the ⏸ button, top-right under the volume control)
 // truly pauses the game — the app loop freezes (app.setPaused), the audio
@@ -93,8 +94,12 @@ export function createPauseMenu({ app, isInputOn, setInput, onSettings, onHome }
     if (on) {
       setInput?.(false);
       Narrator.pause?.();
+      // holdSuspend stops AudioSystem's global unlock/visibility listeners
+      // from silently resuming the soundscape while we're frozen
+      Audio.holdSuspend = true;
       Audio.ctx?.suspend?.().catch?.(() => {});
     } else {
+      Audio.holdSuspend = false;
       if (Audio.enabled) Audio.ctx?.resume?.().catch?.(() => {});
       Narrator.resume?.();
       // restore the SCENE's current truth — a cutscene may have legally
@@ -125,6 +130,7 @@ export function createPauseMenu({ app, isInputOn, setInput, onSettings, onHome }
 
   // --- input: Esc toggles; while open, nothing leaks to the game -------------
   const onKey = (e) => {
+    if (isModalOpen()) return; // an open confirm modal owns Esc/Enter
     if (e.key === 'Escape' && !subOpen) {
       e.preventDefault();
       e.stopImmediatePropagation();
@@ -137,6 +143,7 @@ export function createPauseMenu({ app, isInputOn, setInput, onSettings, onHome }
     }
   };
   const onPointer = (e) => {
+    if (isModalOpen()) return;
     if (open && !subOpen && !overlay.contains(e.target) && e.target !== btn) {
       e.stopImmediatePropagation();
       e.preventDefault();

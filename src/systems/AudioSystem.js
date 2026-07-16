@@ -46,8 +46,11 @@ class AudioSystem {
     document.addEventListener('visibilitychange', () => {
       if (!this.ctx) return;
       if (document.hidden) this.ctx.suspend().catch(() => {});
-      else if (this.enabled) this.ctx.resume().catch(() => {});
+      else if (this.enabled && !this.holdSuspend) this.ctx.resume().catch(() => {});
     });
+    // While true (the pause menu), nothing auto-resumes the context — not the
+    // unlock listeners above, not a visibility flip. The pauser releases it.
+    this.holdSuspend = false;
   }
 
   get enabled() {
@@ -101,7 +104,7 @@ class AudioSystem {
       this.buildAmbience();
       this.loadSamples(); // fetch any real files marked available (none → no-op)
     }
-    if (this.ctx.state === 'suspended' && this.enabled) this.ctx.resume().catch(() => {});
+    if (this.ctx.state === 'suspended' && this.enabled && !this.holdSuspend) this.ctx.resume().catch(() => {});
   }
 
   setVolume(v) {

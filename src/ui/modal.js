@@ -2,6 +2,12 @@ import { Audio } from '../systems/AudioSystem.js';
 
 // A calm "Are you sure?" confirm dialog. Returns a Promise<boolean>.
 // Used by the HOME button and by Settings → Reset progress.
+//
+// Layering contract: while ANY modal is open it owns Esc/Enter (capture phase,
+// stops propagation) — pause/settings check isModalOpen() and stand down.
+let openCount = 0;
+export const isModalOpen = () => openCount > 0;
+
 export function confirmModal({
   title = 'Are you sure?',
   body = '',
@@ -72,24 +78,27 @@ export function confirmModal({
       panel.style.transform = 'translateY(0)';
     });
 
+    openCount += 1;
     let closed = false;
     const close = (result) => {
       if (closed) return;
       closed = true;
+      openCount = Math.max(0, openCount - 1);
       try { Audio.uiClick?.(); } catch { /* ignore */ }
       backdrop.style.opacity = '0';
       panel.style.transform = 'translateY(8px)';
-      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('keydown', onKey, true);
       setTimeout(() => { backdrop.remove(); resolve(result); }, 220);
     };
+    // capture + stopImmediatePropagation: the modal OWNS these keys while open
     const onKey = (e) => {
-      if (e.key === 'Escape') close(false);
-      if (e.key === 'Enter') close(true);
+      if (e.key === 'Escape') { e.stopImmediatePropagation(); close(false); }
+      if (e.key === 'Enter') { e.stopImmediatePropagation(); close(true); }
     };
     cancelBtn.onclick = () => close(false);
     confirmBtn.onclick = () => close(true);
     backdrop.onclick = (e) => { if (e.target === backdrop) close(false); };
-    window.addEventListener('keydown', onKey);
+    window.addEventListener('keydown', onKey, true);
     // Focus the safe (cancel) option by default.
     setTimeout(() => cancelBtn.focus(), 60);
   });

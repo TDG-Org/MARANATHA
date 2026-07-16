@@ -1,8 +1,12 @@
+import { pausableWait } from '../engine/Sequencer.js';
+
 // Cinematic presentation layer (cutscene-director skill): letterbox bars that
 // glide in/out, engraved title cards (bottom-right, location · passage), and a
 // whisper-alpha mood tint the grading system drives. Pure DOM; one instance
-// per scene; dispose removes everything.
-export function createCinema() {
+// per scene; dispose removes everything. All holds honour the pause menu
+// (isPaused) — a paused player never loses a title card or a fade.
+export function createCinema({ isPaused = null } = {}) {
+  const hold = (ms) => pausableWait(ms, isPaused);
   const mk = (css) => {
     const el = document.createElement('div');
     el.style.cssText = css;
@@ -40,14 +44,14 @@ export function createCinema() {
       letterboxOn = !!on;
       top.style.transform = on ? 'translateY(0)' : 'translateY(-100%)';
       bottom.style.transform = on ? 'translateY(0)' : 'translateY(100%)';
-      return new Promise((r) => setTimeout(r, 580));
+      return hold(580);
     },
 
     // fade(true, ms) dips to black; fade(false, ms) lifts. ms 0 = instant.
     fade(toBlack, ms = 600) {
       fadeEl.style.transition = ms > 0 ? `opacity ${ms}ms ease` : 'none';
       fadeEl.style.opacity = toBlack ? '1' : '0';
-      return new Promise((r) => setTimeout(r, ms));
+      return hold(ms);
     },
 
     // titleCard({ heading:'HEBRON, CANAAN', sub:'c. 1898 BC · GENESIS 37', holdMs })
@@ -57,10 +61,10 @@ export function createCinema() {
         (sub ? `<div style="font-size:clamp(11px,1.5vw,14px);letter-spacing:0.3em;opacity:0.72;margin-top:6px;text-transform:uppercase;">${sub}</div>` : '');
       title.style.opacity = '1';
       title.style.transform = 'translateY(0)';
-      await new Promise((r) => setTimeout(r, holdMs));
+      await hold(holdMs);
       title.style.opacity = '0';
       title.style.transform = 'translateY(6px)';
-      await new Promise((r) => setTimeout(r, 900));
+      await hold(900);
     },
 
     // Grading drives this; alpha is clamped to the whisper ceiling.

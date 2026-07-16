@@ -85,10 +85,21 @@ export class SheepFlock {
       if (!s.counted && pd2 < 3.3 * 3.3) {
         // HERD: trot ahead of the player, biased toward the pen gate/center.
         // D3 tuning: wider herd radius + stronger pen bias — lambs are EASY.
-        const px = this.pen.minX + 1.6; // just inside the gate
-        const pz = (this.pen.gate.z0 + this.pen.gate.z1) / 2;
-        const gateInX = this._inPen(s.x, s.z) ? (this.pen.minX + this.pen.maxX) / 2 : px;
-        const gateInZ = this._inPen(s.x, s.z) ? (this.pen.minZ + this.pen.maxZ) / 2 : pz;
+        // Two-stage waypoint: a sheep still EAST of the gate line swings to a
+        // point OUTSIDE the gate first (aiming straight at "inside" drove it
+        // into the south/east fence, where it ground against the rails).
+        const gm = (this.pen.gate.z0 + this.pen.gate.z1) / 2;
+        let gateInX, gateInZ;
+        if (this._inPen(s.x, s.z)) {
+          gateInX = (this.pen.minX + this.pen.maxX) / 2;
+          gateInZ = (this.pen.minZ + this.pen.maxZ) / 2;
+        } else if (s.x > this.pen.minX - 0.2 && (s.z < this.pen.gate.z0 || s.z > this.pen.gate.z1)) {
+          gateInX = this.pen.minX - 1.5; // round the corner to the gate mouth
+          gateInZ = gm;
+        } else {
+          gateInX = this.pen.minX + 1.6; // straight through the opening
+          gateInZ = gm;
+        }
         let ax = dxp, az = dzp; // away from player
         const al = Math.hypot(ax, az) || 1;
         ax /= al; az /= al;

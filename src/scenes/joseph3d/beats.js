@@ -1,4 +1,5 @@
 import { WEB } from '../../data/versesWEB.js';
+import { pausableWait } from '../../engine/Sequencer.js';
 import { NAME_COLOR } from './cast.js';
 
 // SCENE 1 — the story as DATA + gates (script-writing + storyteller +
@@ -10,7 +11,7 @@ const J = NAME_COLOR;
 
 export function createBeats(ctx) {
   const seq = (steps) => ctx.sequencer.run(steps);
-  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const wait = (ms) => pausableWait(ms, ctx.isPaused); // honours the pause menu
 
   // Dialogue cinematography: an over-the-shoulder SHOT computed from LIVE
   // positions — camera behind the listener's shoulder, speaker favored on the
@@ -90,27 +91,35 @@ export function createBeats(ctx) {
     const gate = pointToGate(ctx.camp.pen);
     ctx.guide.setTargetXZ(gate.x, gate.z);
 
-    // brothers sneer as you pass the fire (once) — speakers gesture and face him
+    // brothers sneer as you pass the fire (once) — speakers gesture and face
+    // him. GATED to this beat (a stale trigger firing during the beat-4 gather
+    // froze the ring walkers and re-enabled input inside a cutscene), and the
+    // beat won't complete until the sneer dialogue has fully resolved.
+    let herdActive = true;
+    let sneerBusy = null;
     ctx.interactables.addTrigger({
       id: 'sneer', x: 0.8, z: -6.5, r: 3.4, once: true,
-      onEnter: async () => {
-        ctx.setInput(false);
-        const sim = ctx.cast.simeon, lev = ctx.cast.levi;
-        ctx.npcs.freeze(sim, true);
-        ctx.npcs.freeze(lev, true);
-        const j = ctx.joseph.position;
-        sim.char.turnToward(j.x - sim.pos.x, j.z - sim.pos.z);
-        sim.char.play('talk');
-        await ctx.dialogue.say('Simeon', 'Look — father’s favorite, out among the sheep.', { color: J.Simeon });
-        sim.char.play('idle');
-        lev.char.turnToward(j.x - lev.pos.x, j.z - lev.pos.z);
-        lev.char.play('talk');
-        await ctx.dialogue.say('Levi', 'Mind the flock, little brother. It’s all you’re good for.', { color: J.Levi });
-        lev.char.play('idle');
-        ctx.dialogue.hide();
-        ctx.npcs.freeze(sim, false);
-        ctx.npcs.freeze(lev, false);
-        ctx.setInput(true);
+      when: () => herdActive,
+      onEnter: () => {
+        sneerBusy = (async () => {
+          ctx.setInput(false);
+          const sim = ctx.cast.simeon, lev = ctx.cast.levi;
+          ctx.npcs.freeze(sim, true);
+          ctx.npcs.freeze(lev, true);
+          const j = ctx.joseph.position;
+          sim.char.turnToward(j.x - sim.pos.x, j.z - sim.pos.z);
+          sim.char.play('talk');
+          await ctx.dialogue.say('Simeon', 'Look — father’s favorite, out among the sheep.', { color: J.Simeon });
+          sim.char.play('idle');
+          lev.char.turnToward(j.x - lev.pos.x, j.z - lev.pos.z);
+          lev.char.play('talk');
+          await ctx.dialogue.say('Levi', 'Mind the flock, little brother. It’s all you’re good for.', { color: J.Levi });
+          lev.char.play('idle');
+          ctx.dialogue.hide();
+          ctx.npcs.freeze(sim, false);
+          ctx.npcs.freeze(lev, false);
+          if (herdActive) ctx.setInput(true); // never re-arm input inside a later beat
+        })();
       },
     });
 
@@ -129,6 +138,8 @@ export function createBeats(ctx) {
     if (first) ctx.guide.setTargetXZ(first.x, first.z);
     if (ctx.sheep.straysLeft === 0) done(); // checkpoint-resume safety
     await all;
+    if (sneerBusy) await sneerBusy; // never hand off to beat 2 mid-dialogue
+    herdActive = false;
     ctx.onStrayPenned = null;
     ctx.guide.setTarget(null);
     ctx.sound('ui.chime');
@@ -297,11 +308,14 @@ export function createBeats(ctx) {
       { t: 'fn', fn: async () => { ctx.setMusic('music.dream_wonder'); ctx.sound('stinger.dream_enter'); await wait(600); } },
       { t: 'fade', on: true, ms: 1100 },
     ]);
-    // slip into the dream field (behind the black)
+    // slip into the dream field (behind the black). The campfire beat left the
+    // camera HOLDING its authored ring shot — release the pose or the whole
+    // dream plays on a camera locked 60u away (the review's softlock finding).
     D.group.visible = true;
     D.resetSky();
     ctx.joseph.setPosition(D.FIELD.x, D.FIELD.z + 9);
     ctx.controller.bounds = { minX: D.FIELD.x - 13, maxX: D.FIELD.x + 13, minZ: D.FIELD.z - 13, maxZ: D.FIELD.z + 13 };
+    ctx.camera.release(1);
     ctx.camera.snap();
     await seq([
       { t: 'grade', mood: 'dream', ms: 30 },
@@ -438,7 +452,8 @@ export function createBeats(ctx) {
     c.joseph.setPosition(s[0], s[1]);
     c.camera.snap();
     c.grading.set(n === 5 ? 'dusk' : 'goldenHour');
-    if (n >= 5) c.onDusk?.();
+    if (n === 5) c.onDusk?.(); // fireflies belong to the dusk entry ONLY —
+    // beats 6-7 resume into golden-hour morning (nothing there fades them out)
   }
 
   return { list: [intro, herd, report, coat, dusk, dream, tell, close], applyState };

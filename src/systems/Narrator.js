@@ -122,13 +122,20 @@ class NarratorSystem {
         this._stopCurrent = () => { try { window.speechSynthesis.cancel(); } catch { /* ignore */ } finish(); };
         window.speechSynthesis.speak(u);
         // Robustness: if speech never starts, fall back to reading-time pacing.
+        // (Never while game-paused — resuming here would defeat the pause.)
         setTimeout(() => {
-          if (!done && !window.speechSynthesis.speaking) {
+          if (!done && !this._paused && !window.speechSynthesis.speaking) {
             try { window.speechSynthesis.resume(); } catch { /* ignore */ }
-            setTimeout(() => { if (!done && !window.speechSynthesis.speaking) setTimeout(finish, est * 0.6); }, 400);
+            setTimeout(() => { if (!done && !this._paused && !window.speechSynthesis.speaking) setTimeout(finish, est * 0.6); }, 400);
           }
         }, 700);
-        setTimeout(finish, est * 2.2); // absolute cap
+        // absolute cap — deferred while paused so a held line can't time out
+        const cap = () => {
+          if (done) return;
+          if (this._paused) { setTimeout(cap, 500); return; }
+          finish();
+        };
+        setTimeout(cap, est * 2.2);
       } catch {
         setTimeout(finish, est * 0.75);
       }
@@ -139,10 +146,12 @@ class NarratorSystem {
   // suspended AudioContext, so it pauses on the audio side). resume() picks
   // the line back up. Neither resolves or cancels anything.
   pause() {
+    this._paused = true;
     if (this.supported) { try { window.speechSynthesis.pause(); } catch { /* ignore */ } }
   }
 
   resume() {
+    this._paused = false;
     if (this.supported) { try { window.speechSynthesis.resume(); } catch { /* ignore */ } }
   }
 

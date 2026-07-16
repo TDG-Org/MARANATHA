@@ -2,7 +2,7 @@ import { Audio } from '../systems/AudioSystem.js';
 import { Settings } from '../systems/Settings.js';
 import { Narrator } from '../systems/Narrator.js';
 import { resetProgress } from '../systems/SaveSystem.js';
-import { confirmModal } from './modal.js';
+import { confirmModal, isModalOpen } from './modal.js';
 
 // The Settings panel: four audio channels (Master / Music / SFX / Narrator),
 // the perf-HUD toggle, and a Reset-progress button behind an "Are you sure?".
@@ -145,6 +145,7 @@ export function openSettings({ onReset } = {}) {
       setTimeout(() => { backdrop.remove(); resolve(); }, 220);
     };
     const onKey = (e) => {
+      if (isModalOpen()) return; // a confirm modal above us owns Esc/Enter
       if (e.key === 'Escape') { e.stopImmediatePropagation(); doClose(); }
     };
     close.onclick = doClose;

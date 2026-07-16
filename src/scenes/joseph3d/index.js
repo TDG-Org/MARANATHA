@@ -77,7 +77,8 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
   scene.add(smoke.points, embers.points, fireflies.points);
 
   // --- presentation ---
-  const cinema = createCinema();
+  let disposed = false; // set on dispose(); async init + the story loop check it
+  const cinema = createCinema({ isPaused: () => app.paused });
   const verseCard = createVerseCard();
   const dialogue = createDialogue();
   const nameTags = createNameTags();
@@ -105,7 +106,11 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
     chatter: Audio.playLoop('amb.camp_chatter', { gain: 0.4 }),
   };
   let music = Audio.playLoop('music.camp_warm');
-  const setMusic = (key) => { music.stop(1.4); music = Audio.playLoop(key); };
+  const setMusic = (key) => {
+    if (disposed) return; // a zombie beat must never restart music after exit
+    music.stop(1.4);
+    music = Audio.playLoop(key);
+  };
 
   // --- cast (async GLB load; world plays while it streams) ---
   const factory = new CharacterFactory();
@@ -123,10 +128,13 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
 
   const hud = createStoryHud({
     onHome: async () => {
-      controller?.setEnabled(false);
+      // freeze ALL input surfaces while the confirm is up (controller AND
+      // interactables — E must not start a dialogue behind the modal)
+      const wasOn = inputOn;
+      setInput(false);
       const leave = await askLeave();
       if (leave) app.navigate('home');
-      else if (ready && inputOn) controller.setEnabled(true);
+      else setInput(wasOn);
     },
   });
 
@@ -178,7 +186,8 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
   const ctx = {
     scene, app, cinema, verseCard, dialogue, hud, guide, grading, interactables,
     camera: director, sequencer: null, setInput,
-    sound: (key) => Audio.play(key),
+    isPaused: () => app.paused,
+    sound: (key) => { if (!disposed) Audio.play(key); },
     setMusic, camp, dream, pit, tentInterior, bounds,
     get joseph() { return joseph; },
     get cast() { return cast; },
@@ -188,6 +197,7 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
     onDusk: () => fireflies.setFade(1),
     onDawn: () => fireflies.setFade(0),
     finish: () => {
+      if (disposed) return; // a zombie close beat must not touch saves or nav
       setSceneProgress('joseph', 1);
       clearCheckpoint('joseph3d');
       app.navigate('home');
@@ -207,6 +217,7 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
 
   (async () => {
     await factory.loadBase();
+    if (disposed) return; // scene was exited during the GLB load — stand down
     joseph = buildNamed(factory, 'joseph').addTo(scene);
     joseph.setPosition(0, 15);
     cast.jacob = npcs.add(buildNamed(factory, 'jacob').addTo(scene), { x: -9.8, z: -5.2, wanderR: 0, gestureEvery: 14000, speed: 0.7 });
@@ -258,9 +269,11 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
     try {
       if (from > 0) beats.applyState(from, ctx);
       for (let i = from; i < beats.list.length; i++) {
+        if (disposed) return; // exited mid-story: no more beats, no checkpoint writes
         setCheckpoint('joseph3d', i);
         await beats.list[i](ctx);
       }
+      if (disposed) return;
       storyDone = true;
     } catch (e) {
       console.error('[joseph3d] story error', e);
@@ -302,6 +315,7 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
   }
 
   function dispose() {
+    disposed = true; // stops the story loop, zombie async init, sound/finish
     Object.values(beds).forEach((b) => b.stop(0.6));
     music.stop(0.6);
     Audio.ambience({ wind: 0, birds: 0, night: 0 });

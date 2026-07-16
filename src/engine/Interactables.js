@@ -82,7 +82,11 @@ export class Interactables {
 
   setEnabled(on) {
     this.enabled = on;
-    if (!on) { this.pill.style.display = 'none'; this._active = null; }
+    if (!on) {
+      this.pill.style.display = 'none';
+      this._active = null;
+      if (this.dom) this.dom.style.cursor = ''; // never a stuck pointer cursor
+    }
   }
 
   async _interact() {

@@ -21,9 +21,24 @@
 //   { t:'sound', key }                        — manifest one-shot
 //   { t:'wait', ms }
 //   { t:'fn', fn }                            — escape hatch (async ok)
+// A wait that honours the pause menu: wall-clock setTimeout would let
+// cutscenes advance behind the pause overlay (checkpoints saving, the close
+// beat dumping a paused player to the home screen). Poll in small steps and
+// simply don't count time while isPaused() is true.
+export const pausableWait = (ms, isPaused = null) => new Promise((resolve) => {
+  if (!ms || ms <= 0) { resolve(); return; }
+  let left = ms;
+  const step = 50;
+  const id = setInterval(() => {
+    if (isPaused && isPaused()) return;
+    left -= step;
+    if (left <= 0) { clearInterval(id); resolve(); }
+  }, step);
+});
+
 export class Sequencer {
   // ctx: { cinema, verseCard, dialogue, camera (director), grading, hud, guide,
-  //        setInput(on), sound(key) }
+  //        setInput(on), sound(key), isPaused() }
   constructor(ctx) {
     this.ctx = ctx;
     this.running = false;
@@ -32,6 +47,7 @@ export class Sequencer {
   async run(steps) {
     this.running = true;
     const c = this.ctx;
+    const wait = (ms) => pausableWait(ms, c.isPaused);
     for (const s of steps) {
       switch (s.t) {
         case 'letterbox':
@@ -101,5 +117,3 @@ export class Sequencer {
     this.running = false;
   }
 }
-
-const wait = (ms) => new Promise((r) => setTimeout(r, ms));
