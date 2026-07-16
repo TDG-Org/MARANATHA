@@ -135,6 +135,17 @@ class NarratorSystem {
     });
   }
 
+  // Game pause: hold the current TTS line mid-word (file VO rides the
+  // suspended AudioContext, so it pauses on the audio side). resume() picks
+  // the line back up. Neither resolves or cancels anything.
+  pause() {
+    if (this.supported) { try { window.speechSynthesis.pause(); } catch { /* ignore */ } }
+  }
+
+  resume() {
+    if (this.supported) { try { window.speechSynthesis.resume(); } catch { /* ignore */ } }
+  }
+
   // Skip the CURRENT line only (the Skip button). Resolves the in-flight speak().
   skip() {
     if (this._stopCurrent) this._stopCurrent();

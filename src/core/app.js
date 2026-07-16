@@ -69,6 +69,8 @@ export function createApp(container) {
     busy = false;
   }
 
+  let paused = false; // true pause: update frozen, last frame keeps rendering
+
   const app = {
     camera,
     renderer,
@@ -77,6 +79,8 @@ export function createApp(container) {
     hasScreen(key) { return screens.has(key); },
     navigate,
     get currentKey() { return current?.key; },
+    setPaused(on) { paused = !!on; },
+    get paused() { return paused; },
     // Test hooks (harmless in production; used by automated pixel-readback since
     // the preview tab runs hidden and rAF/screenshots are paused there).
     get scene() { return current?.scene; },
@@ -85,10 +89,12 @@ export function createApp(container) {
 
   startLoop((dt, now) => {
     if (current) {
-      try {
-        current.instance.update?.(dt, now);
-      } catch (e) {
-        if (updateErrors++ < 3) console.error('[app] update error', e);
+      if (!paused) {
+        try {
+          current.instance.update?.(dt, now);
+        } catch (e) {
+          if (updateErrors++ < 3) console.error('[app] update error', e);
+        }
       }
       renderer.render(current.scene, camera);
     }

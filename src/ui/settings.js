@@ -131,18 +131,25 @@ export function openSettings({ onReset } = {}) {
     panel.style.transform = 'translateY(0)';
   });
 
-  let closed = false;
-  const doClose = () => {
-    if (closed) return;
-    closed = true;
-    Audio.uiClick();
-    backdrop.style.opacity = '0';
-    panel.style.transform = 'translateY(10px)';
-    window.removeEventListener('keydown', onKey);
-    setTimeout(() => backdrop.remove(), 220);
-  };
-  const onKey = (e) => { if (e.key === 'Escape') doClose(); };
-  close.onclick = doClose;
-  backdrop.onclick = (e) => { if (e.target === backdrop) doClose(); };
-  window.addEventListener('keydown', onKey);
+  // Resolves when the panel closes (the pause menu awaits this so its own
+  // Esc handling stays out of the way while Settings is up).
+  return new Promise((resolve) => {
+    let closed = false;
+    const doClose = () => {
+      if (closed) return;
+      closed = true;
+      Audio.uiClick();
+      backdrop.style.opacity = '0';
+      panel.style.transform = 'translateY(10px)';
+      window.removeEventListener('keydown', onKey, true);
+      setTimeout(() => { backdrop.remove(); resolve(); }, 220);
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') { e.stopImmediatePropagation(); doClose(); }
+    };
+    close.onclick = doClose;
+    backdrop.onclick = (e) => { if (e.target === backdrop) doClose(); };
+    // capture phase: Settings' Esc wins over any game/pause Esc handling
+    window.addEventListener('keydown', onKey, true);
+  });
 }
