@@ -65,6 +65,8 @@ export class ThirdPersonCamera {
     this._desired.y += this.height - this.shoulderH;
 
     // Raycast pull-in: never let terrain/props come between head and camera.
+    // Pull amount is damped with hysteresis (fast in, slow out) + a deadband,
+    // so a grazing hit can't flip-flop the camera (the prop-jitter bug).
     if (this.colliders.length) {
       this._dir.copy(this._desired).sub(this._head);
       const len = this._dir.length() || 1;
@@ -73,8 +75,15 @@ export class ThirdPersonCamera {
       this._ray.far = len;
       this._ray.camera = this.camera; // required when groups contain Sprites
       const hits = this._ray.intersectObjects(this.colliders, true).filter((h) => !h.object.isSprite);
-      if (hits.length && hits[0].distance < len) {
-        this._desired.copy(this._head).addScaledVector(this._dir, Math.max(this.minDist, hits[0].distance - 0.3));
+      let targetPull = 0;
+      if (hits.length && hits[0].distance < len - 0.05) {
+        targetPull = len - Math.max(this.minDist, hits[0].distance - 0.3);
+      }
+      this._pull = this._pull ?? 0;
+      const pk = targetPull > this._pull ? Math.min(dt * 0.02, 1) : Math.min(dt * 0.0028, 1);
+      this._pull += (targetPull - this._pull) * pk;
+      if (this._pull > 0.01) {
+        this._desired.copy(this._head).addScaledVector(this._dir, Math.max(this.minDist, len - this._pull));
       }
     }
 

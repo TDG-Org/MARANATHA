@@ -45,6 +45,7 @@ export class CameraDirector {
     this._dir = new THREE.Vector3();
     this._blend = new THREE.Vector3();
     this._ray = new THREE.Raycaster();
+    this._pull = 0; // smoothed pull-in amount (hysteresis kills prop jitter)
 
     this.pose = null;
     this.poseK = 0;
@@ -97,7 +98,10 @@ export class CameraDirector {
     this._lookT.x += this.lead.x * 0.001 * this.lookAhead * 160;
     this._lookT.z += this.lead.y * 0.001 * this.lookAhead * 160;
 
-    // 3) pull-in: nothing may sit between the head and the camera.
+    // 3) pull-in: nothing may sit between the head and the camera. The pull
+    // AMOUNT is its own damped value — fast in (don't clip), slow out — with a
+    // small deadband, so a ray grazing a prop edge can never pump the camera
+    // (the jitter bug). Blockers are BIG props only (level-layout law 4).
     if (this.colliders.length) {
       this._dir.copy(this._desired).sub(this._head);
       const len = this._dir.length() || 1;
@@ -106,8 +110,14 @@ export class CameraDirector {
       this._ray.far = len;
       this._ray.camera = this.camera; // required when groups contain Sprites
       const hits = this._ray.intersectObjects(this.colliders, true).filter((h) => !h.object.isSprite);
-      if (hits.length && hits[0].distance < len) {
-        this._desired.copy(this._head).addScaledVector(this._dir, Math.max(this.minDist, hits[0].distance - 0.3));
+      let targetPull = 0;
+      if (hits.length && hits[0].distance < len - 0.05) {
+        targetPull = len - Math.max(this.minDist, hits[0].distance - 0.3);
+      }
+      const pk = targetPull > this._pull ? Math.min(dt * 0.02, 1) : Math.min(dt * 0.0028, 1);
+      this._pull += (targetPull - this._pull) * pk;
+      if (this._pull > 0.01) {
+        this._desired.copy(this._head).addScaledVector(this._dir, Math.max(this.minDist, len - this._pull));
       }
     }
 
