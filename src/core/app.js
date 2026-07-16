@@ -23,11 +23,21 @@ export function createApp(container) {
   let busy = false;
   let updateErrors = 0;
 
-  window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
+  // Responsive: keep the renderer + camera matched to the viewport across
+  // resize, orientation change, iOS visualViewport shifts, and container resize
+  // (ResizeObserver is the robust catch-all — `resize` alone is unreliable on
+  // mobile). DPR stays clamped ≤2 (detectTier + AdaptiveQuality).
+  const onResize = () => {
+    const w = window.innerWidth, h = window.innerHeight;
+    camera.aspect = w / h;
     camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-  });
+    renderer.setPixelRatio(Math.min(2, quality.ratio));
+    renderer.setSize(w, h);
+  };
+  window.addEventListener('resize', onResize);
+  window.addEventListener('orientationchange', onResize);
+  window.visualViewport?.addEventListener('resize', onResize);
+  if ('ResizeObserver' in window) new ResizeObserver(onResize).observe(container);
 
   function build(key, params) {
     const builder = screens.get(key);

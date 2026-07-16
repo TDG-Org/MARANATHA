@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="description" content="MARANATHA — a biblically accurate story game with real depth. Walk through the events of the Bible." />
   <title>MARANATHA</title>
   <style>
@@ -14,13 +14,14 @@
        browser at native resolution, so it is ALWAYS crisp on any screen.
        Screens (home, stories) build their own DOM; these two are persistent. */
     #debug {
-      position: fixed; left: 8px; bottom: 8px; display: none; pointer-events: none;
+      position: fixed; left: calc(8px + env(safe-area-inset-left)); bottom: calc(8px + env(safe-area-inset-bottom));
+      display: none; pointer-events: none;
       z-index: 30; font: 11px/1.5 ui-monospace, Consolas, monospace; color: #cfe8cf;
       background: rgba(10, 10, 18, 0.65); padding: 6px 9px; border-radius: 6px;
       white-space: pre;
     }
     #volume {
-      position: fixed; top: 12px; right: 14px; z-index: 30;
+      position: fixed; top: calc(12px + env(safe-area-inset-top)); right: calc(14px + env(safe-area-inset-right)); z-index: 30;
       display: flex; align-items: center; gap: 8px; opacity: 0.7; transition: opacity 0.25s;
     }
     #volume:hover { opacity: 1; }

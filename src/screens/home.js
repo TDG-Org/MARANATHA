@@ -164,7 +164,7 @@ export function buildHome({ scene, camera, app }) {
   gear.setAttribute('aria-label', 'Settings');
   gear.textContent = '⚙';
   gear.style.cssText = [
-    'position:fixed', 'right:14px', 'bottom:14px', 'z-index:22', 'pointer-events:auto',
+    'position:fixed', 'right:calc(14px + env(safe-area-inset-right))', 'bottom:calc(14px + env(safe-area-inset-bottom))', 'z-index:22', 'pointer-events:auto',
     'width:44px', 'height:44px', 'border-radius:12px', 'cursor:pointer',
     'font-size:20px', 'color:#fdf6e3', 'background:rgba(16,14,26,0.5)',
     'border:1px solid rgba(255,255,255,0.14)', 'backdrop-filter:blur(3px)',

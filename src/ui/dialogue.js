@@ -14,7 +14,7 @@ import { Audio } from '../systems/AudioSystem.js';
 export function createDialogue() {
   const box = document.createElement('div');
   box.style.cssText = [
-    'position:fixed', 'left:50%', 'bottom:26px', 'transform:translateX(-50%) translateY(12px)',
+    'position:fixed', 'left:50%', 'bottom:calc(26px + env(safe-area-inset-bottom))', 'transform:translateX(-50%) translateY(12px)',
     'z-index:45', 'width:min(92vw,620px)', 'padding:16px 20px 14px',
     'background:rgba(16,14,26,0.9)', 'border:1px solid rgba(242,184,128,0.22)',
     'border-radius:14px', 'box-shadow:0 12px 40px rgba(0,0,0,0.4)', 'backdrop-filter:blur(4px)',

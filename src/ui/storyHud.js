@@ -9,7 +9,7 @@ export function createStoryHud({ onHome } = {}) {
   home.setAttribute('aria-label', 'Home');
   home.textContent = '⌂'; // ⌂
   home.style.cssText = [
-    'position:fixed', 'top:12px', 'left:14px', 'z-index:40',
+    'position:fixed', 'top:calc(12px + env(safe-area-inset-top))', 'left:calc(14px + env(safe-area-inset-left))', 'z-index:40',
     'width:46px', 'height:46px', 'border-radius:12px', 'cursor:pointer',
     'display:flex', 'align-items:center', 'justify-content:center',
     'font-size:23px', 'line-height:1', 'color:#fdf6e3',
@@ -23,8 +23,8 @@ export function createStoryHud({ onHome } = {}) {
 
   const obj = document.createElement('div');
   obj.style.cssText = [
-    'position:fixed', 'top:17px', 'left:72px', 'z-index:40',
-    'max-width:min(64vw,420px)', 'padding:9px 14px', 'border-radius:11px',
+    'position:fixed', 'top:calc(17px + env(safe-area-inset-top))', 'left:calc(72px + env(safe-area-inset-left))', 'z-index:40',
+    'max-width:min(60vw,420px)', 'padding:9px 14px', 'border-radius:11px',
     'font-family:"Segoe UI",system-ui,sans-serif', 'font-size:13.5px',
     'letter-spacing:0.01em', 'color:#f7edd8',
     'background:rgba(16,14,26,0.5)', 'border:1px solid rgba(242,184,128,0.16)',
