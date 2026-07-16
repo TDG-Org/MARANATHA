@@ -18,6 +18,8 @@ import { createDialogue } from '../../ui/dialogue.js';
 import { createStoryHud } from '../../ui/storyHud.js';
 import { createNameTags } from '../../ui/nameTags.js';
 import { confirmModal } from '../../ui/modal.js';
+import { createPauseMenu } from '../../ui/pause.js';
+import { openSettings } from '../../ui/settings.js';
 import { buildCamp } from './props.js';
 import { SheepFlock } from './sheep.js';
 import { buildNamed, buildGenericBrother, buildWorker, AmbientNPCs } from './cast.js';
@@ -106,20 +108,22 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
   let controller = null;
   let ready = false;
 
+  const askLeave = () => confirmModal({
+    title: 'Return home?',
+    body: 'Your place in this scene is saved — you can pick it right back up.',
+    confirmText: 'Return home', cancelText: 'Keep playing',
+  });
+
   const hud = createStoryHud({
     onHome: async () => {
       controller?.setEnabled(false);
-      const leave = await confirmModal({
-        title: 'Return home?',
-        body: 'Your place in this scene is saved — you can pick it right back up.',
-        confirmText: 'Return home', cancelText: 'Keep playing',
-      });
+      const leave = await askLeave();
       if (leave) app.navigate('home');
       else if (ready && inputOn) controller.setEnabled(true);
     },
   });
 
-  const interactables = new Interactables({ camera, getPlayerPos: () => joseph?.position || { x: 0, z: 0 } });
+  const interactables = new Interactables({ camera, dom: renderer.domElement, getPlayerPos: () => joseph?.position || { x: 0, z: 0 } });
 
   let inputOn = true;
   const setInput = (on) => {
@@ -127,6 +131,22 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
     if (ready) controller.setEnabled(on);
     interactables.setEnabled(on);
   };
+
+  // Esc / ⏸ — true pause: loop frozen, audio suspended, zero input bleed.
+  const pause = createPauseMenu({
+    app,
+    isInputOn: () => inputOn,
+    setInput: (on) => {
+      if (ready) controller.setEnabled(on);
+      interactables.setEnabled(on);
+    },
+    onSettings: () => openSettings({}),
+    onHome: async () => {
+      const leave = await askLeave();
+      if (leave) app.navigate('home');
+      return leave;
+    },
+  });
 
   // --- the dream field (far east of camp; hidden until the dream beat) ---
   const dream = buildDreamField();
@@ -264,6 +284,7 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
     Audio.ambience({ wind: 0, birds: 0, night: 0 });
     Audio.stopMusic();
     hud.destroy();
+    pause.destroy();
     cinema.destroy();
     verseCard.destroy();
     dialogue.destroy();

@@ -21,28 +21,48 @@ export function createStoryHud({ onHome } = {}) {
   home.onmouseleave = () => { home.style.background = 'rgba(16,14,26,0.55)'; };
   home.onclick = () => { Audio.uiClick?.(); onHome?.(); };
 
+  // The objective line — BIG, warm-white, glowing, kid-readable from across
+  // the room (ui-clarity law 3). A soft hint line can ride under it.
   const obj = document.createElement('div');
   obj.style.cssText = [
-    'position:fixed', 'top:calc(17px + env(safe-area-inset-top))', 'left:calc(72px + env(safe-area-inset-left))', 'z-index:40',
-    'max-width:min(60vw,420px)', 'padding:9px 14px', 'border-radius:11px',
-    'font-family:"Segoe UI",system-ui,sans-serif', 'font-size:13.5px',
-    'letter-spacing:0.01em', 'color:#f7edd8',
-    'background:rgba(16,14,26,0.5)', 'border:1px solid rgba(242,184,128,0.16)',
+    'position:fixed', 'top:calc(15px + env(safe-area-inset-top))', 'left:calc(72px + env(safe-area-inset-left))', 'z-index:40',
+    'max-width:min(62vw,480px)', 'padding:10px 16px', 'border-radius:12px',
+    'font-family:"Segoe UI",system-ui,sans-serif', 'font-size:clamp(15px,2.2vw,19px)', 'font-weight:600',
+    'letter-spacing:0.012em', 'color:#fff3d8', 'line-height:1.3',
+    'background:rgba(12,10,20,0.66)', 'border:1px solid rgba(242,184,128,0.34)',
     'backdrop-filter:blur(3px)', 'pointer-events:none',
-    'opacity:0', 'transition:opacity 350ms ease', 'box-shadow:0 3px 14px rgba(0,0,0,0.28)',
+    'text-shadow:0 0 14px rgba(242,184,128,0.4), 0 1px 2px rgba(0,0,0,0.75)',
+    'box-shadow:0 3px 16px rgba(0,0,0,0.32), 0 0 18px rgba(242,184,128,0.12)',
+    'opacity:0', 'transition:opacity 350ms ease',
+  ].join(';');
+  const objText = document.createElement('div');
+  const objHint = document.createElement('div');
+  objHint.style.cssText = 'font-size:0.72em; font-weight:400; opacity:0.78; margin-top:3px; display:none; text-shadow:0 1px 2px rgba(0,0,0,0.7);';
+  obj.append(objText, objHint);
+
+  // Center-screen counter for number quests (🐑 2 / 3) — pops, then fades.
+  const counter = document.createElement('div');
+  counter.style.cssText = [
+    'position:fixed', 'left:50%', 'top:34%', 'transform:translate(-50%,-50%)', 'z-index:41',
+    'font-family:"Segoe UI",system-ui,sans-serif', 'font-size:clamp(30px,6vw,52px)', 'font-weight:700',
+    'color:#fff3d8', 'letter-spacing:0.04em', 'pointer-events:none', 'white-space:nowrap',
+    'text-shadow:0 0 26px rgba(242,184,128,0.55), 0 2px 6px rgba(0,0,0,0.8)',
+    'opacity:0', 'transition:opacity 500ms ease',
   ].join(';');
 
-  document.body.append(home, obj);
+  document.body.append(home, obj, counter);
 
   let current = '';
-  function setObjective(text) {
+  function setObjective(text, hint = '') {
     if (!text) { obj.style.opacity = '0'; current = ''; return; }
     if (text === current) { pulse(); return; }
     current = text;
     // Cross-fade the text so it never hard-swaps.
     obj.style.opacity = '0';
     setTimeout(() => {
-      obj.textContent = text;
+      objText.textContent = text;
+      objHint.textContent = hint;
+      objHint.style.display = hint ? 'block' : 'none';
       obj.style.opacity = '1';
       pulse();
     }, 180);
@@ -51,16 +71,41 @@ export function createStoryHud({ onHome } = {}) {
   function pulse() {
     try {
       obj.animate(
-        [{ transform: 'scale(1)' }, { transform: 'scale(1.045)' }, { transform: 'scale(1)' }],
+        [
+          { transform: 'scale(1)', boxShadow: '0 3px 16px rgba(0,0,0,0.32), 0 0 18px rgba(242,184,128,0.12)' },
+          { transform: 'scale(1.06)', boxShadow: '0 3px 16px rgba(0,0,0,0.32), 0 0 30px rgba(242,184,128,0.4)' },
+          { transform: 'scale(1)', boxShadow: '0 3px 16px rgba(0,0,0,0.32), 0 0 18px rgba(242,184,128,0.12)' },
+        ],
         { duration: 640, easing: 'ease-in-out' },
       );
     } catch { /* animate() unsupported — no-op */ }
   }
 
-  function destroy() {
-    home.remove();
-    obj.remove();
+  // flashCount('🐑', 2, 3) — the big center pop for number quests.
+  let counterTimer = 0;
+  function flashCount(icon, n, total) {
+    counter.textContent = `${icon} ${n} / ${total}`;
+    counter.style.opacity = '1';
+    try {
+      counter.animate(
+        [
+          { transform: 'translate(-50%,-50%) scale(0.85)' },
+          { transform: 'translate(-50%,-50%) scale(1.1)', offset: 0.55 },
+          { transform: 'translate(-50%,-50%) scale(1)' },
+        ],
+        { duration: 450, easing: 'cubic-bezier(0.34,1.3,0.64,1)' },
+      );
+    } catch { /* no-op */ }
+    clearTimeout(counterTimer);
+    counterTimer = setTimeout(() => { counter.style.opacity = '0'; }, 1400);
   }
 
-  return { setObjective, pulse, destroy, homeButton: home, objectiveEl: obj };
+  function destroy() {
+    clearTimeout(counterTimer);
+    home.remove();
+    obj.remove();
+    counter.remove();
+  }
+
+  return { setObjective, pulse, flashCount, destroy, homeButton: home, objectiveEl: obj, counterEl: counter };
 }

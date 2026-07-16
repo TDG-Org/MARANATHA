@@ -37,7 +37,7 @@ export function createBeats(ctx) {
   async function herd() {
     ctx.setInput(true);
     ctx.grading.grade('goldenHour', 800);
-    ctx.hud.setObjective('Herd the 3 stray sheep into the pen.');
+    ctx.hud.setObjective('Bring 3 stray sheep back to the pen.', 'Walk up behind a sheep — it runs ahead of you.');
     const gate = pointToGate(ctx.camp.pen);
     ctx.guide.setTargetXZ(gate.x, gate.z);
 
@@ -56,7 +56,8 @@ export function createBeats(ctx) {
     let done;
     const all = new Promise((r) => { done = r; });
     ctx.onStrayPenned = (n) => {
-      ctx.hud.setObjective(n >= 3 ? 'All three — well done.' : `Herd the stray sheep into the pen — ${n} of 3.`);
+      ctx.hud.flashCount('🐑', n, 3);
+      ctx.hud.setObjective(n >= 3 ? 'All three — well done!' : `Bring the stray sheep to the pen — ${n} of 3.`, n >= 3 ? '' : 'Walk up behind a sheep — it runs ahead of you.');
       if (n < 3) {
         const s = ctx.sheep.nearestStray(ctx.joseph.position.x, ctx.joseph.position.z);
         if (s) ctx.guide.setTargetXZ(s.x, s.z);
@@ -84,8 +85,9 @@ export function createBeats(ctx) {
     let spoken = false;
     await new Promise((resolve) => {
       ctx.interactables.addPrompt({
-        id: 'jacob-report', label: 'Speak with your father',
+        id: 'jacob-report', label: 'Talk to Jacob',
         getPos: () => jac.pos, r: 3.0, lift: 2.0,
+        object: () => jac.char.root,
         when: () => !spoken,
         onInteract: async () => {
           spoken = true;
@@ -94,8 +96,8 @@ export function createBeats(ctx) {
           ctx.npcs.freeze(jac, true);
           jac.char.turnToward(ctx.joseph.position.x - jac.pos.x, ctx.joseph.position.z - jac.pos.z);
           jac.char.play('talk');
-          await ctx.dialogue.say('Jacob', 'Joseph, my son. How does the flock fare?', { color: J.Jacob });
-          await ctx.dialogue.say('Joseph', 'The ewes are strong, father. The strays are penned.', { color: J.Joseph });
+          await ctx.dialogue.say('Jacob', 'Joseph, my son. How are the sheep?', { color: J.Jacob });
+          await ctx.dialogue.say('Joseph', 'They are strong, father. The strays are back in the pen.', { color: J.Joseph });
           await ctx.dialogue.say('Joseph', 'But my brothers… what they do out there — it is not right.', { color: J.Joseph });
           await ctx.dialogue.say('Jacob', 'I hear you. You have done well to tell me. Stay close a moment.', { color: J.Jacob });
           ctx.dialogue.hide();
@@ -119,7 +121,7 @@ export function createBeats(ctx) {
       { t: 'cam', angle: -Math.PI * 0.35, target: { x: jx + 0.8, z: jz + 0.8 }, distance: 3.6, height: 1.5, lookHeight: 1.35, duration: 1600 },
       { t: 'fn', fn: () => { jac.char.play('talk'); } },
       { t: 'say', who: 'Jacob', text: 'Joseph. Come, stand in the light.', color: J.Jacob },
-      { t: 'say', who: 'Jacob', text: 'You came to me in my old age — my heart’s late harvest.', color: J.Jacob },
+      { t: 'say', who: 'Jacob', text: 'You came to me in my old age, my son — a gift I did not look for.', color: J.Jacob },
       { t: 'say', who: 'Jacob', text: 'I had this made for you. Let all of Hebron see it.', color: J.Jacob },
       { t: 'dialogueHide' },
       // the gift — slow push-in on Joseph as the coat settles
@@ -154,7 +156,7 @@ export function createBeats(ctx) {
   // ---------- beat 4 · 🌙 dusk falls ----------
   async function dusk() {
     ctx.setInput(true);
-    ctx.hud.setObjective('Evening falls. Rest by the fire.');
+    ctx.hud.setObjective('Walk to the fire and rest.');
     ctx.guide.setTargetXZ(1.4, -5.0);
     ctx.setMusic('music.dusk_calm');
     ctx.grading.grade('dusk', 3200);
@@ -185,7 +187,7 @@ export function createBeats(ctx) {
       { t: 'verse', verse: WEB.gen_37_5 },
       { t: 'verseHide' },
       { t: 'letterbox', on: false },
-      { t: 'objective', text: 'Walk among the sheaves.' },
+      { t: 'objective', text: 'Walk to each bundle of wheat.' },
     ]);
     ctx.setInput(true);
 
@@ -199,7 +201,8 @@ export function createBeats(ctx) {
             s.userData.bowed = true;
             ctx.sound('sfx.sheaf_bow');
             bowed += 1;
-            ctx.hud.setObjective(`The sheaves bow… ${bowed} of ${D.outer.length}.`);
+            ctx.hud.flashCount('🌾', bowed, D.outer.length);
+            ctx.hud.setObjective(`The wheat bundles bow — ${bowed} of ${D.outer.length}.`);
             if (bowed >= D.outer.length) resolve();
           },
         });
@@ -247,7 +250,8 @@ export function createBeats(ctx) {
       { t: 'letterbox', on: true },
       { t: 'cam', angle: Math.PI * 0.6, target: { x: 0.8, z: -7.4 }, distance: 4.6, height: 1.7, lookHeight: 1.35, duration: 1500 },
       { t: 'say', who: 'Joseph', text: 'Brothers — hear this dream I dreamed.', color: J.Joseph },
-      { t: 'say', who: 'Joseph', text: 'We bound sheaves in the field. Mine arose… and yours bowed down to it.', color: J.Joseph },
+      // "sheaves" explained once, naturally, inside the line (ui-clarity law 2)
+      { t: 'say', who: 'Joseph', text: 'We were binding sheaves — bundles of wheat — in the field. Mine arose… and yours bowed down to it.', color: J.Joseph },
       { t: 'sound', key: 'stinger.hatred' },
       { t: 'grade', mood: 'ominous', ms: 1600 },
       { t: 'say', who: 'Judah', text: 'Will you indeed reign over us, dreamer of dreams?', color: J.Judah },
