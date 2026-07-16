@@ -1,0 +1,62 @@
+// Cinematic presentation layer (cutscene-director skill): letterbox bars that
+// glide in/out, engraved title cards (bottom-right, location · passage), and a
+// whisper-alpha mood tint the grading system drives. Pure DOM; one instance
+// per scene; dispose removes everything.
+export function createCinema() {
+  const mk = (css) => {
+    const el = document.createElement('div');
+    el.style.cssText = css;
+    document.body.append(el);
+    return el;
+  };
+
+  const barCss = 'position:fixed;left:0;right:0;height:11vh;background:#08070e;z-index:44;pointer-events:none;transition:transform 560ms cubic-bezier(0.4,0,0.2,1);';
+  const top = mk(barCss + 'top:0;transform:translateY(-100%);');
+  const bottom = mk(barCss + 'bottom:0;transform:translateY(100%);');
+
+  // Mood tint — a whisper (≤0.14 alpha), driven by grading.
+  const tint = mk('position:fixed;inset:0;z-index:26;pointer-events:none;background:#000;opacity:0;transition:opacity 2200ms ease, background-color 2200ms ease;');
+
+  // Title card — engraved serif, bottom-right, above the letterbox bar.
+  const title = mk([
+    'position:fixed', 'right:calc(4vw + env(safe-area-inset-right))', 'bottom:calc(13vh + env(safe-area-inset-bottom))',
+    'z-index:46', 'pointer-events:none', 'text-align:right', 'color:#efe3c8',
+    'font-family:Georgia,"Times New Roman",serif', 'opacity:0', 'transform:translateY(6px)',
+    'transition:opacity 1400ms ease, transform 1400ms ease',
+    'text-shadow:0 1px 2px rgba(0,0,0,0.65), 0 0 18px rgba(242,184,128,0.12)',
+  ].join(';'));
+
+  let letterboxOn = false;
+
+  return {
+    get letterboxOn() { return letterboxOn; },
+
+    letterbox(on) {
+      letterboxOn = !!on;
+      top.style.transform = on ? 'translateY(0)' : 'translateY(-100%)';
+      bottom.style.transform = on ? 'translateY(0)' : 'translateY(100%)';
+      return new Promise((r) => setTimeout(r, 580));
+    },
+
+    // titleCard({ heading:'HEBRON, CANAAN', sub:'c. 1898 BC · GENESIS 37', holdMs })
+    async titleCard({ heading = '', sub = '', holdMs = 3400 } = {}) {
+      title.innerHTML =
+        `<div style="font-size:clamp(17px,2.6vw,26px);letter-spacing:0.24em;text-transform:uppercase;">${heading}</div>` +
+        (sub ? `<div style="font-size:clamp(11px,1.5vw,14px);letter-spacing:0.3em;opacity:0.72;margin-top:6px;text-transform:uppercase;">${sub}</div>` : '');
+      title.style.opacity = '1';
+      title.style.transform = 'translateY(0)';
+      await new Promise((r) => setTimeout(r, holdMs));
+      title.style.opacity = '0';
+      title.style.transform = 'translateY(6px)';
+      await new Promise((r) => setTimeout(r, 900));
+    },
+
+    // Grading drives this; alpha is clamped to the whisper ceiling.
+    setTint(cssColor, alpha) {
+      tint.style.backgroundColor = cssColor;
+      tint.style.opacity = String(Math.min(0.14, Math.max(0, alpha)));
+    },
+
+    destroy() { top.remove(); bottom.remove(); tint.remove(); title.remove(); },
+  };
+}

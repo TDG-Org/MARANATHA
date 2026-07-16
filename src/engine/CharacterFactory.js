@@ -34,7 +34,9 @@ export class CharacterFactory {
 
   // opts: { name, colors:{robe,robeShade,skin,hair,coat[]}, scale, base:'robed'|'hooded',
   //         staff:boolean (Jacob), hoodIsCloth:boolean }
-  create({ name = '', colors = {}, scale = 1, base = 'robed', staff = false, hoodIsCloth = false } = {}) {
+  // Default scale 0.8: the KayKit rigs stand 2.2u in bind pose → ~1.76u world
+  // (human scale per MODELS.md). Explicit scale multiplies on top of a variant.
+  create({ name = '', colors = {}, scale = 0.8, base = 'robed', staff = false, hoodIsCloth = false } = {}) {
     const src = this.bases[base] || this.bases.robed;
     if (this.hasGLB && src) {
       const scene = skeletonClone(src.scene);

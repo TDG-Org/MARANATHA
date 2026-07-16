@@ -127,9 +127,16 @@ export class Character3D {
     }
     if (this.staffMesh) this.staffMesh.material = this._toon(0x6b4a2c);
 
-    // 5) size + animation
-    const box = new THREE.Box3().setFromObject(this.rig);
-    this.headHeight = Math.max(1.2, box.max.y - this.root.position.y) + 0.12;
+    // 5) size + animation. Height from the merged BODY geometry (bind pose) —
+    // Box3.setFromObject would count hidden accessory meshes (the wizard hat
+    // inflated headHeight to 3.1 before this).
+    let rawTop = 2.0;
+    const geoOf = this.bodyMesh?.geometry;
+    if (geoOf) {
+      geoOf.computeBoundingBox();
+      rawTop = geoOf.boundingBox.max.y;
+    }
+    this.headHeight = Math.max(1.2, rawTop * scale) + 0.12;
     this.mixer = new THREE.AnimationMixer(this.rig);
     this.actions = {};
     for (const s of CHARACTER_STATES) {
