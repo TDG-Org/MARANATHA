@@ -71,7 +71,8 @@ export class ThirdPersonCamera {
       this._dir.divideScalar(len);
       this._ray.set(this._head, this._dir);
       this._ray.far = len;
-      const hits = this._ray.intersectObjects(this.colliders, true);
+      this._ray.camera = this.camera; // required when groups contain Sprites
+      const hits = this._ray.intersectObjects(this.colliders, true).filter((h) => !h.object.isSprite);
       if (hits.length && hits[0].distance < len) {
         this._desired.copy(this._head).addScaledVector(this._dir, Math.max(this.minDist, hits[0].distance - 0.3));
       }
