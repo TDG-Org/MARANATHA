@@ -46,12 +46,30 @@ export class Joystick {
     base.addEventListener('pointermove', (e) => { if (e.pointerId === id) set(e); });
     const end = (e) => {
       if (e.pointerId !== id) return;
-      id = null; this.vec.x = 0; this.vec.y = 0; this.active = false;
-      thumb.style.transform = 'translate(0,0)';
+      id = null;
+      this.reset();
     };
     base.addEventListener('pointerup', end);
     base.addEventListener('pointercancel', end);
+    // If the capture is torn away without a pointerup/cancel (OS overlay,
+    // screenshot gesture, focus loss), the stick must not stay latched.
+    base.addEventListener('lostpointercapture', () => { id = null; this.reset(); });
+    this._onBlur = () => { id = null; this.reset(); };
+    window.addEventListener('blur', this._onBlur);
+    this._thumb = thumb;
   }
 
-  dispose() { this.base?.remove(); }
+  // Zero the stick (input hardening — also called by the controller on
+  // blur/visibilitychange/contextmenu). Safe when the stick isn't mounted.
+  reset() {
+    this.vec.x = 0;
+    this.vec.y = 0;
+    this.active = false;
+    if (this._thumb) this._thumb.style.transform = 'translate(0,0)';
+  }
+
+  dispose() {
+    if (this._onBlur) window.removeEventListener('blur', this._onBlur);
+    this.base?.remove();
+  }
 }
