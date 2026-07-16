@@ -58,6 +58,14 @@ export const WEB = {
     vo: 'joseph/1/verse-37-11',
     text: 'His brothers envied him, but his father kept this saying in mind.',
   },
+  gen_37_24: {
+    ref: 'Genesis 37:24 (WEB)',
+    vo: 'joseph/1/verse-37-24',
+    // The COLD-OPEN flash-forward (verified verbatim at ebible.org/web/GEN37.htm
+    // 2026-07-16). Leading "And" capitalized for a standalone card — the same
+    // presentation-casing note as v7; no wording change.
+    text: 'And they took him, and threw him into the pit. The pit was empty. There was no water in it.',
+  },
 };
 
 // Note on v7: canonical text begins mid-sentence continuing v6 ("…dreamed:

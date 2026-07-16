@@ -51,7 +51,16 @@ export class CameraDirector {
     this.poseK = 0;
     this._poseDir = 0;
     this._poseSpeed = 0;
+
+    // NEVER-STATIC drift (cutscene-director): while on, authored poses orbit
+    // almost imperceptibly and the follow camera sways — a frame is never
+    // frozen during narration.
+    this.drift = false;
+    this._driftT = 0;
+    this._poseRot = new THREE.Vector3();
   }
+
+  setDrift(on) { this.drift = !!on; }
 
   setTarget(v) { this.target.copy(v); }
   setLead(vx, vz) { this.lead.set(vx, vz); }
@@ -72,6 +81,7 @@ export class CameraDirector {
 
   frame(dt) {
     this._t += dt;
+    if (this.drift) this._driftT += dt;
 
     // 1) authored params: active zone (or defaults), damped for the glide.
     const zn = this._zoneAt(this.target.x, this.target.z);
@@ -86,8 +96,9 @@ export class CameraDirector {
     this.p.height = lerp(this.p.height, goal.height, k);
     this.p.lookHeight = lerp(this.p.lookHeight, goal.lookHeight, k);
 
-    // 2) desired transform from params
-    const sin = Math.sin(this.p.yaw), cos = Math.cos(this.p.yaw);
+    // 2) desired transform from params (+ follow-mode drift sway)
+    const driftYaw = this.drift ? Math.sin(this._t * 0.00022) * 0.05 : 0;
+    const sin = Math.sin(this.p.yaw + driftYaw), cos = Math.cos(this.p.yaw + driftYaw);
     this._desired.set(
       this.target.x - sin * this.p.distance,
       this.target.y + this.p.height,
@@ -135,10 +146,21 @@ export class CameraDirector {
     const breath = Math.sin(this._t * 0.0009) * 0.045;
     if (this.pose && this.poseK > 0) {
       const kk = easeInOut(this.poseK);
+      // pose drift: orbit the held shot around its look target (~0.03 rad/s)
+      // + a slow rise — felt, never seen (cutscene-director NEVER-STATIC).
+      let px = this.pose.pos.x, py = this.pose.pos.y, pz = this.pose.pos.z;
+      if (this.drift) {
+        const a = this._driftT * 0.00003;
+        const ox = px - this.pose.look.x, oz = pz - this.pose.look.z;
+        const ca = Math.cos(a), sa = Math.sin(a);
+        px = this.pose.look.x + ox * ca - oz * sa;
+        pz = this.pose.look.z + ox * sa + oz * ca;
+        py += Math.sin(this._driftT * 0.00012) * 0.12;
+      }
       this.camera.position.set(
-        lerp(this._pos.x, this.pose.pos.x, kk),
-        lerp(this._pos.y, this.pose.pos.y, kk) + breath,
-        lerp(this._pos.z, this.pose.pos.z, kk),
+        lerp(this._pos.x, px, kk),
+        lerp(this._pos.y, py, kk) + breath,
+        lerp(this._pos.z, pz, kk),
       );
       this._blend.set(
         lerp(this._look.x, this.pose.look.x, kk),
@@ -160,6 +182,7 @@ export class CameraDirector {
     this.pose = { pos, look };
     this._poseDir = 1;
     this._poseSpeed = 1 / Math.max(1, duration);
+    this._driftT = 0; // each shot's drift arc starts from ITS authored frame
   }
 
   release(duration = 1400) { this._poseDir = -1; this._poseSpeed = 1 / Math.max(1, duration); }

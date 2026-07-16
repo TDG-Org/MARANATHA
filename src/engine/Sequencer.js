@@ -36,6 +36,9 @@ export class Sequencer {
       switch (s.t) {
         case 'letterbox':
           c.setInput?.(!s.on);
+          // NEVER-STATIC default (cutscene-director): while the bars are up,
+          // the camera is always on a slow authored drift.
+          c.camera.setDrift?.(!!s.on);
           await c.cinema.letterbox(s.on);
           break;
         case 'title':
@@ -54,8 +57,12 @@ export class Sequencer {
           c.dialogue.hide();
           break;
         case 'cam':
-          c.camera.cinematicMoveTo(s);
+          // target may be a function — dialogue shots frame LIVE positions
+          c.camera.cinematicMoveTo(typeof s.target === 'function' ? { ...s, target: s.target() } : s);
           if (s.awaitMs !== false) await wait(s.duration ?? 1400);
+          break;
+        case 'fade':
+          await c.cinema.fade(s.on !== false, s.ms ?? 600);
           break;
         case 'camRelease':
           c.camera.release(s.ms ?? 1400);

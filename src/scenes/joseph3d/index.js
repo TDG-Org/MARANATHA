@@ -39,8 +39,9 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
   // and the dream field — un-carved, the terrain swell pierced the wheat.
   const ground = makeGround({
     pads: [
-      { x: 0, z: 0, flatCore: 27, falloff: 42 },   // the camp
-      { x: 62, z: 0, flatCore: 17.5, falloff: 24 }, // the dream field
+      { x: 0, z: 0, flatCore: 27, falloff: 42 },    // the camp
+      { x: 62, z: 0, flatCore: 17.5, falloff: 24 },  // the dream field
+      { x: -62, z: 6, flatCore: 9, falloff: 16 },    // the pit (cold open)
     ],
   });
   scene.add(ground);
@@ -153,13 +154,18 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
   dream.group.visible = false;
   scene.add(dream.group);
 
+  // --- the pit (far west; the cold-open flash of Gen 37:24) ---
+  const pit = buildPitStage();
+  pit.group.visible = false;
+  scene.add(pit.group);
+
   // --- beats context (everything the story data needs) ---
   const bounds = { minX: -19, maxX: 19, minZ: -16.5, maxZ: 17 };
   const ctx = {
     scene, app, cinema, verseCard, dialogue, hud, guide, grading, interactables,
     camera: director, sequencer: null, setInput,
     sound: (key) => Audio.play(key),
-    setMusic, camp, dream, bounds,
+    setMusic, camp, dream, pit, bounds,
     get joseph() { return joseph; },
     get cast() { return cast; },
     npcs,
@@ -258,6 +264,7 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
     fireflies.update(dt, t);
     camp.sway.forEach((c, i) => { c.rotation.x = Math.sin(t * 1.1 + c.userData.sway.phase) * 0.13; });
     dream.update(dt, t);
+    pit.update(dt, t);
 
     if (!ready) return;
     controller.update(dt);
@@ -299,6 +306,7 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
     Object.values(cast).forEach((n) => (n.char || n).dispose?.());
     factory.dispose();
     dream.dispose();
+    pit.dispose();
   }
 
   // level-layout audit (run in QA via debug.audit() — must return []).
@@ -315,6 +323,7 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
     stages: [
       { x: 0, z: 0, r: 24, label: 'camp' },
       { x: 62, z: 0, r: 16, label: 'dream-field' },
+      { x: -62, z: 6, r: 7, label: 'pit' },
     ],
   });
 
@@ -324,6 +333,78 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
       get joseph() { return joseph; }, get controller() { return controller; },
       get ready() { return ready; }, get storyDone() { return storyDone; },
       cast, ctx, director, sheep: () => ctx.sheep, beats, colliders, factory, audit,
+    },
+  };
+}
+
+// --- the pit: the cold-open stage (Genesis 37:24) ----------------------------
+// A dry cistern seen from inside: earthen walls, a dusty shaft of light from
+// the rim, and the brothers' silhouettes peering over the edge. Shown for
+// ~15 seconds at the very start, then never again this scene.
+function buildPitStage() {
+  const group = new THREE.Group();
+  const PIT = { x: -62, z: 6 };
+
+  // walls — an open cylinder seen from inside (BackSide), dry-earth dark
+  const wall = new THREE.Mesh(
+    new THREE.CylinderGeometry(3.4, 2.7, 5.2, 20, 1, true),
+    new THREE.MeshBasicMaterial({ color: 0x4a4258, side: THREE.BackSide, fog: true }),
+  );
+  wall.position.set(PIT.x, 2.6, PIT.z);
+  group.add(wall);
+
+  // floor — packed dry earth (the pit was EMPTY; no water in it)
+  const floor = new THREE.Mesh(new THREE.CircleGeometry(2.75, 20), new THREE.MeshBasicMaterial({ color: 0x332e44, fog: true }));
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.set(PIT.x, 0.01, PIT.z);
+  group.add(floor);
+
+  // the light shaft — dusty light falling from the rim (additive, fog-exempt)
+  const shaft = new THREE.Mesh(
+    new THREE.CylinderGeometry(1.05, 1.9, 6.4, 14, 1, true),
+    new THREE.MeshBasicMaterial({
+      color: 0xfff0d0, transparent: true, opacity: 0.09, fog: false,
+      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+    }),
+  );
+  shaft.position.set(PIT.x + 0.4, 3.1, PIT.z - 0.3);
+  shaft.rotation.z = 0.1;
+  group.add(shaft);
+
+  // the brothers — ink silhouettes leaning over the rim, against the sky
+  const silTone = new THREE.MeshBasicMaterial({ color: 0x241f38, fog: false });
+  const camAngle = Math.PI * 0.15; // must match the cold-open shot
+  const figures = [];
+  [-0.75, -0.25, 0.3, 0.85].forEach((off, i) => {
+    const fig = new THREE.Group();
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 8, 6), silTone);
+    head.position.y = 0.34;
+    const shoulders = new THREE.Mesh(new THREE.SphereGeometry(0.3, 8, 6), silTone);
+    shoulders.scale.set(1.25, 0.72, 0.8);
+    fig.add(head, shoulders);
+    const a = camAngle + off;
+    fig.position.set(PIT.x + Math.sin(a) * 3.15, 5.05 + (i % 2) * 0.14, PIT.z + Math.cos(a) * 3.15);
+    fig.lookAt(PIT.x, 4.4, PIT.z);   // lean in toward the boy below
+    fig.rotateX(0.35);
+    fig.userData.baseY = fig.position.y;
+    fig.userData.phase = i * 1.9;
+    figures.push(fig);
+    group.add(fig);
+  });
+
+  return {
+    group, PIT,
+    // never-static: the dust shaft breathes; the watchers shift their weight
+    update(dt, t) {
+      if (!group.visible) return;
+      shaft.material.opacity = 0.085 + Math.sin(t * 0.7) * 0.02;
+      for (const f of figures) {
+        f.position.y = f.userData.baseY + Math.sin(t * 0.9 + f.userData.phase) * 0.035;
+      }
+    },
+    dispose() {
+      group.traverse((o) => { if (o.isMesh) { o.geometry?.dispose?.(); o.material?.dispose?.(); } });
+      group.parent?.remove(group);
     },
   };
 }

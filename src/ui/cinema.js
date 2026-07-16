@@ -17,6 +17,11 @@ export function createCinema() {
   // Mood tint — a whisper (≤0.14 alpha), driven by grading.
   const tint = mk('position:fixed;inset:0;z-index:26;pointer-events:none;background:#000;opacity:0;transition:opacity 2200ms ease, background-color 2200ms ease;');
 
+  // Dip-to-black — the clean-transition layer (cutscene-director). Sits ABOVE
+  // the letterbox bars but BELOW the title card + dialogue, so title cards can
+  // play over black.
+  const fadeEl = mk('position:fixed;inset:0;z-index:43;pointer-events:none;background:#05040a;opacity:0;');
+
   // Title card — engraved serif, bottom-right, above the letterbox bar.
   const title = mk([
     'position:fixed', 'right:calc(4vw + env(safe-area-inset-right))', 'bottom:calc(13vh + env(safe-area-inset-bottom))',
@@ -38,6 +43,13 @@ export function createCinema() {
       return new Promise((r) => setTimeout(r, 580));
     },
 
+    // fade(true, ms) dips to black; fade(false, ms) lifts. ms 0 = instant.
+    fade(toBlack, ms = 600) {
+      fadeEl.style.transition = ms > 0 ? `opacity ${ms}ms ease` : 'none';
+      fadeEl.style.opacity = toBlack ? '1' : '0';
+      return new Promise((r) => setTimeout(r, ms));
+    },
+
     // titleCard({ heading:'HEBRON, CANAAN', sub:'c. 1898 BC · GENESIS 37', holdMs })
     async titleCard({ heading = '', sub = '', holdMs = 3400 } = {}) {
       title.innerHTML =
@@ -57,6 +69,6 @@ export function createCinema() {
       tint.style.opacity = String(Math.min(0.14, Math.max(0, alpha)));
     },
 
-    destroy() { top.remove(); bottom.remove(); tint.remove(); title.remove(); },
+    destroy() { top.remove(); bottom.remove(); tint.remove(); title.remove(); fadeEl.remove(); },
   };
 }

@@ -12,18 +12,63 @@ export function createBeats(ctx) {
   const seq = (steps) => ctx.sequencer.run(steps);
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-  // ---------- beat 0 · 🌅 intro cinematic ----------
+  // Dialogue cinematography: an over-the-shoulder SHOT computed from LIVE
+  // positions — camera behind the listener's shoulder, speaker favored on the
+  // near third. Alternate `side` sign between cuts to swap shoulders.
+  const posOf = (who) => (who === 'joseph' ? ctx.joseph.position : ctx.cast[who].pos);
+  const shot = (speaker, listener, { side = 0.42, dist = 2.9, height = 1.55, look = 1.3, ms = 850 } = {}) => ({
+    t: 'fn',
+    fn: async () => {
+      const sp = posOf(speaker), li = posOf(listener);
+      const a = Math.atan2(sp.x - li.x, sp.z - li.z) + side;
+      ctx.camera.cinematicMoveTo({
+        angle: a,
+        target: { x: sp.x * 0.72 + li.x * 0.28, z: sp.z * 0.72 + li.z * 0.28 },
+        distance: dist, height, lookHeight: look, duration: ms,
+      });
+      await wait(ms * 0.6); // the cut lands as the line starts
+    },
+  });
+
+  // ---------- beat 0 · 🕳️ COLD OPEN (Gen 37:24) → 🌅 the golden camp ----------
   async function intro() {
     ctx.setInput(false);
-    ctx.grading.set('goldenHour');
+    const P = ctx.pit;
+
+    // THE PIT — a flash of where this story is going. Black. Wind. A boy at
+    // the bottom of a dry cistern; his brothers' silhouettes over the rim.
+    ctx.grading.set('pit');
+    P.group.visible = true;
     ctx.joseph.setCoat(false);
-    ctx.joseph.setPosition(0, 15);
-    // opening glide: high over the camp, drifting down toward Joseph
-    ctx.camera.cinematicMoveTo({ angle: Math.PI * 0.9, target: { x: 0, z: -2 }, distance: 17, height: 9, lookHeight: 0.5, duration: 10 });
+    ctx.joseph.setPosition(P.PIT.x, P.PIT.z);
+    ctx.joseph.play('kneel');
+    ctx.camera.cinematicMoveTo({ angle: Math.PI * 0.15, target: { x: P.PIT.x, z: P.PIT.z }, distance: 2.3, height: 0.7, lookHeight: 1.0, duration: 1 });
     await seq([
+      { t: 'fade', on: true, ms: 0 },     // open on black
       { t: 'letterbox', on: true },
-      { t: 'cam', angle: Math.PI * 1.12, target: { x: 0, z: 0 }, distance: 12, height: 5.5, lookHeight: 1.2, duration: 7000, awaitMs: false },
-      { t: 'title', heading: 'Hebron, Canaan', sub: 'c. 1898 BC · Genesis 37', holdMs: 4200 },
+      { t: 'wait', ms: 500 },
+      { t: 'fade', on: false, ms: 2800 }, // the pit fades in: dust, one shaft of light
+      { t: 'wait', ms: 800 },
+      { t: 'verse', verse: WEB.gen_37_24 },
+      { t: 'verseHide' },
+      // Joseph looks up — the camera lifts to the rim, the silhouettes
+      { t: 'cam', angle: Math.PI * 0.15, target: { x: P.PIT.x, z: P.PIT.z }, distance: 1.9, height: 0.5, lookHeight: 4.6, duration: 2800 },
+      { t: 'wait', ms: 400 },
+      { t: 'sound', key: 'stinger.hatred' },
+      { t: 'fade', on: true, ms: 130 },   // SMASH to black
+      { t: 'fn', fn: () => {
+        P.group.visible = false;
+        ctx.joseph.play('idle');
+        ctx.grading.set('goldenHour');
+        ctx.joseph.setPosition(0, 15);
+        ctx.camera.cinematicMoveTo({ angle: Math.PI * 0.9, target: { x: 0, z: -2 }, distance: 17, height: 9, lookHeight: 0.5, duration: 1 });
+      } },
+      // the time-jump card plays OVER black (the Bible gives no number of
+      // years, so the card says only "Earlier")
+      { t: 'title', heading: 'Earlier', sub: 'Hebron, Canaan · c. 1898 BC · Genesis 37', holdMs: 3400 },
+      { t: 'fade', on: false, ms: 1600 },
+      // crane-down over the golden camp
+      { t: 'cam', angle: Math.PI * 1.12, target: { x: 0, z: 0 }, distance: 12, height: 5.5, lookHeight: 1.2, duration: 9000, awaitMs: false },
       { t: 'verse', verse: WEB.gen_37_1 },
       { t: 'verse', verse: WEB.gen_37_2_short },
       { t: 'verseHide' },
@@ -41,14 +86,26 @@ export function createBeats(ctx) {
     const gate = pointToGate(ctx.camp.pen);
     ctx.guide.setTargetXZ(gate.x, gate.z);
 
-    // brothers sneer as you pass the fire (once)
+    // brothers sneer as you pass the fire (once) — speakers gesture and face him
     ctx.interactables.addTrigger({
       id: 'sneer', x: 0.8, z: -6.5, r: 3.4, once: true,
       onEnter: async () => {
         ctx.setInput(false);
+        const sim = ctx.cast.simeon, lev = ctx.cast.levi;
+        ctx.npcs.freeze(sim, true);
+        ctx.npcs.freeze(lev, true);
+        const j = ctx.joseph.position;
+        sim.char.turnToward(j.x - sim.pos.x, j.z - sim.pos.z);
+        sim.char.play('talk');
         await ctx.dialogue.say('Simeon', 'Look — father’s favorite, out among the sheep.', { color: J.Simeon });
+        sim.char.play('idle');
+        lev.char.turnToward(j.x - lev.pos.x, j.z - lev.pos.z);
+        lev.char.play('talk');
         await ctx.dialogue.say('Levi', 'Mind the flock, little brother. It’s all you’re good for.', { color: J.Levi });
+        lev.char.play('idle');
         ctx.dialogue.hide();
+        ctx.npcs.freeze(sim, false);
+        ctx.npcs.freeze(lev, false);
         ctx.setInput(true);
       },
     });
@@ -117,11 +174,14 @@ export function createBeats(ctx) {
     const jx = jac.pos.x, jz = jac.pos.z;
     await seq([
       { t: 'letterbox', on: true },
-      // two-shot at the tent
+      // two-shot at the tent, then OTS cuts as each line lands
       { t: 'cam', angle: -Math.PI * 0.35, target: { x: jx + 0.8, z: jz + 0.8 }, distance: 3.6, height: 1.5, lookHeight: 1.35, duration: 1600 },
       { t: 'fn', fn: () => { jac.char.play('talk'); } },
+      shot('jacob', 'joseph', { side: 0.42 }),
       { t: 'say', who: 'Jacob', text: 'Joseph. Come, stand in the light.', color: J.Jacob },
+      shot('jacob', 'joseph', { side: -0.4, dist: 2.5 }),
       { t: 'say', who: 'Jacob', text: 'You came to me in my old age, my son — a gift I did not look for.', color: J.Jacob },
+      shot('jacob', 'joseph', { side: 0.38, dist: 2.3 }),
       { t: 'say', who: 'Jacob', text: 'I had this made for you. Let all of Hebron see it.', color: J.Jacob },
       { t: 'dialogueHide' },
       // the gift — slow push-in on Joseph as the coat settles
@@ -136,17 +196,31 @@ export function createBeats(ctx) {
       } },
       { t: 'verse', verse: WEB.gen_37_3 },
       { t: 'verseHide' },
-      // across the camp, the brothers watch
-      { t: 'cam', angle: Math.PI * 0.55, target: { x: 0.8, z: -7.6 }, distance: 5.4, height: 1.8, lookHeight: 1.3, duration: 1800 },
-      { t: 'grade', mood: 'ominous', ms: 1800 },
+      // across the camp, the brothers watch — a dip-to-black CUT, never a
+      // swooping glide through the tents (cutscene-director: clean transitions)
+      { t: 'fade', on: true, ms: 260 },
+      { t: 'cam', angle: Math.PI * 0.55, target: { x: 0.8, z: -7.6 }, distance: 5.4, height: 1.8, lookHeight: 1.3, duration: 1, awaitMs: false },
+      { t: 'grade', mood: 'ominous', ms: 10 },
       { t: 'sound', key: 'stinger.hatred' },
+      { t: 'fn', fn: () => { ctx.npcs.freeze(ctx.cast.judah, true); ctx.npcs.freeze(ctx.cast.reuben, true); } },
+      { t: 'fade', on: false, ms: 420 },
+      shot('judah', 'reuben', { side: 0.45, dist: 3.1 }),
+      { t: 'anim', get char() { return ctx.cast.judah.char; }, state: 'talk' },
       { t: 'say', who: 'Judah', text: 'A prince’s tunic… while we wear the dust of his father’s fields.', color: J.Judah },
+      { t: 'anim', get char() { return ctx.cast.judah.char; }, state: 'idle' },
+      shot('reuben', 'judah', { side: -0.42, dist: 3.1 }),
+      { t: 'anim', get char() { return ctx.cast.reuben.char; }, state: 'talk' },
       { t: 'say', who: 'Reuben', text: 'Not one kind word is left in me for that boy.', color: J.Reuben },
+      { t: 'anim', get char() { return ctx.cast.reuben.char; }, state: 'idle' },
       { t: 'dialogueHide' },
       { t: 'verse', verse: WEB.gen_37_4 },
       { t: 'verseHide' },
-      { t: 'grade', mood: 'goldenHour', ms: 1600 },
-      { t: 'camRelease', ms: 1500 },
+      { t: 'fn', fn: () => { ctx.npcs.freeze(ctx.cast.judah, false); ctx.npcs.freeze(ctx.cast.reuben, false); } },
+      // dip back to Joseph in the gold — the jealousy stays behind the cut
+      { t: 'fade', on: true, ms: 260 },
+      { t: 'grade', mood: 'goldenHour', ms: 10 },
+      { t: 'camRelease', ms: 900 },
+      { t: 'fade', on: false, ms: 420 },
       { t: 'letterbox', on: false },
       { t: 'fn', fn: () => ctx.npcs.freeze(jac, false) },
     ]);
@@ -171,19 +245,22 @@ export function createBeats(ctx) {
   async function dream() {
     const D = ctx.dream;
     ctx.setInput(false);
+    // dusk deepens by the fire, embers rising… then a match-fade into the dream
     await seq([
       { t: 'letterbox', on: true },
       { t: 'grade', mood: 'night', ms: 2200 },
       { t: 'fn', fn: async () => { ctx.setMusic('music.dream_wonder'); ctx.sound('stinger.dream_enter'); await wait(600); } },
+      { t: 'fade', on: true, ms: 1100 },
     ]);
-    // slip into the dream field
+    // slip into the dream field (behind the black)
     D.group.visible = true;
     D.resetSky();
     ctx.joseph.setPosition(D.FIELD.x, D.FIELD.z + 9);
     ctx.controller.bounds = { minX: D.FIELD.x - 13, maxX: D.FIELD.x + 13, minZ: D.FIELD.z - 13, maxZ: D.FIELD.z + 13 };
     ctx.camera.snap();
     await seq([
-      { t: 'grade', mood: 'dream', ms: 1800 },
+      { t: 'grade', mood: 'dream', ms: 30 },
+      { t: 'fade', on: false, ms: 1500 },
       { t: 'verse', verse: WEB.gen_37_5 },
       { t: 'verseHide' },
       { t: 'letterbox', on: false },
@@ -226,17 +303,18 @@ export function createBeats(ctx) {
       { t: 'verse', verse: WEB.gen_37_9 },
       { t: 'verseHide' },
       { t: 'letterbox', on: true },
-      { t: 'grade', mood: 'night', ms: 1800 },
+      { t: 'fade', on: true, ms: 1300 },
     ]);
-    // wake back at camp
+    // wake back at camp (behind the black — morning has come)
     D.group.visible = false;
     ctx.joseph.setPosition(0.6, -3.8);
     ctx.controller.bounds = ctx.bounds;
     ctx.camera.snap();
     ctx.onDawn?.(); // fireflies fade out (wired by the scene)
     await seq([
-      { t: 'grade', mood: 'goldenHour', ms: 2400 },
+      { t: 'grade', mood: 'goldenHour', ms: 30 },
       { t: 'fn', fn: () => ctx.setMusic('music.camp_warm') },
+      { t: 'fade', on: false, ms: 1600 },
       { t: 'letterbox', on: false },
     ]);
   }
@@ -246,37 +324,54 @@ export function createBeats(ctx) {
     ctx.setInput(false);
     ctx.grading.grade('goldenHour', 400);
     const jac = ctx.cast.jacob;
+    const freezeAll = (on) => ['judah', 'reuben', 'simeon', 'levi'].forEach((k) => ctx.npcs.freeze(ctx.cast[k], on));
+    // group scene: establish WIDE, then cut to whoever speaks
     await seq([
       { t: 'letterbox', on: true },
-      { t: 'cam', angle: Math.PI * 0.6, target: { x: 0.8, z: -7.4 }, distance: 4.6, height: 1.7, lookHeight: 1.35, duration: 1500 },
+      { t: 'fn', fn: () => { freezeAll(true); ctx.npcs.freeze(jac, true); } },
+      { t: 'cam', angle: Math.PI * 0.6, target: { x: 0.8, z: -7.4 }, distance: 5.2, height: 2.0, lookHeight: 1.3, duration: 1500 },
+      { t: 'fn', fn: () => { ctx.joseph.play('talk'); } },
+      shot('joseph', 'judah', { side: 0.4 }),
       { t: 'say', who: 'Joseph', text: 'Brothers — hear this dream I dreamed.', color: J.Joseph },
       // "sheaves" explained once, naturally, inside the line (ui-clarity law 2)
       { t: 'say', who: 'Joseph', text: 'We were binding sheaves — bundles of wheat — in the field. Mine arose… and yours bowed down to it.', color: J.Joseph },
+      { t: 'fn', fn: () => { ctx.joseph.play('idle'); } },
       { t: 'sound', key: 'stinger.hatred' },
       { t: 'grade', mood: 'ominous', ms: 1600 },
+      shot('judah', 'joseph', { side: -0.42, dist: 2.6 }),
+      { t: 'anim', get char() { return ctx.cast.judah.char; }, state: 'talk' },
       { t: 'say', who: 'Judah', text: 'Will you indeed reign over us, dreamer of dreams?', color: J.Judah },
+      { t: 'anim', get char() { return ctx.cast.judah.char; }, state: 'idle' },
       { t: 'dialogueHide' },
       { t: 'verse', verse: WEB.gen_37_8 },
       { t: 'verseHide' },
+      shot('joseph', 'judah', { side: 0.44, dist: 2.7 }),
+      { t: 'fn', fn: () => { ctx.joseph.play('talk'); } },
       { t: 'say', who: 'Joseph', text: 'And again — the sun, the moon, eleven stars… all of them bowed to me.', color: J.Joseph },
-      { t: 'fn', fn: () => { jac.char.play('talk'); } },
+      { t: 'fn', fn: () => { ctx.joseph.play('idle'); jac.char.play('talk'); } },
+      shot('jacob', 'joseph', { side: -0.4, dist: 2.8 }),
       { t: 'say', who: 'Jacob', text: 'Joseph! Shall I, your mother, and your brothers bow to the earth before you?', color: J.Jacob },
       { t: 'dialogueHide' },
       { t: 'fn', fn: () => { jac.char.play('idle'); } },
       { t: 'verse', verse: WEB.gen_37_10_short },
       { t: 'verseHide' },
       { t: 'wait', ms: 700 },
+      { t: 'fn', fn: () => { freezeAll(false); ctx.npcs.freeze(jac, false); } },
     ]);
   }
 
-  // ---------- beat 7 · 🎬 close ----------
+  // ---------- beat 7 · 🎬 close: the glare, the verse, the tease ----------
   async function close() {
     await seq([
+      // hold on the brothers' jealous glare as the light hardens
+      { t: 'cam', angle: Math.PI * 0.5, target: { x: 0.8, z: -7.6 }, distance: 3.2, height: 1.6, lookHeight: 1.35, duration: 2200, awaitMs: false },
+      { t: 'grade', mood: 'ominous', ms: 2000 },
       { t: 'verse', verse: WEB.gen_37_11 },
       { t: 'wait', ms: 600 },
       { t: 'verseHide' },
-      { t: 'grade', mood: 'dusk', ms: 2600 },
-      { t: 'title', heading: 'To be continued', sub: 'Genesis 37:12 — the road to Dothan', holdMs: 4000 },
+      { t: 'grade', mood: 'dusk', ms: 2400 },
+      { t: 'fade', on: true, ms: 1800 },
+      { t: 'title', heading: 'To be continued', sub: 'Genesis 37:12 — the road to Dothan', holdMs: 4200 },
     ]);
     ctx.finish?.();
   }
