@@ -20,6 +20,7 @@ export class PlayerController3D {
     this.keys = new Set();
     this._fwd = new THREE.Vector3();
     this._right = new THREE.Vector3();
+    this._moveDir = new THREE.Vector3(); // scratch (no per-frame alloc)
     this._footT = 0;
 
     this.joystick = new Joystick({ side: 'left' });
@@ -61,13 +62,13 @@ export class PlayerController3D {
     }
 
     let wantX = 0, wantZ = 0;
-    const dir = new THREE.Vector3();
+    this._moveDir.set(0, 0, 0);
     if (ix !== 0 || iz !== 0) {
-      dir.addScaledVector(this._fwd, iz).addScaledVector(this._right, ix);
-      if (dir.lengthSq() > 1) dir.normalize();
-      const speed = running ? this.runSpeed : this.walkSpeed;
-      wantX = dir.x * speed;
-      wantZ = dir.z * speed;
+      this._moveDir.addScaledVector(this._fwd, iz).addScaledVector(this._right, ix);
+      if (this._moveDir.lengthSq() > 1) this._moveDir.normalize();
+      const spd = running ? this.runSpeed : this.walkSpeed;
+      wantX = this._moveDir.x * spd;
+      wantZ = this._moveDir.z * spd;
     }
 
     // Ease velocity, integrate, clamp.
@@ -83,7 +84,9 @@ export class PlayerController3D {
     // Turn + animation state.
     if (speed > 0.25) this.character.turnToward(this.vel.x, this.vel.y);
     const state = speed < 0.35 ? 'idle' : (running && speed > this.walkSpeed * 1.05 ? 'run' : 'walk');
-    if (this.character.state !== 'kneel' && this.character.state !== 'talk') this.character.play(state);
+    // Movement overrides a held kneel/talk pose; standing lets the pose hold.
+    if (speed > 0.35) this.character.play(state);
+    else if (this.character.state !== 'kneel' && this.character.state !== 'talk') this.character.play('idle');
     this.character.update(dt, this.camera);
 
     // Footsteps.

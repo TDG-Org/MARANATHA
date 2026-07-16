@@ -9,6 +9,7 @@ export function createNameTags() {
   document.body.append(layer);
 
   const tags = [];
+  let scratch = null; // reused Vector3 for projection (no per-frame alloc)
   function add(character, text, { maxDist = 42 } = {}) {
     const el = document.createElement('div');
     el.textContent = text;
@@ -28,7 +29,8 @@ export function createNameTags() {
 
   function update(camera) {
     const W = window.innerWidth, H = window.innerHeight;
-    const p = new (camera.position.constructor)();
+    if (!scratch) scratch = new (camera.position.constructor)();
+    const p = scratch;
     for (const tag of tags) {
       const c = tag.character;
       p.copy(c.position);

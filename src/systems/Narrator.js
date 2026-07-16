@@ -116,7 +116,10 @@ class NarratorSystem {
         u.onend = finish;
         u.onerror = finish;
         this._setSpeaking(true);
-        this._stopCurrent = () => { try { window.speechSynthesis.cancel(); } catch { /* ignore */ } };
+        // Skip / mute must resolve the awaited promise NOW and clear speaking
+        // state — not rely on the engine firing onend after cancel() (some don't,
+        // which stalled the beat until the est×2.2 backstop). finish() is idempotent.
+        this._stopCurrent = () => { try { window.speechSynthesis.cancel(); } catch { /* ignore */ } finish(); };
         window.speechSynthesis.speak(u);
         // Robustness: if speech never starts, fall back to reading-time pacing.
         setTimeout(() => {

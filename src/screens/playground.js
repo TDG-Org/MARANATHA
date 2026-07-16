@@ -68,7 +68,7 @@ export function buildPlayground({ scene, camera, renderer, app }) {
     controller = new PlayerController3D({ camera, character: hero, bounds: { minX: -24, maxX: 24, minZ: -24, maxZ: 20 } });
     tcam = new ThirdPersonCamera(camera);
     tcam.setTarget(hero.position);
-    tcam.setColliders([ground, trees]); // raycast pull-in vs terrain + trees
+    tcam.setColliders([trees]); // pull-in vs trees (flat ground here; a hilly scene would add it)
     tcam.setYaw(Math.PI);
     tcam.frame(0, 0, 0);
 
@@ -93,6 +93,7 @@ export function buildPlayground({ scene, camera, renderer, app }) {
     nameTags.destroy();
     controller?.dispose();
     chars.forEach((c) => c.dispose());
+    factory.dispose();
   }
 
   return { update, dispose, debug: { get hero() { return hero; }, get controller() { return controller; }, get tcam() { return tcam; }, factory } };

@@ -69,15 +69,21 @@ export class Character3D {
   }
 
   _applyToonToRig(rig) {
+    // A cast rig is often ONE unnamed skinned mesh, so unmatched materials must
+    // default to the variant's robe/coat colour (NOT the original GLB colour) —
+    // otherwise every variant renders identically. Named slots refine it.
+    // Joseph's coat is represented by its first band here; true multi-colour
+    // bands need an accessory-coat.glb (see /models/MODELS.md).
+    const robeColor = (this.colors.coat && this.colors.coat.length) ? this.colors.coat[0] : this.colors.robe;
     rig.traverse((o) => {
       if (!o.isMesh) return;
-      const src = o.material;
-      const name = (src && src.name ? src.name : '').toLowerCase();
-      let color = (src && src.color && src.color.clone) ? src.color.getHex() : this.colors.robe;
+      const name = (o.material && o.material.name ? o.material.name : '').toLowerCase();
+      let color = robeColor;
       if (name.includes('skin') || name.includes('head') || name.includes('face')) color = this.colors.skin;
       else if (name.includes('hair') || name.includes('beard')) color = this.colors.hair;
-      else if (name.includes('robe') || name.includes('cloth') || name.includes('body')) color = this.colors.robe;
-      else if (name.includes('sash') || name.includes('belt')) color = this.colors.sash ?? color;
+      else if (name.includes('sash') || name.includes('belt')) color = this.colors.sash ?? robeColor;
+      else if (name.includes('coat')) color = (this.colors.coat && this.colors.coat[0]) || robeColor;
+      else if (name.includes('robe') || name.includes('cloth') || name.includes('body')) color = robeColor;
       o.material = this._toon(color);
       o.castShadow = false;
       o.receiveShadow = false;
@@ -186,7 +192,12 @@ export class Character3D {
 
   dispose() {
     this.mixer?.stopAllAction();
-    this.root.traverse((o) => { if (o.isMesh) o.geometry?.dispose?.(); });
+    // Capsule geometry is per-instance → safe to dispose. GLB geometry is SHARED
+    // across SkeletonUtils clones + the factory base → do NOT dispose it here
+    // (CharacterFactory.dispose() frees the base once). Materials are per-instance.
+    if (this.mode === 'capsule') {
+      this.root.traverse((o) => { if (o.isMesh) o.geometry?.dispose?.(); });
+    }
     this._mats.forEach((m) => m.dispose());
     this.root.parent?.remove(this.root);
   }

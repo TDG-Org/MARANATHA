@@ -35,4 +35,23 @@ export class CharacterFactory {
     }
     return new Character3D({ mode: 'capsule', colors, scale, name, temp: true });
   }
+
+  // Free the base GLB's geometry/materials/textures ONCE (clones share the
+  // base geometry by reference, so individual characters must not dispose it —
+  // Character3D.dispose() skips geometry in GLB mode). Call at scene teardown.
+  dispose() {
+    if (!this.base) return;
+    this.base.scene.traverse((o) => {
+      if (!o.isMesh) return;
+      o.geometry?.dispose?.();
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      mats.forEach((m) => {
+        if (!m) return;
+        for (const k in m) { const v = m[k]; if (v && v.isTexture) v.dispose(); }
+        m.dispose?.();
+      });
+    });
+    this.base = null;
+    this.hasGLB = false;
+  }
 }

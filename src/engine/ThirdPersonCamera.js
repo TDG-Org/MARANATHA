@@ -32,6 +32,7 @@ export class ThirdPersonCamera {
     this._fwd = new THREE.Vector3();
     this._desired = new THREE.Vector3();
     this._dir = new THREE.Vector3();
+    this._lookTarget = new THREE.Vector3(); // scratch (no per-frame alloc)
     this._ray = new THREE.Raycaster();
 
     this.pose = null;
@@ -76,10 +77,10 @@ export class ThirdPersonCamera {
       }
     }
 
-    const lookTarget = this._head.clone().addScaledVector(this._fwd, this.lookAhead);
-    if (!this._init) { this._pos.copy(this._desired); this._look.copy(lookTarget); this._init = true; }
+    this._lookTarget.copy(this._head).addScaledVector(this._fwd, this.lookAhead);
+    if (!this._init) { this._pos.copy(this._desired); this._look.copy(this._lookTarget); this._init = true; }
     this._pos.lerp(this._desired, Math.min(dt * this.posDamp, 1));
-    this._look.lerp(lookTarget, Math.min(dt * this.lookDamp, 1));
+    this._look.lerp(this._lookTarget, Math.min(dt * this.lookDamp, 1));
 
     // Cinematic pose blend.
     if (this._poseDir !== 0) {

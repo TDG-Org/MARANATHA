@@ -49,7 +49,7 @@ export function createVerseDisplay() {
         window.removeEventListener('pointerdown', onTap);
         done();
       };
-      const onTap = () => { if (skipEnabled) { Narrator.cancel(); finish(); } };
+      const onTap = () => { if (skipEnabled) { Narrator.skip(); finish(); } };
       setTimeout(() => { skipEnabled = true; window.addEventListener('pointerdown', onTap); }, 1200);
       Narrator.speak(v.text).then(finish);
     });
