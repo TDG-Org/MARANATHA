@@ -8,7 +8,7 @@ import { CameraDirector } from '../../engine/CameraDirector.js';
 import { PlayerController3D } from '../../engine/PlayerController3D.js';
 import { Interactables } from '../../engine/Interactables.js';
 import { Guidance } from '../../engine/Guidance.js';
-import { MoodGrading } from '../../engine/MoodGrading.js';
+import { MoodGrading, MOODS } from '../../engine/MoodGrading.js';
 import { Sequencer } from '../../engine/Sequencer.js';
 import { makeSmoke, makeEmbers, makeFireflies } from '../../engine/particles.js';
 import { CharacterFactory } from '../../engine/CharacterFactory.js';
@@ -20,7 +20,7 @@ import { createNameTags } from '../../ui/nameTags.js';
 import { confirmModal } from '../../ui/modal.js';
 import { createPauseMenu } from '../../ui/pause.js';
 import { openSettings } from '../../ui/settings.js';
-import { buildCamp } from './props.js';
+import { buildCamp, makeTentInterior } from './props.js';
 import { SheepFlock } from './sheep.js';
 import { buildNamed, buildGenericBrother, buildWorker, AmbientNPCs } from './cast.js';
 import { createBeats } from './beats.js';
@@ -31,17 +31,23 @@ import { createBeats } from './beats.js';
 // (game-architecture: this file assembles; systems live in engine/, story in
 // beats.js, set in props.js, cast in cast.js.)
 export function buildJoseph3D({ scene, camera, renderer, app }) {
-  // --- world (unchanged Alto look) ---
-  scene.fog = new THREE.Fog(0xffdfba, 44, 250);
-  const sky = makeSky({ top: 0xf2b880, bottom: 0xffe9c9 });
+  // --- world (Alto look, D3 grade: warmer, more saturated, earthier ground).
+  // Base palette comes straight from MOODS.goldenHour — one source of truth.
+  const gh = MOODS.goldenHour;
+  scene.fog = new THREE.Fog(gh.fog, gh.fogNear, 250);
+  const sky = makeSky({ top: gh.skyTop, bottom: gh.skyBottom });
   scene.add(sky.mesh);
-  // Every story STAGE carves its own flat pad (level-layout law 1): the camp
-  // and the dream field — un-carved, the terrain swell pierced the wheat.
+  // Every story STAGE carves its own flat pad (level-layout law 1): the camp,
+  // the dream field, the pit, and Jacob's tent interior.
   const ground = makeGround({
+    color: 0x6a5140, // dark warm earth (Nate: "darker and earthier")
+    mottle: [0x7d6148, 0x5d6b45], // sunlit earth + olive-grass patches
+    segX: 96, segZ: 30,
     pads: [
       { x: 0, z: 0, flatCore: 27, falloff: 42 },    // the camp
       { x: 62, z: 0, flatCore: 17.5, falloff: 24 },  // the dream field
       { x: -62, z: 6, flatCore: 9, falloff: 16 },    // the pit (cold open)
+      { x: -62, z: -34, flatCore: 8, falloff: 14 },  // Jacob's tent interior
     ],
   });
   scene.add(ground);
@@ -51,9 +57,9 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
   scene.add(motes.points);
 
   // character light rig (the deliberate exception — no shadows)
-  const keyLight = new THREE.DirectionalLight(0xfff2d6, 1.15);
+  const keyLight = new THREE.DirectionalLight(gh.key, gh.keyI);
   keyLight.position.set(-6, 10, 5);
-  const hemiLight = new THREE.HemisphereLight(0xffe9c9, 0x4c4066, 0.6);
+  const hemiLight = new THREE.HemisphereLight(gh.skyBottom, 0x5d4a3a, gh.hemi);
   scene.add(keyLight, hemiLight);
 
   // --- camp set + collision ---
@@ -159,13 +165,21 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
   pit.group.visible = false;
   scene.add(pit.group);
 
+  // --- Jacob's tent interior (lamplit stage; the coat is given HERE) ---
+  const TENT_I = { x: -62, z: -34 };
+  const tentInterior = makeTentInterior(TENT_I.x, TENT_I.z);
+  tentInterior.group = tentInterior.mesh; // stage contract
+  tentInterior.POS = TENT_I;
+  tentInterior.mesh.visible = false;
+  scene.add(tentInterior.mesh);
+
   // --- beats context (everything the story data needs) ---
   const bounds = { minX: -19, maxX: 19, minZ: -16.5, maxZ: 17 };
   const ctx = {
     scene, app, cinema, verseCard, dialogue, hud, guide, grading, interactables,
     camera: director, sequencer: null, setInput,
     sound: (key) => Audio.play(key),
-    setMusic, camp, dream, pit, bounds,
+    setMusic, camp, dream, pit, tentInterior, bounds,
     get joseph() { return joseph; },
     get cast() { return cast; },
     npcs,
@@ -182,10 +196,12 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
   ctx.sequencer = new Sequencer(ctx);
 
   // --- sheep (independent of GLB load) ---
+  // strays start NEAR the spawn→pen path and read as LAMBS (smaller, warmer)
+  // so a first-time player finds all three without wandering (Nate's note).
   ctx.sheep = new SheepFlock({
     scene, colliderWorld: colliders, pen: camp.pen, bounds,
     count: 9,
-    strays: [{ x: -15, z: 9 }, { x: -2, z: 15.5 }, { x: 16.5, z: -8 }],
+    strays: [{ x: -5.5, z: 10.5 }, { x: 2.5, z: 13 }, { x: 12, z: 2 }],
     onPenned: (n) => { Audio.play('sfx.pen_gate'); ctx.onStrayPenned?.(n); },
   });
 
@@ -193,7 +209,7 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
     await factory.loadBase();
     joseph = buildNamed(factory, 'joseph').addTo(scene);
     joseph.setPosition(0, 15);
-    cast.jacob = npcs.add(buildNamed(factory, 'jacob').addTo(scene), { x: -9.8, z: -5.2, wanderR: 0, gestureEvery: 14000 });
+    cast.jacob = npcs.add(buildNamed(factory, 'jacob').addTo(scene), { x: -9.8, z: -5.2, wanderR: 0, gestureEvery: 14000, speed: 0.7 });
     cast.reuben = npcs.add(buildNamed(factory, 'reuben').addTo(scene), { x: 1.8, z: -7.9, wanderR: 1.4 });
     cast.judah = npcs.add(buildNamed(factory, 'judah').addTo(scene), { x: 0.3, z: -8.6, wanderR: 1.4 });
     cast.simeon = npcs.add(buildNamed(factory, 'simeon').addTo(scene), { x: -1.6, z: -7.7, wanderR: 1.6 });
@@ -307,6 +323,7 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
     factory.dispose();
     dream.dispose();
     pit.dispose();
+    tentInterior.dispose();
   }
 
   // level-layout audit (run in QA via debug.audit() — must return []).
@@ -324,6 +341,7 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
       { x: 0, z: 0, r: 24, label: 'camp' },
       { x: 62, z: 0, r: 16, label: 'dream-field' },
       { x: -62, z: 6, r: 7, label: 'pit' },
+      { x: -62, z: -34, r: 6, label: 'tent-interior' },
     ],
   });
 

@@ -37,9 +37,12 @@ export function createBeats(ctx) {
 
     // THE PIT — a flash of where this story is going. Black. Wind. A boy at
     // the bottom of a dry cistern; his brothers' silhouettes over the rim.
+    // (bounds must move WITH him — the controller clamp runs even with input
+    // off, and camp bounds would yank him 40u out of the shot)
     ctx.grading.set('pit');
     P.group.visible = true;
     ctx.joseph.setCoat(false);
+    ctx.controller.bounds = { minX: P.PIT.x - 2.4, maxX: P.PIT.x + 2.4, minZ: P.PIT.z - 2.4, maxZ: P.PIT.z + 2.4 };
     ctx.joseph.setPosition(P.PIT.x, P.PIT.z);
     ctx.joseph.play('kneel');
     ctx.camera.cinematicMoveTo({ angle: Math.PI * 0.15, target: { x: P.PIT.x, z: P.PIT.z }, distance: 2.3, height: 0.7, lookHeight: 1.0, duration: 1 });
@@ -60,6 +63,7 @@ export function createBeats(ctx) {
         P.group.visible = false;
         ctx.joseph.play('idle');
         ctx.grading.set('goldenHour');
+        ctx.controller.bounds = ctx.bounds; // back to the camp
         ctx.joseph.setPosition(0, 15);
         ctx.camera.cinematicMoveTo({ angle: Math.PI * 0.9, target: { x: 0, z: -2 }, distance: 17, height: 9, lookHeight: 0.5, duration: 1 });
       } },
@@ -135,7 +139,7 @@ export function createBeats(ctx) {
   async function report() {
     ctx.setInput(true);
     ctx.grading.grade('goldenHour', 600);
-    ctx.hud.setObjective('Go to your father, Jacob.');
+    ctx.hud.setObjective('Go to your father’s tent.');
     const jac = ctx.cast.jacob;
     ctx.guide.setTargetXZ(jac.pos.x, jac.pos.z);
 
@@ -156,7 +160,8 @@ export function createBeats(ctx) {
           await ctx.dialogue.say('Jacob', 'Joseph, my son. How are the sheep?', { color: J.Jacob });
           await ctx.dialogue.say('Joseph', 'They are strong, father. The strays are back in the pen.', { color: J.Joseph });
           await ctx.dialogue.say('Joseph', 'But my brothers… what they do out there — it is not right.', { color: J.Joseph });
-          await ctx.dialogue.say('Jacob', 'I hear you. You have done well to tell me. Stay close a moment.', { color: J.Jacob });
+          await ctx.dialogue.say('Jacob', 'I hear you. You have done well to tell me.', { color: J.Jacob });
+          await ctx.dialogue.say('Jacob', 'Come inside — I have something for you.', { color: J.Jacob });
           ctx.dialogue.hide();
           jac.char.play('idle');
           resolve();
@@ -165,27 +170,40 @@ export function createBeats(ctx) {
     });
   }
 
-  // ---------- beat 3 · 🧥 THE COAT ----------
+  // ---------- beat 3 · 🧥 THE COAT (inside Jacob's lamplit tent) ----------
   async function coat() {
     const jac = ctx.cast.jacob;
+    const T = ctx.tentInterior;
     ctx.setInput(false);
     ctx.npcs.freeze(jac, true);
-    ctx.grading.grade('goldenHour', 600);
-    const jx = jac.pos.x, jz = jac.pos.z;
+    const jacHome = { x: jac.pos.x, z: jac.pos.z };
     await seq([
       { t: 'letterbox', on: true },
-      // two-shot at the tent, then OTS cuts as each line lands
-      { t: 'cam', angle: -Math.PI * 0.35, target: { x: jx + 0.8, z: jz + 0.8 }, distance: 3.6, height: 1.5, lookHeight: 1.35, duration: 1600 },
+      // step inside with father — dip to black, come up in lamplight
+      { t: 'fade', on: true, ms: 750 },
+      { t: 'fn', fn: () => {
+        T.group.visible = true;
+        ctx.grading.set('tentWarm');
+        // bounds travel with the stage (the clamp runs even with input off)
+        ctx.controller.bounds = { minX: T.POS.x - 3.4, maxX: T.POS.x + 3.4, minZ: T.POS.z - 3.4, maxZ: T.POS.z + 3.4 };
+        jac.pos.x = T.POS.x - 0.8; jac.pos.z = T.POS.z - 0.5;
+        jac.char.setPosition(jac.pos.x, jac.pos.z);
+        ctx.joseph.setPosition(T.POS.x + 1.0, T.POS.z + 0.9);
+        jac.char.turnToward(ctx.joseph.position.x - jac.pos.x, ctx.joseph.position.z - jac.pos.z);
+        ctx.joseph.turnToward(jac.pos.x - ctx.joseph.position.x, jac.pos.z - ctx.joseph.position.z);
+        ctx.camera.cinematicMoveTo({ angle: -Math.PI * 0.3, target: { x: T.POS.x, z: T.POS.z }, distance: 3.3, height: 1.5, lookHeight: 1.15, duration: 1 });
+      } },
+      { t: 'fade', on: false, ms: 1000 },
       { t: 'fn', fn: () => { jac.char.play('talk'); } },
-      shot('jacob', 'joseph', { side: 0.42 }),
-      { t: 'say', who: 'Jacob', text: 'Joseph. Come, stand in the light.', color: J.Jacob },
-      shot('jacob', 'joseph', { side: -0.4, dist: 2.5 }),
+      shot('jacob', 'joseph', { side: 0.42, dist: 2.6 }),
+      { t: 'say', who: 'Jacob', text: 'Joseph. Come, stand in the lamplight.', color: J.Jacob },
+      shot('jacob', 'joseph', { side: -0.4, dist: 2.4 }),
       { t: 'say', who: 'Jacob', text: 'You came to me in my old age, my son — a gift I did not look for.', color: J.Jacob },
       shot('jacob', 'joseph', { side: 0.38, dist: 2.3 }),
       { t: 'say', who: 'Jacob', text: 'I had this made for you. Let all of Hebron see it.', color: J.Jacob },
       { t: 'dialogueHide' },
-      // the gift — slow push-in on Joseph as the coat settles
-      { t: 'cam', angle: Math.PI * 0.08, target: ctx.joseph.position, distance: 2.6, height: 1.35, lookHeight: 1.25, duration: 1500 },
+      // the gift — slow push-in on Joseph as the coat settles in the lamplight
+      { t: 'cam', angle: -Math.PI * 0.55, target: () => ({ x: ctx.joseph.position.x, z: ctx.joseph.position.z }), distance: 2.2, height: 1.3, lookHeight: 1.2, duration: 1500 },
       { t: 'fn', fn: async () => {
         ctx.joseph.setCoat(true);
         ctx.sound('sfx.cloth_equip');
@@ -196,9 +214,9 @@ export function createBeats(ctx) {
       } },
       { t: 'verse', verse: WEB.gen_37_3 },
       { t: 'verseHide' },
-      // across the camp, the brothers watch — a dip-to-black CUT, never a
-      // swooping glide through the tents (cutscene-director: clean transitions)
-      { t: 'fade', on: true, ms: 260 },
+      // outside, across the camp, the brothers watch the tent — dip-to-black
+      // CUT (cutscene-director: clean transitions, never a glide through walls)
+      { t: 'fade', on: true, ms: 300 },
       { t: 'cam', angle: Math.PI * 0.55, target: { x: 0.8, z: -7.6 }, distance: 5.4, height: 1.8, lookHeight: 1.3, duration: 1, awaitMs: false },
       { t: 'grade', mood: 'ominous', ms: 10 },
       { t: 'sound', key: 'stinger.hatred' },
@@ -216,18 +234,26 @@ export function createBeats(ctx) {
       { t: 'verse', verse: WEB.gen_37_4 },
       { t: 'verseHide' },
       { t: 'fn', fn: () => { ctx.npcs.freeze(ctx.cast.judah, false); ctx.npcs.freeze(ctx.cast.reuben, false); } },
-      // dip back to Joseph in the gold — the jealousy stays behind the cut
-      { t: 'fade', on: true, ms: 260 },
-      { t: 'grade', mood: 'goldenHour', ms: 10 },
-      { t: 'camRelease', ms: 900 },
-      { t: 'fade', on: false, ms: 420 },
+      // Joseph steps back out into the gold, wearing the coat
+      { t: 'fade', on: true, ms: 300 },
+      { t: 'fn', fn: () => {
+        T.group.visible = false;
+        jac.pos.x = jacHome.x; jac.pos.z = jacHome.z;
+        jac.char.setPosition(jacHome.x, jacHome.z);
+        ctx.controller.bounds = ctx.bounds; // back to the camp
+        ctx.joseph.setPosition(-8.2, -4.2); // just outside father's tent
+        ctx.grading.set('goldenHour');
+      } },
+      { t: 'camRelease', ms: 1 },
+      { t: 'fn', fn: () => ctx.camera.snap() },
+      { t: 'fade', on: false, ms: 700 },
       { t: 'letterbox', on: false },
       { t: 'fn', fn: () => ctx.npcs.freeze(jac, false) },
     ]);
     ctx.setInput(true);
   }
 
-  // ---------- beat 4 · 🌙 dusk falls ----------
+  // ---------- beat 4 · 🌙 dusk falls: the brothers ring the fire ----------
   async function dusk() {
     ctx.setInput(true);
     ctx.hud.setObjective('Walk to the fire and rest.');
@@ -239,6 +265,25 @@ export function createBeats(ctx) {
       ctx.interactables.addTrigger({ id: 'rest', x: 1.4, z: -5.0, r: 1.7, once: true, onEnter: resolve });
     });
     ctx.guide.setTarget(null);
+
+    // the brothers gather and SIT in a ring around the fire — sparks rise,
+    // the camera holds a low close arc as the light dies (world vibe: the
+    // deeper campfire scene)
+    ctx.setInput(false);
+    await seq([{ t: 'letterbox', on: true }]);
+    const ring = [['judah', -0.4], ['reuben', 0.7], ['simeon', 1.9], ['levi', 2.9]];
+    await Promise.all(ring.map(async ([k, a]) => {
+      const n = ctx.cast[k];
+      await ctx.npcs.sendTo(n, Math.cos(a) * 1.8, -6 + Math.sin(a) * 1.8, { speed: 1.5 });
+      ctx.npcs.freeze(n, true);
+      n.char.turnToward(0 - n.pos.x, -6 - n.pos.z);
+      n.char.play('kneel'); // Sit_Floor_Idle — seated by the firelight
+    }));
+    await seq([
+      { t: 'cam', angle: Math.PI * 0.35, target: { x: 0.2, z: -5.9 }, distance: 4.0, height: 1.4, lookHeight: 0.85, duration: 2800 },
+      { t: 'wait', ms: 1600 },
+    ]);
+    // (letterbox stays up — the dream rises straight out of this stillness)
   }
 
   // ---------- beat 5 · 💤 THE DREAM ----------
@@ -305,12 +350,19 @@ export function createBeats(ctx) {
       { t: 'letterbox', on: true },
       { t: 'fade', on: true, ms: 1300 },
     ]);
-    // wake back at camp (behind the black — morning has come)
+    // wake back at camp (behind the black — morning has come; the brothers
+    // rise from the fire and drift back to their work)
     D.group.visible = false;
     ctx.joseph.setPosition(0.6, -3.8);
     ctx.controller.bounds = ctx.bounds;
     ctx.camera.snap();
     ctx.onDawn?.(); // fireflies fade out (wired by the scene)
+    ['judah', 'reuben', 'simeon', 'levi'].forEach((k) => {
+      const n = ctx.cast[k];
+      ctx.npcs.freeze(n, false);
+      n.char.play('idle');
+      ctx.npcs.sendTo(n, n.home.x, n.home.z, { speed: 1.2 }); // fire-and-forget
+    });
     await seq([
       { t: 'grade', mood: 'goldenHour', ms: 30 },
       { t: 'fn', fn: () => ctx.setMusic('music.camp_warm') },

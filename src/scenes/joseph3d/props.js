@@ -10,8 +10,9 @@ const C = {
   tent: 0xb08d62, tentDark: 0x8d6f4c, jacobTent: 0x9a6f4e,
   wood: 0x6b4a2c, woodDark: 0x54381f,
   stone: 0x8a807a, stoneDark: 0x6e655f,
-  pot: 0x9c5f38, rug1: 0x8a4a42, rug2: 0x5d6e86, cloth: 0xe8dcc0,
-  path: 0x5a4c72, grass: 0x6d7a52, fireGlow: 0xffc07a,
+  pot: 0xa8622f, rug1: 0x96473e, rug2: 0x4f6b8a, cloth: 0xe8dcc0,
+  path: 0x7d5f41, grass: 0x7a8d4a, fireGlow: 0xffc07a,
+  foliage: 0x5c6b3c, foliageDark: 0x49572f, boulder: 0x84796f,
 };
 
 function inst(geo, color, spots, { yBase = 0, seedRot = 5 } = {}) {
@@ -172,6 +173,118 @@ export function makeGrass(count = 90, span = 42, colliderWorld = null) {
   return { mesh: inst(blade, C.grass, spots, { seedRot: 43 }), colliders: [] };
 }
 
+// NATURAL BORDERS (level-layout law 5): the play space is enclosed by things
+// the player can SEE — olive/tamarisk tree lines and boulder clusters — with
+// colliders ON those props. The hard world bounds beyond are a silent failsafe.
+// The north horizon stays open low (the ridge vista) — boulders there are
+// knee-high and gappy on purpose; the fog and distance do the rest.
+export function makeTreeline(runs, colliderWorld = null) {
+  // one merged tree (trunk + two canopy cones) instanced along border runs
+  const trunk = new THREE.CylinderGeometry(0.09, 0.13, 1.1, 5);
+  trunk.translate(0, 0.55, 0);
+  const lower = new THREE.ConeGeometry(0.85, 1.5, 6);
+  lower.translate(0, 1.55, 0);
+  const upper = new THREE.ConeGeometry(0.55, 1.1, 6);
+  upper.translate(0, 2.45, 0);
+  const rnd = mulberry32(2027);
+  const spots = [];
+  const colliders = [];
+  for (const r of runs) {
+    const len = Math.hypot(r.x1 - r.x0, r.z1 - r.z0);
+    const n = Math.max(2, Math.round(len / (r.gap ?? 2.4)));
+    // unit normal of the run (for the staggered second row)
+    const nx = -(r.z1 - r.z0) / len, nz = (r.x1 - r.x0) / len;
+    for (let row = 0; row < 2; row++) {
+      // two STAGGERED rows — the player can never slip between trunks to the
+      // invisible failsafe wall (level-layout law 5)
+      const off = row * 0.5 / n; // half-phase
+      const push = row * 1.15;   // second row sits behind the first
+      for (let i = 0; i <= n; i++) {
+        const t = Math.min(1, i / n + off);
+        const jx = (rnd() - 0.5) * 0.9;
+        const jz = (rnd() - 0.5) * 0.9;
+        const x = r.x0 + (r.x1 - r.x0) * t + jx + nx * push;
+        const z = r.z0 + (r.z1 - r.z0) * t + jz + nz * push;
+        // never plant a border tree into a camp prop (pen fence, tents…)
+        if (colliderWorld && colliderWorld.overlaps(x, z, 0.85)) continue;
+        spots.push([x, z, 0.8 + rnd() * 0.7]);
+        colliders.push({ type: 'circle', x, z, r: 0.75, group: 'border' });
+      }
+    }
+  }
+  const group = new THREE.Group();
+  group.add(inst(trunk, C.wood, spots, { seedRot: 51 }));
+  const canopyLo = inst(lower, C.foliage, spots, { seedRot: 51 });
+  const canopyHi = inst(upper, C.foliageDark, spots, { seedRot: 51 });
+  group.add(canopyLo, canopyHi);
+  return { mesh: group, colliders, blockers: [canopyLo] };
+}
+
+export function makeBoulders(spots) {
+  const geo = new THREE.DodecahedronGeometry(0.62, 0);
+  geo.translate(0, 0.28, 0);
+  const mesh = inst(geo, C.boulder, spots.map((s) => [s.x, s.z, s.scale ?? 1, 0]), { seedRot: 52 });
+  const colliders = spots.map((s) => ({ type: 'circle', x: s.x, z: s.z, r: 0.62 * (s.scale ?? 1), group: 'border' }));
+  return { mesh, colliders };
+}
+
+// JACOB'S TENT INTERIOR — a lamplit stage far off-camp (the report/coat beats
+// play inside). Warm wool, rugs, a low lamp; fog near ~11 closes the air in.
+export function makeTentInterior(x, z) {
+  const group = new THREE.Group();
+  // the tent shell seen from inside
+  const shell = new THREE.Mesh(
+    new THREE.ConeGeometry(4.3, 4.4, 8, 1, true),
+    new THREE.MeshBasicMaterial({ color: 0x9a7550, side: THREE.BackSide, fog: true }),
+  );
+  shell.position.set(x, 2.2, z);
+  group.add(shell);
+  // floor rug layers
+  const rug = new THREE.Mesh(new THREE.CircleGeometry(3.4, 18), new THREE.MeshBasicMaterial({ color: 0x7c4038, fog: true }));
+  rug.rotation.x = -Math.PI / 2;
+  rug.position.set(x, 0.015, z);
+  const rug2 = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.6), new THREE.MeshBasicMaterial({ color: 0x4f6b8a, fog: true }));
+  rug2.rotation.x = -Math.PI / 2;
+  rug2.rotation.z = 0.5;
+  rug2.position.set(x + 0.4, 0.03, z + 0.4);
+  group.add(rug, rug2);
+  // the lamp: a small pot with a warm glow (no real lights — art-style rule)
+  const lampPot = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), new THREE.MeshBasicMaterial({ color: 0x54381f, fog: true }));
+  lampPot.position.set(x - 1.1, 0.45, z - 0.7);
+  const lampPost = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.45, 5), new THREE.MeshBasicMaterial({ color: 0x54381f, fog: true }));
+  lampPost.position.set(x - 1.1, 0.2, z - 0.7);
+  const glowTex = canvasTexture(64, 64, (ctx, w, h) => {
+    const g = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
+    g.addColorStop(0, 'rgba(255,205,140,0.95)');
+    g.addColorStop(1, 'rgba(255,205,140,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+  });
+  const lampGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0xffc98a, transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+  lampGlow.position.set(x - 1.1, 0.62, z - 0.7);
+  lampGlow.scale.setScalar(2.2);
+  group.add(lampPot, lampPost, lampGlow);
+  // cushions + a cedar chest
+  [[x + 1.1, z - 0.9, 0xa8622f], [x + 1.5, z - 0.2, 0x96473e], [x - 0.6, z + 1.3, 0x4f6b8a]].forEach(([cx, cz, col]) => {
+    const cushion = new THREE.Mesh(new THREE.SphereGeometry(0.34, 8, 6), new THREE.MeshBasicMaterial({ color: col, fog: true }));
+    cushion.scale.set(1, 0.45, 1);
+    cushion.position.set(cx, 0.15, cz);
+    group.add(cushion);
+  });
+  const chest = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.5, 0.55), new THREE.MeshBasicMaterial({ color: C.wood, fog: true }));
+  chest.position.set(x - 0.2, 0.25, z - 1.6);
+  chest.rotation.y = 0.3;
+  group.add(chest);
+  return {
+    mesh: group, lampGlow,
+    dispose() {
+      glowTex.dispose();
+      group.traverse((o) => { if (o.isMesh || o.isSprite) { o.geometry?.dispose?.(); o.material?.dispose?.(); } });
+      group.parent?.remove(group);
+    },
+  };
+}
+
 // Sheep pen: fence posts + rails around a rect with a west gate opening.
 export function makePen(rect) {
   const { minX, maxX, minZ, maxZ, gate } = rect; // gate: {z0,z1} opening on minX side
@@ -236,15 +349,40 @@ export function buildCamp(colliderWorld) {
   addAll(makeWell(4.5, -1));
   addAll(makeLaundry(-3, 8.5, 2, 9.5));
   addAll(makeCrates([{ x: 7.6, z: -6.2 }, { x: 8.4, z: -5.6, scale: 0.85 }, { x: 7.9, z: -5.3, scale: 0.7 }, { x: -12.6, z: -4.9, scale: 0.9 }]));
-  addAll(makePots([{ x: 5.5, z: -2.1 }, { x: 3.6, z: -0.2 }, { x: -10.2, z: -5.8 }, { x: -2.6, z: 8.9 }]));
-  addAll(makeRugs([{ x: 1.6, z: -6.4, rot: 0.3 }, { x: -1.7, z: -5.2, rot: -0.5 }, { x: -9.6, z: 2.8, rot: 1.1 }]));
+  addAll(makePots([
+    { x: 5.5, z: -2.1 }, { x: 3.6, z: -0.2 }, { x: -10.2, z: -5.8 }, { x: -2.6, z: 8.9 },
+    // lived-in fill along the paths (world-density: clustered, never sprinkled)
+    { x: 2.8, z: 2.2 }, { x: 9.4, z: 6.6, scale: 0.85 }, { x: -5.8, z: -3.4, scale: 0.9 },
+  ]));
+  addAll(makeRugs([
+    { x: 1.6, z: -6.4, rot: 0.3 }, { x: -1.7, z: -5.2, rot: -0.5 }, { x: -9.6, z: 2.8, rot: 1.1 },
+    { x: 6.2, z: 4.1, rot: -0.7 },
+  ]));
   addAll(makePaths([
     { x: 0, z: -2.5, r: 2.6, sx: 1.4 }, { x: -5, z: -5, r: 2.2, sx: 1.5, rot: 0.7 },
     { x: 5.5, z: 3, r: 2.0, sx: 1.6, rot: -0.9 }, { x: 10, z: 8, r: 2.2, sx: 1.4, rot: -0.4 },
   ]));
-  const pen = { minX: 10, maxX: 17, minZ: 8.5, maxZ: 14, gate: { z0: 10.2, z1: 12.4 } };
+  addAll(makeCrates([{ x: 10.5, z: 7.3, scale: 0.8 }])); // clear of the tent (audit-verified)
+  // gate widened (D3: lambs must be EASY to pen)
+  const pen = { minX: 10, maxX: 17, minZ: 8.5, maxZ: 14, gate: { z0: 9.9, z1: 12.9 } };
   addAll(makePen(pen));
-  addAll(makeGrass(90, 42, colliderWorld));
+
+  // natural borders: tree lines east/west/south; low gappy boulders north so
+  // the ridge vista stays open. Colliders live ON the visible props.
+  // run directions chosen so each staggered second row lands INSIDE the play
+  // area (the normal points inward)
+  addAll(makeTreeline([
+    { x0: 18.7, z0: -14, x1: 18.7, z1: 16.5 },       // east  (2nd row at ~x17.5)
+    { x0: -18.7, z0: 16.5, x1: -18.7, z1: -14 },     // west  (2nd row at ~x-17.5)
+    { x0: 17.5, z0: 16.8, x1: -17.5, z1: 16.8, gap: 2.1 }, // south (2nd row at ~z15.7)
+  ], colliderWorld));
+  addAll(makeBoulders([
+    { x: -17.5, z: -15.8, scale: 1.3 }, { x: -14.8, z: -16.2, scale: 0.9 }, { x: -12.4, z: -15.6, scale: 1.1 },
+    { x: -8.8, z: -16.3, scale: 0.8 }, { x: -3.2, z: -16 }, { x: 1.4, z: -16.4, scale: 0.85 },
+    { x: 7.2, z: -16.1, scale: 1.15 }, { x: 11.8, z: -15.7, scale: 0.9 }, { x: 15.6, z: -16.2, scale: 1.25 },
+    { x: 17.8, z: -13.4, scale: 0.95 },
+  ]));
+  addAll(makeGrass(110, 42, colliderWorld));
 
   return { group, fireEmitters, sway, pen, cameraBlockers };
 }

@@ -48,6 +48,7 @@ export class SheepFlock {
     return {
       x, z, yaw: this.rnd() * Math.PI * 2, penned,
       counted: penned, // strays count when they enter
+      lamb: !penned,   // strays read as LAMBS — smaller, easier to spot
       state: 'graze', vx: 0, vz: 0,
       timer: 600 + this.rnd() * 2200, walk: 0,
       phase: this.rnd() * Math.PI * 2,
@@ -81,8 +82,9 @@ export class SheepFlock {
       const dzp = s.z - playerPos.z;
       const pd2 = dxp * dxp + dzp * dzp;
 
-      if (!s.counted && pd2 < 2.8 * 2.8) {
+      if (!s.counted && pd2 < 3.3 * 3.3) {
         // HERD: trot ahead of the player, biased toward the pen gate/center.
+        // D3 tuning: wider herd radius + stronger pen bias — lambs are EASY.
         const px = this.pen.minX + 1.6; // just inside the gate
         const pz = (this.pen.gate.z0 + this.pen.gate.z1) / 2;
         const gateInX = this._inPen(s.x, s.z) ? (this.pen.minX + this.pen.maxX) / 2 : px;
@@ -93,7 +95,7 @@ export class SheepFlock {
         let bx = gateInX - s.x, bz = gateInZ - s.z; // toward pen
         const bl = Math.hypot(bx, bz) || 1;
         bx /= bl; bz /= bl;
-        const mix = 0.45; // away + pen bias
+        const mix = 0.58; // away + pen bias (was 0.45 — strays now lead you in)
         let dx = ax * (1 - mix) + bx * mix;
         let dz = az * (1 - mix) + bz * mix;
         const dl = Math.hypot(dx, dz) || 1;
@@ -162,9 +164,10 @@ export class SheepFlock {
     this.sheep.forEach((s, i) => {
       const bob = Math.abs(Math.sin(s.walk * Math.PI + s.phase)) * 0.05;
       const breathe = 1 + Math.sin(t * 1.6 + s.phase) * 0.02;
+      const size = s.lamb ? 0.74 : 1; // lambs stay small even once penned
       d.position.set(s.x, bob, s.z);
       d.rotation.set(0, s.yaw, 0);
-      d.scale.set(1, breathe, 1);
+      d.scale.set(size, size * breathe, size);
       d.updateMatrix();
       this.bodies.setMatrixAt(i, d.matrix);
       this.heads.setMatrixAt(i, d.matrix);

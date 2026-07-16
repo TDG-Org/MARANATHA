@@ -5,13 +5,17 @@ import { easeInOut } from './world.js';
 // in one eased tween — sky stops, fog color/near, the character light rig, and
 // a whisper of DOM tint. Scenes pass their own mood table; beats call
 // grade('dusk'). Update per frame.
+// D3 grade: richer saturation + contrast (Nate's cozy mandate) — deeper
+// orange golden hour, hotter dusk sunset, more magical dream violet.
 export const MOODS = {
-  goldenHour: { skyTop: 0xf2b880, skyBottom: 0xffe9c9, fog: 0xffdfba, fogNear: 44, key: 0xfff2d6, keyI: 1.15, hemi: 0.6, tint: '#000000', tintA: 0 },
+  goldenHour: { skyTop: 0xefa45e, skyBottom: 0xffe4b6, fog: 0xffd6a2, fogNear: 44, key: 0xffedc2, keyI: 1.28, hemi: 0.66, tint: '#000000', tintA: 0 },
   // The pit (cold open): trapped, airless — fog crushes in to ~18 (environment-vibes).
   pit: { skyTop: 0x3a3550, skyBottom: 0x6b5a63, fog: 0x5a5464, fogNear: 18, key: 0x9a8fb0, keyI: 0.55, hemi: 0.35, tint: '#1c1830', tintA: 0.12 },
-  dusk: { skyTop: 0x4a4e8f, skyBottom: 0xe88d67, fog: 0xb98a7c, fogNear: 38, key: 0xffd9b0, keyI: 0.85, hemi: 0.5, tint: '#3a2f55', tintA: 0.08 },
+  // Jacob's tent interior: lamplight, close air, wool and cedar.
+  tentWarm: { skyTop: 0x4a4e8f, skyBottom: 0xe88d67, fog: 0x2e2118, fogNear: 11, key: 0xffcf96, keyI: 1.05, hemi: 0.55, tint: '#2a1c10', tintA: 0.08 },
+  dusk: { skyTop: 0x434b9e, skyBottom: 0xf28a58, fog: 0xc08a70, fogNear: 38, key: 0xffd2a0, keyI: 0.9, hemi: 0.52, tint: '#3a2f55', tintA: 0.08 },
   ominous: { skyTop: 0x3a3550, skyBottom: 0x6b5a63, fog: 0x5a5464, fogNear: 26, key: 0xd9c2b0, keyI: 0.7, hemi: 0.42, tint: '#251f33', tintA: 0.12 },
-  dream: { skyTop: 0x2b3a67, skyBottom: 0x8a7fb5, fog: 0x6b6a9a, fogNear: 34, key: 0xcfd8ff, keyI: 0.9, hemi: 0.55, tint: '#1d2547', tintA: 0.1 },
+  dream: { skyTop: 0x2b3a67, skyBottom: 0x9a8fd2, fog: 0x6f6ca4, fogNear: 34, key: 0xd4dcff, keyI: 0.95, hemi: 0.58, tint: '#1d2547', tintA: 0.1 },
   night: { skyTop: 0x0b1026, skyBottom: 0x2b3a67, fog: 0x1b2340, fogNear: 30, key: 0x9fb0d8, keyI: 0.6, hemi: 0.4, tint: '#060a18', tintA: 0.12 },
 };
 

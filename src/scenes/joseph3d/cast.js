@@ -9,13 +9,18 @@ export const NAME_COLOR = {
   Simeon: '#a8bd8f', Levi: '#c9a3b2',
 };
 
+// Likeness pass (D3, design LOCKED — features only): Jacob reads ELDERLY
+// (gray-wool robe, white beard, staff, slower walk, slightly stooped scale);
+// Joseph reads YOUNGEST (smallest of the men, bright cream); the four named
+// brothers get distinct builds — Reuben broad (firstborn), Judah solid gold-
+// brown, Simeon lean olive, Levi plum.
 const CAST = {
-  joseph: { name: 'Joseph', base: 'robed', colors: { robe: 0xd9cba6, robeShade: 0xb5a67f, skin: 0xcf9a63, coat: [0xb5643c, 0xcf9a4e, 0x6f8256, 0x8a5a72, 0x3f7a86] } },
-  jacob: { name: 'Jacob', base: 'robed', staff: true, scale: 0.82, colors: { robe: 0x8a5a3c, robeShade: 0x6e4630, skin: 0xb98a55 } },
-  reuben: { name: 'Reuben', base: 'hooded', scale: 0.84, colors: { robe: 0x5a6b86, robeShade: 0x47566e, skin: 0xc98d5a } },
-  judah: { name: 'Judah', base: 'robed', colors: { robe: 0xa9773f, robeShade: 0x8a5f31, skin: 0xc07d45 } },
-  simeon: { name: 'Simeon', base: 'hooded', colors: { robe: 0x77804f, robeShade: 0x5f6640, skin: 0xc98d5a } },
-  levi: { name: 'Levi', base: 'robed', colors: { robe: 0x8a6a7d, robeShade: 0x705364, skin: 0xb98a55 } },
+  joseph: { name: 'Joseph', base: 'robed', scale: 0.97, colors: { robe: 0xd9cba6, robeShade: 0xb5a67f, skin: 0xcf9a63, coat: [0xb5643c, 0xcf9a4e, 0x6f8256, 0x8a5a72, 0x3f7a86] } },
+  jacob: { name: 'Jacob', base: 'robed', staff: true, elder: true, scale: 0.9, colors: { robe: 0x8b8177, robeShade: 0x6d645a, skin: 0xb98a55 } },
+  reuben: { name: 'Reuben', base: 'hooded', scale: 1.06, colors: { robe: 0x5a6b86, robeShade: 0x47566e, skin: 0xc98d5a } },
+  judah: { name: 'Judah', base: 'robed', scale: 1.03, colors: { robe: 0xa9773f, robeShade: 0x8a5f31, skin: 0xc07d45 } },
+  simeon: { name: 'Simeon', base: 'hooded', scale: 0.98, colors: { robe: 0x77804f, robeShade: 0x5f6640, skin: 0xc98d5a } },
+  levi: { name: 'Levi', base: 'robed', scale: 1.01, colors: { robe: 0x8a6a7d, robeShade: 0x705364, skin: 0xb98a55 } },
 };
 
 const GENERIC = [
@@ -29,7 +34,7 @@ const GENERIC = [
 
 export function buildNamed(factory, key) {
   const c = CAST[key];
-  return factory.create({ name: c.name, base: c.base, colors: c.colors, staff: c.staff, scale: 0.8 * (c.scale ?? 1) });
+  return factory.create({ name: c.name, base: c.base, colors: c.colors, staff: c.staff, elder: c.elder, scale: 0.8 * (c.scale ?? 1) });
 }
 
 export function buildGenericBrother(factory, i) {

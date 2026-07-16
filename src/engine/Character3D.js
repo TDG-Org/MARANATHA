@@ -40,7 +40,8 @@ const _srgb = new THREE.Color();
 function linearColor(hex) { return _srgb.set(hex).convertSRGBToLinear().clone(); }
 
 export class Character3D {
-  constructor({ mode = 'capsule', gltf = null, colors = {}, scale = 1, name = '', temp = false, staff = false, hoodIsCloth = false } = {}) {
+  constructor({ mode = 'capsule', gltf = null, colors = {}, scale = 1, name = '', temp = false, staff = false, elder = false, hoodIsCloth = false } = {}) {
+    this.elder = elder;
     this.name = name;
     this.mode = mode;
     this.isTemp = temp || mode === 'capsule';
@@ -136,6 +137,19 @@ export class Character3D {
       const hp = new THREE.Vector3();
       headBone.getWorldPosition(hp);
       this.headHeight = Math.max(1.3, hp.y) + 0.3;
+      // ELDER: a chunky gray-white beard rides the head bone (likeness pass —
+      // the painted face texture can't be re-tinted, so age is worn, not drawn).
+      if (this.elder) {
+        const beardGeo = new THREE.ConeGeometry(0.15, 0.34, 6);
+        beardGeo.translate(0, -0.13, 0);
+        beardGeo.scale(1.15, 1, 0.75);
+        const beard = new THREE.Mesh(beardGeo, this._toon(0xd8d2c8));
+        beard.position.set(0, 0.02, 0.3); // chin, bone-local — proud of the face
+        beard.rotation.x = 0.3;
+        headBone.add(beard);
+        this._ownedGeo.push(beardGeo);
+        this.beardMesh = beard;
+      }
     } else {
       let top = 1.8;
       const g = this.bodyMesh?.geometry;
