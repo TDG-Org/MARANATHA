@@ -7,12 +7,15 @@ import { Audio } from '../systems/AudioSystem.js';
 // eased. The character turns toward its move direction and picks idle/walk/run.
 // Exposes moveVec so the 3rd-person camera can trail the movement.
 export class PlayerController3D {
-  constructor({ camera, character, bounds, walkSpeed = 3.4, runSpeed = 6.6 }) {
+  constructor({ camera, character, bounds, walkSpeed = 3.4, runSpeed = 6.6, colliders = null, radius = 0.42 }) {
     this.camera = camera;
     this.character = character;
     this.walkSpeed = walkSpeed;
     this.runSpeed = runSpeed;
     this.bounds = bounds || { minX: -40, maxX: 40, minZ: -40, maxZ: 40 };
+    this.colliders = colliders; // ColliderWorld (optional)
+    this.dynamics = null;       // array of {x,z,r} live circles (NPCs/sheep)
+    this.radius = radius;
     this.enabled = true;
 
     this.vel = new THREE.Vector2(0, 0);   // world (x, z)
@@ -71,12 +74,15 @@ export class PlayerController3D {
       wantZ = this._moveDir.z * spd;
     }
 
-    // Ease velocity, integrate, clamp.
+    // Ease velocity, integrate, resolve collision (smooth slide), clamp.
     const acc = Math.min(dt * 0.012, 1);
     this.vel.x += (wantX - this.vel.x) * acc;
     this.vel.y += (wantZ - this.vel.y) * acc;
-    pos.x = clamp(pos.x + this.vel.x * dt * 0.001, this.bounds.minX, this.bounds.maxX);
-    pos.z = clamp(pos.z + this.vel.y * dt * 0.001, this.bounds.minZ, this.bounds.maxZ);
+    pos.x += this.vel.x * dt * 0.001;
+    pos.z += this.vel.y * dt * 0.001;
+    if (this.colliders) this.colliders.resolve(pos, this.radius, this.dynamics);
+    pos.x = clamp(pos.x, this.bounds.minX, this.bounds.maxX);
+    pos.z = clamp(pos.z, this.bounds.minZ, this.bounds.maxZ);
 
     const speed = this.vel.length();
     this.moveVec.set(this.vel.x, this.vel.y);

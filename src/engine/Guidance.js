@@ -68,6 +68,8 @@ export class Guidance {
     this.group.visible = true;
   }
 
+  setTargetXZ(x, z) { this.target.set(x, 0, z); this.visible = true; this.group.visible = true; }
+
   update(dt, camera) {
     if (!this.visible) return;
     this._t += dt;
