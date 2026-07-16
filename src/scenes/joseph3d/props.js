@@ -35,8 +35,9 @@ function inst(geo, color, spots, { yBase = 0, seedRot = 5 } = {}) {
 export function makeTents(spots) {
   const geo = new THREE.ConeGeometry(1.7, 2.2, 6);
   const mesh = inst(geo, C.tent, spots.map((s) => [s.x, s.z, s.scale ?? 1, 1.1, s.rot]));
-  const colliders = spots.map((s) => ({ type: 'circle', x: s.x, z: s.z, r: 1.55 * (s.scale ?? 1) }));
-  return { mesh, colliders };
+  const colliders = spots.map((s) => ({ type: 'circle', x: s.x, z: s.z, r: 1.55 * (s.scale ?? 1), group: 'tents' }));
+  // Tents are BIG — they join the camera-blocker list (level-layout law 4).
+  return { mesh, colliders, blockers: [mesh] };
 }
 
 export function makeFires(spots) {
@@ -86,7 +87,7 @@ export function makeWell(x, z) {
   roof.position.set(x, 1.75, z);
   roof.rotation.y = Math.PI / 4;
   group.add(ring, posts, roof);
-  return { mesh: group, colliders: [{ type: 'circle', x, z, r: 1.15 }] };
+  return { mesh: group, colliders: [{ type: 'circle', x, z, r: 1.15, group: 'well' }], blockers: [ring, roof] };
 }
 
 export function makeLaundry(x1, z1, x2, z2) {
@@ -119,6 +120,7 @@ export function makeCrates(spots) {
     type: 'aabb',
     minX: s.x - 0.45 * (s.scale ?? 1), maxX: s.x + 0.45 * (s.scale ?? 1),
     minZ: s.z - 0.45 * (s.scale ?? 1), maxZ: s.z + 0.45 * (s.scale ?? 1),
+    group: 'crates', // a stacked pile — same-group touching is intentional
   }));
   return { mesh, colliders };
 }
@@ -200,11 +202,11 @@ export function makePen(rect) {
   });
   const t = 0.12;
   const colliders = [
-    { type: 'aabb', minX, maxX, minZ: minZ - t, maxZ: minZ + t },
-    { type: 'aabb', minX, maxX, minZ: maxZ - t, maxZ: maxZ + t },
-    { type: 'aabb', minX: maxX - t, maxX: maxX + t, minZ, maxZ },
-    { type: 'aabb', minX: minX - t, maxX: minX + t, minZ, maxZ: gate.z0 },
-    { type: 'aabb', minX: minX - t, maxX: minX + t, minZ: gate.z1, maxZ },
+    { type: 'aabb', minX, maxX, minZ: minZ - t, maxZ: minZ + t, group: 'pen' },
+    { type: 'aabb', minX, maxX, minZ: maxZ - t, maxZ: maxZ + t, group: 'pen' },
+    { type: 'aabb', minX: maxX - t, maxX: maxX + t, minZ, maxZ, group: 'pen' },
+    { type: 'aabb', minX: minX - t, maxX: minX + t, minZ, maxZ: gate.z0, group: 'pen' },
+    { type: 'aabb', minX: minX - t, maxX: minX + t, minZ: gate.z1, maxZ, group: 'pen' },
   ];
   return { mesh: group, colliders };
 }
@@ -215,11 +217,13 @@ export function buildCamp(colliderWorld) {
   const group = new THREE.Group();
   const fireEmitters = [];
   const sway = [];
+  const cameraBlockers = []; // ONLY big props block the camera (level-layout law 4)
   const addAll = (made) => {
     group.add(made.mesh);
     made.colliders?.forEach((c) => colliderWorld.add(c));
     made.emitters?.forEach((e) => fireEmitters.push(e));
     made.sway?.forEach((s) => sway.push(s));
+    made.blockers?.forEach((b) => cameraBlockers.push(b));
   };
 
   addAll(makeTents([
@@ -242,5 +246,5 @@ export function buildCamp(colliderWorld) {
   addAll(makePen(pen));
   addAll(makeGrass(90, 42, colliderWorld));
 
-  return { group, fireEmitters, sway, pen };
+  return { group, fireEmitters, sway, pen, cameraBlockers };
 }

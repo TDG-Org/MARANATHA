@@ -182,29 +182,66 @@ export function makeRidges(pal = {}) {
 
 // --- Ground: a gently rolling unlit heightfield, flattened near the origin --
 
-// The walkable area stays dead flat (a `flatCore` radius around WORLD origin,
-// where the camp/player live); swells only ramp in beyond it, toward the
-// horizon. Flattening is computed in WORLD space so the mesh's z offset can't
-// push the flat spot off the play area (that bug made the ground rise up and
-// occlude the character).
-export function makeGround({ color = 0x4c4066, seed = 77, width = 320, depth = 130, flatCore = 17, falloff = 46, z = -25, flattenWorldZ = 0 } = {}) {
-  const geo = new THREE.PlaneGeometry(width, depth, 64, 20);
+// The walkable areas stay dead flat: every story STAGE (camp, dream field,
+// pit, interiors…) carves its own flat PAD — `pads: [{x, z, flatCore,
+// falloff}]` in world space — and swells only ramp in beyond ALL pads
+// (level-layout law 1: un-carved stages get pierced by terrain). The default
+// single pad around the origin keeps old callers working. Flattening is
+// computed in WORLD space so the mesh's z offset can't push a flat spot off
+// its stage (that bug made the ground rise up and occlude the character).
+export function makeGround({
+  color = 0x4c4066, seed = 77, width = 320, depth = 130,
+  flatCore = 17, falloff = 46, z = -25, flattenWorldZ = 0,
+  pads = null, segX = 64, segZ = 20, mottle = null,
+} = {}) {
+  const padList = pads ?? [{ x: 0, z: flattenWorldZ, flatCore, falloff }];
+  const geo = new THREE.PlaneGeometry(width, depth, segX, segZ);
   geo.rotateX(-Math.PI / 2);
   const pos = geo.attributes.position;
   const rnd = mulberry32(seed);
   const p1 = rnd() * Math.PI * 2;
   const p2 = rnd() * Math.PI * 2;
+
+  // Optional vertex-color mottling: patches of nearby earth tones so the
+  // ground reads alive and sun-warmed instead of one flat sheet.
+  let colAttr = null;
+  const base = new THREE.Color(color);
+  const tones = (mottle || []).map((m) => new THREE.Color(m));
+  if (tones.length) {
+    colAttr = new Float32Array(pos.count * 3);
+    geo.setAttribute('color', new THREE.BufferAttribute(colAttr, 3));
+  }
+  const tmp = new THREE.Color();
+
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i);
     const zz = pos.getZ(i);
     const worldZ = zz + z; // this vertex's world z (mesh is offset by z)
-    const dist = Math.hypot(x, worldZ - flattenWorldZ);
-    const d = Math.min(1, Math.max(0, (dist - flatCore) / falloff));
+    let d = 1;
+    for (const p of padList) {
+      const dist = Math.hypot(x - p.x, worldZ - p.z);
+      const pd = Math.min(1, Math.max(0, (dist - p.flatCore) / p.falloff));
+      if (pd < d) d = pd;
+    }
     const y = (Math.sin(x * 0.055 + p1) * 1.6 + Math.sin(x * 0.021 + zz * 0.045 + p2) * 2.4) * d * d;
     pos.setY(i, y - 0.02);
+
+    if (colAttr) {
+      // two soft sine fields pick a tone + strength — organic, deterministic
+      const n1 = Math.sin(x * 0.21 + worldZ * 0.17 + p1 * 3) * Math.sin(x * 0.06 - worldZ * 0.11 + p2);
+      const n2 = Math.sin(x * 0.045 + worldZ * 0.05 + p2 * 2);
+      const t = tones[(n2 > 0 ? 0 : 1) % tones.length] || tones[0];
+      const k = Math.max(0, n1) * 0.55;
+      tmp.copy(base).lerp(t, k);
+      colAttr[i * 3] = tmp.r;
+      colAttr[i * 3 + 1] = tmp.g;
+      colAttr[i * 3 + 2] = tmp.b;
+    }
   }
   geo.computeVertexNormals();
-  const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, fog: true }));
+  const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial(
+    colAttr ? { vertexColors: true, fog: true } : { color, fog: true },
+  ));
   mesh.position.z = z;
   return mesh;
 }

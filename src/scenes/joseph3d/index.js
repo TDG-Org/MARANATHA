@@ -3,6 +3,7 @@ import { makeSky, makeRidges, makeGround, makeSun, makeMotes } from '../../engin
 import { Audio } from '../../systems/AudioSystem.js';
 import { getCheckpoint, setCheckpoint, clearCheckpoint, setSceneProgress } from '../../systems/SaveSystem.js';
 import { ColliderWorld } from '../../engine/collision.js';
+import { auditLayout } from '../../engine/layoutAudit.js';
 import { CameraDirector } from '../../engine/CameraDirector.js';
 import { PlayerController3D } from '../../engine/PlayerController3D.js';
 import { Interactables } from '../../engine/Interactables.js';
@@ -32,7 +33,15 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
   scene.fog = new THREE.Fog(0xffdfba, 44, 250);
   const sky = makeSky({ top: 0xf2b880, bottom: 0xffe9c9 });
   scene.add(sky.mesh);
-  scene.add(makeGround({ flatCore: 27, falloff: 42 }));
+  // Every story STAGE carves its own flat pad (level-layout law 1): the camp
+  // and the dream field — un-carved, the terrain swell pierced the wheat.
+  const ground = makeGround({
+    pads: [
+      { x: 0, z: 0, flatCore: 27, falloff: 42 },   // the camp
+      { x: 62, z: 0, flatCore: 17.5, falloff: 24 }, // the dream field
+    ],
+  });
+  scene.add(ground);
   scene.add(makeRidges());
   scene.add(makeSun());
   const motes = makeMotes({ count: 70 });
@@ -76,7 +85,7 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
     // dream field: hold a wide-ish stage frame
     { shape: 'rect', minX: 48, maxX: 76, minZ: -14, maxZ: 14, yaw: Math.PI, distance: 6.6, height: 2.6 },
   ]);
-  director.setColliders([camp.group]);
+  director.setColliders(camp.cameraBlockers); // BIG props only — small props never pump the camera
 
   // --- audio: beds via manifest (real file OR fallback OR silence) ---
   Audio.unlock?.();
@@ -271,12 +280,29 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
     dream.dispose();
   }
 
+  // level-layout audit (run in QA via debug.audit() — must return []).
+  const audit = () => auditLayout({
+    colliderWorld: colliders,
+    ground,
+    zones: [
+      ...interactables.triggers.map((t) => ({ x: t.x, z: t.z, label: t.id })),
+      ...interactables.prompts.map((p) => {
+        const pos = p.getPos ? p.getPos() : p;
+        return { x: pos.x, z: pos.z, label: p.id };
+      }),
+    ],
+    stages: [
+      { x: 0, z: 0, r: 24, label: 'camp' },
+      { x: 62, z: 0, r: 16, label: 'dream-field' },
+    ],
+  });
+
   return {
     update, dispose,
     debug: {
       get joseph() { return joseph; }, get controller() { return controller; },
       get ready() { return ready; }, get storyDone() { return storyDone; },
-      cast, ctx, director, sheep: () => ctx.sheep, beats, colliders, factory,
+      cast, ctx, director, sheep: () => ctx.sheep, beats, colliders, factory, audit,
     },
   };
 }
