@@ -1,6 +1,7 @@
 import { createApp } from './core/app.js';
 import { buildHome } from './screens/home.js';
 import { buildJoseph } from './scenes/joseph/index.js';
+import { buildJoseph3D } from './scenes/joseph3d/index.js';
 import { buildPlayground } from './screens/playground.js';
 import { Audio } from './systems/AudioSystem.js';
 import { Settings } from './systems/Settings.js';
@@ -17,13 +18,18 @@ const container = document.getElementById('app');
 const app = createApp(container);
 
 app.register('home', buildHome);
-app.register('joseph', buildJoseph);
-app.register('playground', buildPlayground); // #playground — Phase D1 3D foundation demo
+app.register('joseph', buildJoseph3D);        // the 3D Scene 1 is the default story route
+app.register('legacy-joseph', buildJoseph);   // the 2D original, until Nate signs off on 3D
+app.register('playground', buildPlayground);  // #playground — 3D foundation test bench
 
 Audio.registerManifest(AUDIO_MANIFEST);
 mountVolumeControl();
 mountSkipButton();
-app.navigate(/playground/.test(location.hash) ? 'playground' : 'home');
+app.navigate(
+  /playground/.test(location.hash) ? 'playground'
+    : /legacy-joseph/.test(location.hash) ? 'legacy-joseph'
+      : 'home',
+);
 
 // Debug/testing handle (harmless in production; used by automated playtests).
 window.__MARANATHA = { app, Audio, Settings, Narrator };

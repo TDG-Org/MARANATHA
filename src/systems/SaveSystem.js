@@ -59,6 +59,26 @@ export function setSceneProgress(storyId, n) {
   write(data);
 }
 
+// Mid-scene beat checkpoints — a refresh resumes at the saved beat. Stored in
+// the same save object, so "Reset progress" clears these too.
+export function getCheckpoint(sceneId) {
+  const { checkpoints } = read();
+  return (checkpoints && typeof checkpoints === 'object' && checkpoints[sceneId]) || 0;
+}
+
+export function setCheckpoint(sceneId, beat) {
+  const data = read();
+  const cp = data.checkpoints && typeof data.checkpoints === 'object' ? data.checkpoints : {};
+  cp[sceneId] = beat;
+  data.checkpoints = cp;
+  write(data);
+}
+
+export function clearCheckpoint(sceneId) {
+  const data = read();
+  if (data.checkpoints) { delete data.checkpoints[sceneId]; write(data); }
+}
+
 export function resetProgress() {
   try {
     localStorage.removeItem(KEY);

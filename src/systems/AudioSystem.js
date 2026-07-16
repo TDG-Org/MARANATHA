@@ -191,10 +191,39 @@ class AudioSystem {
     if (this._loaded || !this._manifest || !this.ctx) return;
     this._loaded = true;
     for (const e of this._manifest.values()) {
-      if (!e.available || e.loop || e.bus === 'voice') continue; // voice = narrator VO (own loader); loops procedural
+      if (!e.available || e.bus === 'voice') continue; // voice VO has its own loader
       const buf = await this._fetchDecode(e.key);
       if (buf) this.samples[e.key] = buf;
     }
+  }
+
+  // Looping bed/music by manifest key. Real file → looped source with a live
+  // gain handle. No file → the entry's procedural fallback (or SILENCE when
+  // fallback is null — never junk noise). Returns { setGain, stop, real }.
+  playLoop(key, { gain = 1 } = {}) {
+    const e = this._manifest?.get(key);
+    const buf = this.samples[key];
+    if (this.on && buf) {
+      const src = this.ctx.createBufferSource();
+      src.buffer = buf;
+      src.loop = true;
+      const g = this.ctx.createGain();
+      g.gain.value = gain;
+      const bus = e?.bus === 'music' ? this.music : this.sfx;
+      src.connect(g).connect(bus || this.master);
+      src.start();
+      return {
+        real: true,
+        setGain: (v, s = 0.2) => g.gain.setTargetAtTime(v, this.ctx.currentTime, s),
+        stop: (fade = 1.2) => {
+          g.gain.setTargetAtTime(0, this.ctx.currentTime, fade / 3);
+          setTimeout(() => { try { src.stop(); } catch { /* done */ } }, fade * 1000 + 200);
+        },
+      };
+    }
+    const fb = e?.fallback;
+    if (fb && typeof this[fb] === 'function') this[fb]();
+    return { real: false, setGain() {}, stop() {} };
   }
 
   async _fetchDecode(key) {

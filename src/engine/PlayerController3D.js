@@ -95,11 +95,15 @@ export class PlayerController3D {
     else if (this.character.state !== 'kneel' && this.character.state !== 'talk') this.character.play('idle');
     this.character.update(dt, this.camera);
 
-    // Footsteps.
+    // Footsteps — scene can supply a surface-aware handler (onFootstep).
     if (speed > 0.5) {
       this._footT += speed * dt * 0.001;
       const stride = state === 'run' ? 0.8 : 1.15;
-      if (this._footT > stride) { this._footT = 0; Audio.footstep(); }
+      if (this._footT > stride) {
+        this._footT = 0;
+        if (this.onFootstep) this.onFootstep(pos);
+        else Audio.footstep();
+      }
     }
   }
 
