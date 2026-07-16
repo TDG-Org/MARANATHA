@@ -31,6 +31,8 @@ class AudioSystem {
     this.samples = {}; // decoded real audio buffers, keyed by manifest key
     this._manifest = null;
     this._loaded = false;
+    this.voiceBus = null; // real gain bus for file-based narration (live volume)
+    this._voCache = {};   // decoded VO buffers / negative cache by url
     this.noiseBuf = null;
     this.amb = null;
     this.birdTimer = null;
@@ -74,6 +76,9 @@ class AudioSystem {
       this.music = this.ctx.createGain();
       this.music.gain.value = this.channels.music;
       this.music.connect(this.master);
+      this.voiceBus = this.ctx.createGain(); // file-based narration routes here
+      this.voiceBus.gain.value = this.channels.voice;
+      this.voiceBus.connect(this.master);
 
       // Space: a soft filtered feedback echo the one-shots are sent into.
       const delay = this.ctx.createDelay(1);
@@ -137,6 +142,7 @@ class AudioSystem {
     const t = this.ctx.currentTime;
     if (name === 'sfx' && this.sfx) this.sfx.gain.setTargetAtTime(v, t, 0.05);
     if (name === 'music' && this.music) this.music.gain.setTargetAtTime(v, t, 0.05);
+    if (name === 'voice' && this.voiceBus) this.voiceBus.gain.setTargetAtTime(v, t, 0.05);
   }
 
   // Effective narrator loudness = narrator channel × master. speechSynthesis
@@ -185,7 +191,7 @@ class AudioSystem {
     if (this._loaded || !this._manifest || !this.ctx) return;
     this._loaded = true;
     for (const e of this._manifest.values()) {
-      if (!e.available || e.loop) continue; // loops stay procedural until fetched explicitly
+      if (!e.available || e.loop || e.bus === 'voice') continue; // voice = narrator VO (own loader); loops procedural
       const buf = await this._fetchDecode(e.key);
       if (buf) this.samples[e.key] = buf;
     }
@@ -229,6 +235,44 @@ class AudioSystem {
   ambientNightBed() { this.ambience({ wind: 0.12, birds: 0, night: 0.5 }); }
   musicWarmBed() { this.musicPad(0.03, [130.81, 196.0, 261.63]); }
   musicWonderBed() { this.musicPad(0.028, [146.83, 220.0, 293.66]); }
+
+  // --- Voice bus: real VO files play here so Master/Narrator are LIVE mid-line -
+  async decodeVO(url) {
+    if (this._voCache[url] !== undefined) return this._voCache[url]; // incl. cached null
+    if (!this.ctx) return null;
+    try {
+      const res = await fetch(url);
+      if (!res.ok) { this._voCache[url] = null; return null; }
+      const buf = await this.ctx.decodeAudioData(await res.arrayBuffer());
+      this._voCache[url] = buf;
+      return buf;
+    } catch { this._voCache[url] = null; return null; }
+  }
+
+  // Play a decoded VO buffer through the voice bus; returns the source so the
+  // caller can stop() it (skip). Volume rides the live voiceBus × master gains.
+  playVO(buffer) {
+    const src = this.ctx.createBufferSource();
+    src.buffer = buffer;
+    src.connect(this.voiceBus || this.master);
+    src.start();
+    return src;
+  }
+
+  // A clearly-labeled PLACEHOLDER "voice" buffer (speech-cadence tone) so the
+  // live-slider / skip demo works before real VO exists. NEVER shipped as final.
+  voicePlaceholderBuffer(seconds = 4) {
+    const rate = this.ctx.sampleRate;
+    const buf = this.ctx.createBuffer(1, Math.floor(rate * seconds), rate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) {
+      const t = i / rate;
+      const syllable = Math.max(0, Math.sin(t * Math.PI * 3.2)); // ~1.6 syllables/s
+      const f = 140 + 30 * Math.sin(t * 2.3);
+      d[i] = Math.sin(2 * Math.PI * f * t) * syllable * 0.28;
+    }
+    return buf;
+  }
 
   // --- Ambient beds: wind, water, night pad, birdsong ---------------------
   buildAmbience() {

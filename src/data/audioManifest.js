@@ -25,4 +25,17 @@ export const AUDIO_MANIFEST = [
   { key: 'stinger.dream', bus: 'sfx', loop: false, seconds: 2.6, fallback: 'swellBright', available: false, purpose: 'the dream vision begins', scene: 'joseph-1' },
   { key: 'stinger.turn', bus: 'sfx', loop: false, seconds: 2.4, fallback: 'swellSoft', available: false, purpose: 'the brothers’ jealousy hardens', scene: 'joseph-1' },
   { key: 'sfx.bow', bus: 'sfx', loop: false, seconds: 0.4, fallback: 'thump', available: false, purpose: 'sheaves / stars bow down (soft)', scene: 'joseph-1' },
+
+  // --- Narrator VO (file-first; naming: vo/<story>/<scene>/<line-id>) ---
+  // The manifest key is the path under /audio. The Narrator is called with the
+  // line-id (the key minus the leading "vo/") and fetches audio/vo/<line-id>.mp3
+  // |.ogg; missing → speechSynthesis fallback. VO plays on the 'voice' bus, so
+  // Master + Narrator sliders are live mid-line and a volume change never stops it.
+  { key: 'vo/joseph/1/verse-37-3', bus: 'voice', loop: false, available: false, purpose: 'narrate Gen 37:3', scene: 'joseph-1' },
+  { key: 'vo/joseph/1/verse-37-4', bus: 'voice', loop: false, available: false, purpose: 'narrate Gen 37:4', scene: 'joseph-1' },
+  { key: 'vo/joseph/1/verse-37-7', bus: 'voice', loop: false, available: false, purpose: 'narrate Gen 37:7', scene: 'joseph-1' },
+  { key: 'vo/joseph/1/verse-37-8', bus: 'voice', loop: false, available: false, purpose: 'narrate Gen 37:8', scene: 'joseph-1' },
+  { key: 'vo/joseph/1/verse-37-9', bus: 'voice', loop: false, available: false, purpose: 'narrate Gen 37:9', scene: 'joseph-1' },
+  { key: 'vo/joseph/1/verse-37-11', bus: 'voice', loop: false, available: false, purpose: 'narrate Gen 37:11', scene: 'joseph-1' },
+  { key: 'vo/playground/demo/line-1', bus: 'voice', loop: false, available: false, purpose: 'playground narrator test line', scene: 'playground' },
 ];
