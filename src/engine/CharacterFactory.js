@@ -2,56 +2,69 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone as skeletonClone } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { Character3D } from './Character3D.js';
 
-// Builds the whole cast from ONE base rig: load models/character-base.glb once,
-// then clone it per variant (SkeletonUtils, shared geometry) with material
-// color-swaps. If the GLB is absent, every character is a clearly-labeled TEMP
-// capsule with the same API — so the camera, animation states, name tags, and
-// playground all work before any real asset arrives.
+// Builds the whole cast from shared base rigs: load the robed base (and the
+// hooded variant when present) ONCE, then clone per character (SkeletonUtils)
+// with per-part Alto color swaps — the clip library is shared, and each
+// character renders as ~1 draw call (merged skinned body). If no GLB exists,
+// every character is the labeled TEMP capsule with the same API.
+//
+// Files (see /models/MODELS.md + CREDITS.md):
+//   models/character-base.glb    — robed base (required for GLB mode)
+//   models/character-hooded.glb  — hooded variant (optional)
 export class CharacterFactory {
   constructor() {
-    this.base = null;
+    this.bases = { robed: null, hooded: null };
     this.hasGLB = false;
     this._tried = false;
     this._loader = new GLTFLoader();
   }
 
-  // Returns true if a real rigged GLB loaded. Safe to call repeatedly.
-  async loadBase(url = 'models/character-base.glb') {
+  async loadBase() {
     if (this._tried) return this.hasGLB;
     this._tried = true;
-    try {
-      this.base = await this._loader.loadAsync(url);
-      this.hasGLB = true;
-    } catch {
-      this.hasGLB = false; // no file yet → TEMP capsule mode (expected while /models is empty)
-    }
+    this.bases.robed = await this._load('models/character-base.glb');
+    this.bases.hooded = await this._load('models/character-hooded.glb');
+    this.hasGLB = !!this.bases.robed;
     return this.hasGLB;
   }
 
-  create({ name = '', colors = {}, scale = 1 } = {}) {
-    if (this.hasGLB && this.base) {
-      const scene = skeletonClone(this.base.scene);
-      return new Character3D({ mode: 'glb', gltf: { scene, animations: this.base.animations }, colors, scale, name });
+  async _load(url) {
+    try { return await this._loader.loadAsync(url); } catch { return null; }
+  }
+
+  // opts: { name, colors:{robe,robeShade,skin,hair,coat[]}, scale, base:'robed'|'hooded',
+  //         staff:boolean (Jacob), hoodIsCloth:boolean }
+  create({ name = '', colors = {}, scale = 1, base = 'robed', staff = false, hoodIsCloth = false } = {}) {
+    const src = this.bases[base] || this.bases.robed;
+    if (this.hasGLB && src) {
+      const scene = skeletonClone(src.scene);
+      return new Character3D({
+        mode: 'glb', gltf: { scene, animations: src.animations },
+        colors, scale, name, staff, hoodIsCloth,
+      });
     }
     return new Character3D({ mode: 'capsule', colors, scale, name, temp: true });
   }
 
-  // Free the base GLB's geometry/materials/textures ONCE (clones share the
-  // base geometry by reference, so individual characters must not dispose it —
-  // Character3D.dispose() skips geometry in GLB mode). Call at scene teardown.
+  // Free the shared base GLBs ONCE (clones share base geometry by reference;
+  // per-character dispose only frees per-instance merged geometry/materials).
   dispose() {
-    if (!this.base) return;
-    this.base.scene.traverse((o) => {
-      if (!o.isMesh) return;
-      o.geometry?.dispose?.();
-      const mats = Array.isArray(o.material) ? o.material : [o.material];
-      mats.forEach((m) => {
-        if (!m) return;
-        for (const k in m) { const v = m[k]; if (v && v.isTexture) v.dispose(); }
-        m.dispose?.();
+    for (const key of Object.keys(this.bases)) {
+      const base = this.bases[key];
+      if (!base) continue;
+      base.scene.traverse((o) => {
+        if (!o.isMesh && !o.isSkinnedMesh) return;
+        o.geometry?.dispose?.();
+        const mats = Array.isArray(o.material) ? o.material : [o.material];
+        mats.forEach((m) => {
+          if (!m) return;
+          for (const k in m) { const v = m[k]; if (v && v.isTexture) v.dispose(); }
+          m.dispose?.();
+        });
       });
-    });
-    this.base = null;
+      this.bases[key] = null;
+    }
     this.hasGLB = false;
+    this._tried = false;
   }
 }

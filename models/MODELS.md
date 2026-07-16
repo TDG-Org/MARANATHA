@@ -1,9 +1,13 @@
 # /models — rigged 3D character files (GLB)
 
-The 3D character system (Phase D1) loads characters from this folder. Until a real
-rigged GLB is here, the game uses a **clearly-labeled TEMP capsule** stand-in so the
-camera, movement, animation-state API, name tags, and playground all work — but the
-toon look, real animation, and cast variants only appear once you drop in a real file.
+**STATUS (2026-07-16): real CC0 rigs are INSTALLED** — `character-base.glb` (robed) and
+`character-hooded.glb` (hooded), from the KayKit Adventurers pack. See `CREDITS.md` for
+licenses, validation numbers, and the clip-mapping gaps (talk→Interact, kneel→Sit_Floor_Idle).
+The TEMP capsule remains only as the graceful fallback if these files are removed.
+
+Note vs the original spec below: these rigs use KayKit bone names (`hips/spine/chest/head/
+handslot.l/r`), not `mixamorig:*` — that's fine; the loader matches animation clips by NAME
+and only searches bones for accessory attachment (`/chest|spine/i`, present here).
 
 ## What to provide
 
