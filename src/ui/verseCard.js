@@ -2,15 +2,22 @@ import { Narrator } from '../systems/Narrator.js';
 
 // The scripture surface for 3D scenes (core game pillar): translation-exact
 // verse text + reference, gently faded in, narrated (file-first VO via lineId),
-// tap-to-skip after a moment, never blocking gameplay UI. Pass verse objects
+// never blocking gameplay UI. Skipping a line is the Skip BUTTON's job alone
+// (cutscene-director rule) — stray clicks do nothing here. Pass verse objects
 // ({ ref, text, vo }) from the scene's verse data — the card renders exactly
 // what it's given (wording is verified at the data layer).
+//
+// Position: clamped into the letterbox SAFE ZONE — the top edge always clears
+// the 11vh cinema bar (whichever is lower: 10% or bar + gap), and max-height
+// keeps the card off the bottom bar on short viewports.
 export function createVerseCard() {
   const panel = document.createElement('div');
   panel.style.cssText = [
-    'position:fixed', 'left:50%', 'top:calc(10% + env(safe-area-inset-top))',
+    'position:fixed', 'left:50%',
+    'top:max(calc(10% + env(safe-area-inset-top)), calc(11vh + 14px))',
     'transform:translateX(-50%) translateY(-8px)', 'z-index:38',
     'width:min(88vw,600px)', 'padding:14px 22px', 'text-align:center',
+    'max-height:calc(74vh - 42px)', 'overflow-y:auto',
     'background:rgba(12,10,20,0.68)', 'border:1px solid rgba(242,184,128,0.2)',
     'border-radius:13px', 'backdrop-filter:blur(3px)', 'box-shadow:0 6px 24px rgba(0,0,0,0.35)',
     'opacity:0', 'transition:opacity 700ms ease, transform 700ms ease', 'pointer-events:none',
@@ -38,19 +45,9 @@ export function createVerseCard() {
 
     if (!narrate) return holdMs ? new Promise((r) => setTimeout(r, holdMs)) : Promise.resolve();
 
-    return new Promise((done) => {
-      let finished = false;
-      let skipEnabled = false;
-      const finish = () => {
-        if (finished) return;
-        finished = true;
-        window.removeEventListener('pointerdown', onTap);
-        done();
-      };
-      const onTap = () => { if (skipEnabled) { Narrator.skip(); finish(); } };
-      setTimeout(() => { skipEnabled = true; window.addEventListener('pointerdown', onTap); }, 1200);
-      Narrator.speak(verse.text, verse.vo || null).then(finish);
-    });
+    // The awaited line ends when narration ends — or when the Skip BUTTON
+    // resolves it through Narrator.skip(). No other input can end it.
+    return Narrator.speak(verse.text, verse.vo || null);
   }
 
   function hide() {
