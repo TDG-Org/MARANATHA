@@ -54,21 +54,56 @@ export class AmbientNPCs {
     this.world = colliderWorld;
     this.rnd = mulberry32(seed);
     this.npcs = [];
+    this._circles = []; // shared dynamics list (NPC-vs-NPC separation)
   }
 
-  add(char, { x, z, wanderR = 2.2, gestureEvery = 9000, canWander = true } = {}) {
+  add(char, { x, z, wanderR = 2.2, gestureEvery = 9000, canWander = true, speed = 1.1 } = {}) {
     char.setPosition(x, z);
     const npc = {
-      char, home: { x, z }, wanderR, canWander,
-      target: null, timer: 800 + this.rnd() * 2600,
+      char, home: { x, z }, wanderR, canWander, speed,
+      target: null, onArrive: null, timer: 800 + this.rnd() * 2600,
       gestureT: gestureEvery * (0.5 + this.rnd()), gestureEvery,
+      stuckT: 0,
       pos: { x, z }, circle: { type: 'circle', x, z, r: 0.4 },
     };
     this.npcs.push(npc);
+    this._circles.push(npc.circle);
     return npc;
   }
 
   get dynamics() { return this.npcs.map((n) => n.circle); }
+
+  // A wander target must be standable — never inside a prop, fire, or fence.
+  _pickTarget(n) {
+    for (let tries = 0; tries < 4; tries++) {
+      const a = this.rnd() * Math.PI * 2;
+      const r = 0.8 + this.rnd() * n.wanderR;
+      const x = n.home.x + Math.cos(a) * r;
+      const z = n.home.z + Math.sin(a) * r;
+      if (!this.world.overlaps(x, z, 0.45)) return { x, z };
+    }
+    return null; // crowded spot — stay put this round
+  }
+
+  // Choreography: send an NPC somewhere (campfire ring, tent door…). Resolves
+  // when they arrive (or give up against a blocker). Overrides wandering.
+  sendTo(npc, x, z, { speed = null } = {}) {
+    return new Promise((resolve) => {
+      npc.target = { x, z, scripted: true, speed };
+      npc.stuckT = 0;
+      npc.onArrive = resolve;
+    });
+  }
+
+  _arrive(n) {
+    n.target = null;
+    n.timer = 1400 + this.rnd() * 3200;
+    n.stuckT = 0;
+    n.char.play('idle');
+    const cb = n.onArrive;
+    n.onArrive = null;
+    cb?.();
+  }
 
   update(dt) {
     const s001 = dt * 0.001;
@@ -87,26 +122,43 @@ export class AmbientNPCs {
       // wander
       n.timer -= dt;
       if (n.timer <= 0 && n.canWander && !n.target && c.state !== 'talk') {
-        const a = this.rnd() * Math.PI * 2;
-        const r = 0.8 + this.rnd() * n.wanderR;
-        n.target = { x: n.home.x + Math.cos(a) * r, z: n.home.z + Math.sin(a) * r };
+        n.target = this._pickTarget(n);
+        if (!n.target) n.timer = 1600 + this.rnd() * 2400;
       }
       if (n.target) {
         const dx = n.target.x - n.pos.x;
         const dz = n.target.z - n.pos.z;
         const d = Math.hypot(dx, dz);
         if (d < 0.25) {
-          n.target = null;
-          n.timer = 1400 + this.rnd() * 3200;
-          c.play('idle');
+          this._arrive(n);
         } else {
-          const sp = 1.1;
+          const sp = n.target.speed ?? n.speed;
+          const ox = n.pos.x, oz = n.pos.z;
           n.pos.x += (dx / d) * sp * s001;
           n.pos.z += (dz / d) * sp * s001;
-          this.world.resolve(n.pos, 0.4, null);
-          c.turnToward(dx, dz);
-          c.play('walk');
+          // resolve vs statics AND the other NPCs (skip self) — bodies never merge
+          n.circle.skip = true;
+          this.world.resolve(n.pos, 0.4, this._circles);
+          n.circle.skip = false;
+          // Animation follows REAL movement; blocked = no walk-in-place, and a
+          // sustained block abandons the target instead of grinding on a prop.
+          const stepped = Math.hypot(n.pos.x - ox, n.pos.z - oz);
+          const wanted = sp * s001;
+          if (stepped < wanted * 0.25) {
+            n.stuckT += dt;
+            c.play('idle');
+            if (n.stuckT > 550) this._arrive(n);
+          } else {
+            n.stuckT = 0;
+            c.turnToward(dx, dz);
+            c.play('walk');
+          }
         }
+      } else {
+        // idle separation: if someone was pushed into us, ease back apart
+        n.circle.skip = true;
+        this.world.resolve(n.pos, 0.4, this._circles);
+        n.circle.skip = false;
       }
       n.circle.x = n.pos.x;
       n.circle.z = n.pos.z;
@@ -116,5 +168,5 @@ export class AmbientNPCs {
   }
 
   freeze(npc, on = true) { npc.frozen = on; }
-  dispose() { this.npcs.length = 0; }
+  dispose() { this.npcs.length = 0; this._circles.length = 0; }
 }
