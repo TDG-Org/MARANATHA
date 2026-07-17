@@ -433,6 +433,7 @@ export function createBeats(ctx) {
     ctx.camera.snap();
     await seq([
       { t: 'grade', mood: 'dream', ms: 30 },
+      { t: 'fn', fn: () => D.showMoon(1) }, // the moon shaft pours over the field
       { t: 'fade', on: false, ms: 1500 },
       { t: 'verse', verse: WEB.gen_37_5 },
       { t: 'verseHide' },
@@ -462,49 +463,87 @@ export function createBeats(ctx) {
     await allBowed;
     ctx.guide.setTarget(null);
 
-    // dream 1 answered (the field). Now DREAM 2 — the sky — one continuous move.
-    ctx.setInput(false);
-    ctx.joseph.turnToward(0, -1); // face the sky (north)
-    ctx.joseph.play('idle');
+    // dream 1 answered (the field). A MOUNTAIN looms in the north — the dreamer
+    // climbs it. (short playable ascent → the summit where the sky bows)
     await seq([
       { t: 'objective', text: '' },
-      { t: 'cam', angle: 0, target: { x: D.FIELD.x, z: D.FIELD.z }, distance: 7.5, height: 2.2, lookHeight: 1.6, duration: 1600 },
       { t: 'verse', verse: WEB.gen_37_7 },
       { t: 'verseHide' },
-      // 1) the camera TILTS and RISES toward the sky; the bodies appear high
+    ]);
+    ctx.hud.setObjective('A mountain rises in the north. Climb to its summit.', 'Follow the glowing stones up the slope.');
+    const base = { x: D.FIELD.x, z: D.FIELD.z - 11.5 };
+    ctx.guide.setTargetXZ(base.x, base.z);
+    ctx.setInput(true);
+    await new Promise((resolve) => {
+      ctx.interactables.addTrigger({ id: 'summit-reach', x: base.x, z: base.z, r: 2.8, once: true, onEnter: resolve });
+    });
+    ctx.guide.setTarget(null);
+    ctx.setInput(false);
+
+    // DREAM 2 — the SUMMIT where the sky bows (Gen 37:9). Dip to black, lift the
+    // dreamer onto the peak above a sea of cloud; the sun/moon/11 stars descend
+    // and bow across authored cuts — a true summit silhouette.
+    const SY = D.SUMMIT_Y;
+    await seq([
+      { t: 'letterbox', on: true },
+      { t: 'fade', on: true, ms: 900 },
+    ]);
+    D.showSummit(true);
+    D.showSky(0);
+    ctx.joseph.setPosition(D.FIELD.x, D.FIELD.z);
+    ctx.joseph.root.position.y = SY;           // stand on the peak (input is off)
+    ctx.joseph.turnToward(0, -1);              // face north, into the sky
+    ctx.joseph.play('idle');
+    ctx.camera.cinematicMoveTo({ angle: Math.PI, target: { x: D.FIELD.x, z: D.FIELD.z + 2 }, distance: 5.2, height: SY + 2.2, lookHeight: SY + 2.2, duration: 1 });
+    ctx.camera.snap();
+    await seq([
+      { t: 'fade', on: false, ms: 1500 },      // reveal: on the summit, deep sky above
+      { t: 'wait', ms: 600 },
+      // 1) the bodies kindle high in the sky over the peak
       { t: 'fn', fn: async () => { D.showSky(1); ctx.sound('stinger.dream_enter'); await wait(400); } },
-      { t: 'cam', angle: 0, target: { x: D.FIELD.x, z: D.FIELD.z - 8 }, distance: 5.5, height: 3.6, lookHeight: 13, duration: 2600 },
-      // 2) the sun + moon descend slowly; the 11 stars follow
+      { t: 'cam', angle: Math.PI, target: { x: D.FIELD.x, z: D.FIELD.z + 2 }, distance: 5.6, height: SY + 3.0, lookHeight: SY + 9, duration: 2400 },
+      // 2) sun + moon descend, the 11 stars following
       { t: 'fn', fn: async () => { D.descendSky(); await wait(2400); } },
-      // 3) the camera glides DOWN, following their descent…
-      { t: 'cam', angle: 0, target: { x: D.FIELD.x, z: D.FIELD.z - 3 }, distance: 7, height: 2.6, lookHeight: 6, duration: 2400 },
-      // 4) …and settles BEHIND Joseph, who stands watching them bow to him
-      { t: 'fn', fn: () => { ctx.joseph.setPosition(D.FIELD.x, D.FIELD.z + 1.8); ctx.joseph.turnToward(0, -1); } },
-      { t: 'cam', angle: Math.PI, target: () => ({ x: D.FIELD.x, z: D.FIELD.z + 1.8 }), distance: 4.6, height: 2.3, lookHeight: 2.6, duration: 2400 },
+      // 3) the camera eases back to the dreamer's shoulder as they come down…
+      { t: 'cam', angle: Math.PI, target: () => ({ x: D.FIELD.x, z: D.FIELD.z + 1.6 }), distance: 4.8, height: SY + 2.2, lookHeight: SY + 4.0, duration: 2200 },
+      // 4) …and they bow to him
       { t: 'fn', fn: async () => { D.bowSky(); ctx.sound('sfx.sheaf_bow'); await wait(2600); } },
       { t: 'verse', verse: WEB.gen_37_9 },
       { t: 'verseHide' },
       { t: 'letterbox', on: true },
-      { t: 'fade', on: true, ms: 1400 },
+      { t: 'fade', on: true, ms: 1500 },
     ]);
-    // 5) WAKE → cut to EVENING in camp; the player walks to tell the brothers
+    // 5) WAKE → inside the tent at MORNING; Joseph rises, then steps out to tell
+    ctx.joseph.root.position.y = 0;            // back down to the ground
     D.group.visible = false;
     D.resetSky();
+    const T = ctx.tentInterior;
+    T.group.visible = true;
+    ctx.grading.set('goldenHour');             // warm morning light in the tent
+    ctx.onDawn?.();                            // the night's fireflies fade out
+    ctx.controller.bounds = { minX: T.POS.x - 3.4, maxX: T.POS.x + 3.4, minZ: T.POS.z - 3.4, maxZ: T.POS.z + 3.4 };
+    ctx.joseph.setPosition(T.POS.x + 0.5, T.POS.z + 0.7);
+    ctx.joseph.turnToward(0.3, 1);
+    ctx.joseph.play('kneel');                  // still down from sleep
+    ctx.camera.cinematicMoveTo({ angle: -Math.PI * 0.3, target: { x: T.POS.x, z: T.POS.z }, distance: 3.2, height: 1.4, lookHeight: 1.0, duration: 1 });
+    ctx.camera.snap();
+    ctx.setMusic('music.camp_warm');
+    await seq([
+      { t: 'grade', mood: 'goldenHour', ms: 30 },
+      { t: 'fade', on: false, ms: 1500 },      // waking: morning sun through the tent
+      { t: 'title', heading: 'The next morning', sub: 'Hebron', holdMs: 2600 },
+      { t: 'fn', fn: async () => { ctx.joseph.play('idle'); await wait(900); } }, // rises
+      { t: 'letterbox', on: false },
+    ]);
+    // step out into the golden morning → go tell the brothers
+    T.group.visible = false;
     ctx.controller.bounds = ctx.bounds;
-    ctx.joseph.setPosition(-8.2, -4.0); // waking by his father's tent
+    ctx.joseph.setPosition(-8.2, -4.2);
     ctx.joseph.turnToward(1, 0.3);
     ctx.camera.release(1);
     ctx.camera.snap();
-    ctx.onDusk?.(); // it's evening, not morning — fireflies stay
     ['judah', 'reuben', 'simeon', 'levi'].forEach((k) => { ctx.npcs.freeze(ctx.cast[k], false); ctx.cast[k].char.play('idle'); });
-    await seq([
-      { t: 'grade', mood: 'dusk', ms: 30 },
-      { t: 'fn', fn: () => ctx.setMusic('music.dusk_calm') },
-      { t: 'fade', on: false, ms: 1600 },
-      { t: 'letterbox', on: false },
-    ]);
-    // hand off to the telling — the player walks over (tell() gates on arrival)
-    ctx.hud.setObjective('Go and tell your brothers your dream.', 'Walk to your brothers by the fire.');
+    ctx.hud.setObjective('Go and tell your brothers your dream.', 'Walk to your brothers.');
     ctx.guide.setTargetXZ(0.8, -6.6);
     ctx.setInput(true);
   }
@@ -524,7 +563,7 @@ export function createBeats(ctx) {
     });
     ctx.guide.setTarget(null);
     ctx.setInput(false);
-    ctx.grading.grade('dusk', 500); // stay in the evening
+    ctx.grading.grade('goldenHour', 500); // the morning after the dream
     const freezeAll = (on) => ['judah', 'reuben', 'simeon', 'levi'].forEach((k) => ctx.npcs.freeze(ctx.cast[k], on));
     // group scene: establish WIDE, then cut to whoever speaks
     await seq([
@@ -575,7 +614,7 @@ export function createBeats(ctx) {
       { t: 'verse', verse: WEB.gen_37_11 },
       { t: 'wait', ms: 600 },
       { t: 'verseHide' },
-      { t: 'grade', mood: 'dusk', ms: 2400 },
+      { t: 'grade', mood: 'goldenHour', ms: 2400 },
       { t: 'fade', on: true, ms: 1800 },
       { t: 'title', heading: 'To be continued', sub: 'Genesis 37:12 — the road to Dothan', holdMs: 4200 },
     ]);
@@ -591,9 +630,9 @@ export function createBeats(ctx) {
     const s = spawns[n] || [0, 12];
     c.joseph.setPosition(s[0], s[1]);
     c.camera.snap();
-    // beats 5 (dream/dusk) and 6-7 (telling, evening) all sit in dusk light
-    c.grading.set(n >= 5 ? 'dusk' : 'goldenHour');
-    if (n >= 5) c.onDusk?.(); // fireflies stay lit through the evening telling
+    // beat 5 (dream) sets its own night/dream grade on entry; beats 6-7 (the
+    // telling) now happen the NEXT MORNING (Task 8 wakes in the tent at dawn).
+    c.grading.set('goldenHour');
   }
 
   return { list: [intro, herd, report, coat, dusk, dream, tell, close], applyState };

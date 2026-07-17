@@ -569,8 +569,14 @@ function buildDreamField() {
 
   // ROWS of tall wheat (instanced) — the clearing (r 6.4) around the sheaves
   // stays open. One draw; a gentle field-wide sway reads as night wind.
-  const stalkGeo = new THREE.ConeGeometry(0.045, 1.7, 4);
-  stalkGeo.translate(0, 0.85, 0);
+  // DREAM V2: a proper wheat BLADE (slim stalk + a rounded grain head), not a
+  // pointy 4-sided cone — merged so the whole field is still a single draw.
+  const _wStalk = new THREE.CylinderGeometry(0.016, 0.032, 1.3, 5);
+  _wStalk.translate(0, 0.65, 0);
+  const _wHead = new THREE.SphereGeometry(0.1, 6, 5);
+  _wHead.scale(1, 1.8, 1);         // an ovoid grain head, not a spike
+  _wHead.translate(0, 1.42, 0);
+  const stalkGeo = mergeGeometries([_wStalk, _wHead]);
   const wheatSpots = [];
   for (let row = -13; row <= 13; row += 1.5) {
     for (let col = -13; col <= 13; col += 0.75) {
@@ -581,7 +587,7 @@ function buildDreamField() {
       wheatSpots.push([x, z, 0.7 + rnd() * 0.7, rnd() * Math.PI * 2]);
     }
   }
-  const wheat = new THREE.InstancedMesh(stalkGeo, new THREE.MeshBasicMaterial({ color: 0x9c8a5a, fog: true }), wheatSpots.length);
+  const wheat = new THREE.InstancedMesh(stalkGeo, new THREE.MeshBasicMaterial({ color: 0xb39a5e, fog: true }), wheatSpots.length);
   const wd = new THREE.Object3D();
   wheatSpots.forEach((s, i) => {
     wd.position.set(FIELD.x + s[0], 0, FIELD.z + s[1]);
@@ -598,13 +604,16 @@ function buildDreamField() {
   const mkSheaf = (x, z, scale = 1) => {
     const g = new THREE.Group();
     const stalkGeos = [];
-    for (let i = 0; i < 6; i++) {
-      const a = (i / 6) * Math.PI * 2;
-      const geo = new THREE.ConeGeometry(0.07, 1.6, 4);
-      geo.rotateZ(Math.cos(a) * 0.22);
-      geo.rotateX(-Math.sin(a) * 0.22);
-      geo.translate(Math.cos(a) * 0.17, 0.8, Math.sin(a) * 0.17);
-      stalkGeos.push(geo);
+    // 7 leaning blades, each a stalk + rounded grain head, all merged to 1 mesh
+    for (let i = 0; i < 7; i++) {
+      const a = (i / 7) * Math.PI * 2;
+      const st = new THREE.CylinderGeometry(0.028, 0.05, 1.5, 5); st.translate(0, 0.75, 0);
+      const hd = new THREE.SphereGeometry(0.095, 6, 5); hd.scale(1, 1.9, 1); hd.translate(0, 1.52, 0);
+      const blade = mergeGeometries([st, hd]);
+      blade.rotateZ(Math.cos(a) * 0.22);
+      blade.rotateX(-Math.sin(a) * 0.22);
+      blade.translate(Math.cos(a) * 0.17, 0, Math.sin(a) * 0.17);
+      stalkGeos.push(blade);
     }
     const stalks = new THREE.Mesh(mergeGeometries(stalkGeos), new THREE.MeshBasicMaterial({ color: 0xd9b96a, fog: true }));
     g.add(stalks);
@@ -638,12 +647,24 @@ function buildDreamField() {
   };
   const fogTex = softTex('150,160,205');
   const fogBanks = [];
-  for (let i = 0; i < 5; i++) {
-    const a = -0.9 + i * 0.45;
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(14, 7), new THREE.MeshBasicMaterial({ map: fogTex, transparent: true, opacity: 0.4, depthWrite: false, fog: false }));
-    m.position.set(FIELD.x + Math.sin(a) * 15, 3.2, FIELD.z + Math.cos(a) * 15 - 3);
+  for (let i = 0; i < 6; i++) {
+    const a = -1.1 + i * 0.44;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(15, 8), new THREE.MeshBasicMaterial({ map: fogTex, color: 0x6b7196, transparent: true, opacity: 0.46, depthWrite: false, fog: false }));
+    m.position.set(FIELD.x + Math.sin(a) * 15, 3.4, FIELD.z + Math.cos(a) * 15 - 3);
     m.userData = { phase: i * 1.3, baseX: m.position.x };
     fogBanks.push(m); group.add(m);
+  }
+
+  // DREAM V2 · distinct fog GLOOM — broad, dark, low sheets of mist hugging the
+  // field so it reads instantly as a heavy dream haze, not clear night air.
+  const mistTex = softTex('90,100,140');
+  const groundMist = [];
+  for (let i = 0; i < 2; i++) {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(42, 42), new THREE.MeshBasicMaterial({ map: mistTex, color: 0x232b47, transparent: true, opacity: 0.3, depthWrite: false, fog: false }));
+    m.rotation.x = -Math.PI / 2;
+    m.position.set(FIELD.x, 0.55 + i * 0.5, FIELD.z);
+    m.userData = { phase: i * 2.3 };
+    groundMist.push(m); group.add(m);
   }
 
   // the MOONBEAM — a visible cool shaft of light down onto the field.
@@ -651,12 +672,18 @@ function buildDreamField() {
   // would leak one GPU texture on every scene exit.)
   const beamTex = softTex('200,215,255');
   const beam = new THREE.Mesh(
-    new THREE.CylinderGeometry(1.2, 4.2, 15, 18, 1, true),
+    new THREE.CylinderGeometry(1.5, 5.0, 16, 20, 1, true),
     new THREE.MeshBasicMaterial({ map: beamTex, color: 0xcfe0ff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }),
   );
-  beam.position.set(FIELD.x + 3, 7.5, FIELD.z - 3);
+  beam.position.set(FIELD.x + 3, 8, FIELD.z - 3);
   beam.rotation.z = -0.12;
   group.add(beam);
+  // a soft MOON disc at the head of the shaft — the source of the moonlight
+  const moonDiscTex = softTex('215,228,255');
+  const moonDisc = new THREE.Sprite(new THREE.SpriteMaterial({ map: moonDiscTex, color: 0xdfe9ff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+  moonDisc.scale.setScalar(5.5);
+  moonDisc.position.set(FIELD.x + 3.4, 15.5, FIELD.z - 4);
+  group.add(moonDisc);
 
   // floating dream motes (cool, drift upward)
   const moteCount = 60;
@@ -713,6 +740,67 @@ function buildDreamField() {
       Math.cos(a) * 3.4, 3.6 + Math.sin(a) * 1.2, -3.2);
   });
 
+  // --- DREAM V2: the MOUNTAIN to climb + the SUMMIT where the sky bows --------
+  const darkRock = (col) => new THREE.MeshBasicMaterial({ color: col, fog: true });
+  // the looming massif to the NORTH — the dreamer climbs toward it (Gen 37:9)
+  const mountainGroup = new THREE.Group();
+  {
+    const parts = [];
+    const peak = (x, z, r, h) => { const c = new THREE.ConeGeometry(r, h, 6); c.translate(FIELD.x + x, h / 2, FIELD.z + z); parts.push(c); };
+    peak(0, -24, 12, 21); peak(-8, -22, 7, 13); peak(9, -23, 8, 15);
+    mountainGroup.add(new THREE.Mesh(mergeGeometries(parts), darkRock(0x171d33)));
+  }
+  group.add(mountainGroup);
+
+  // a path of faintly glowing cairns leading from the clearing up to the base
+  const cairnGeo = new THREE.DodecahedronGeometry(0.28, 0);
+  const cairns = new THREE.InstancedMesh(cairnGeo, new THREE.MeshBasicMaterial({ color: 0x7f8cc4, fog: true }), 6);
+  {
+    const o = new THREE.Object3D();
+    for (let i = 0; i < 6; i++) {
+      o.position.set(FIELD.x + (i % 2 ? 0.6 : -0.6), 0.2, FIELD.z - 6 - i * 1.15);
+      o.scale.setScalar(0.7 + (i % 2) * 0.3);
+      o.updateMatrix(); cairns.setMatrixAt(i, o.matrix);
+    }
+    cairns.instanceMatrix.needsUpdate = true;
+  }
+  group.add(cairns);
+
+  // the SUMMIT set — hidden until the climb ends. The dreamer is lifted onto the
+  // peak (root.y = SUMMIT_Y, set by the beat); a sea of cloud rolls below and
+  // lower peaks stand beyond → a real summit silhouette against the sky.
+  const SUMMIT_Y = 3.6;
+  const cloudTex = softTex('185,196,230');
+  const summitGroup = new THREE.Group();
+  summitGroup.visible = false;
+  {
+    const rock = new THREE.Mesh(new THREE.ConeGeometry(3.4, SUMMIT_Y + 1.6, 7), darkRock(0x121830));
+    rock.position.set(FIELD.x, (SUMMIT_Y + 1.6) / 2 - 0.5, FIELD.z + 0.2);
+    summitGroup.add(rock);
+    // lower peaks beyond, in silhouette
+    [[-11, -7, 5, 8], [12, -9, 6, 10], [-16, -13, 7, 6], [17, -14, 5, 7]].forEach(([x, z, r, h]) => {
+      const p = new THREE.Mesh(new THREE.ConeGeometry(r, h, 6), darkRock(0x0f1428));
+      p.position.set(FIELD.x + x, h / 2 - 1.2, FIELD.z + z);
+      summitGroup.add(p);
+    });
+    // the cloud sea just below the summit
+    const clouds = [];
+    for (let i = 0; i < 4; i++) {
+      const a = i * 1.7;
+      const c = new THREE.Mesh(new THREE.PlaneGeometry(34, 34), new THREE.MeshBasicMaterial({ map: cloudTex, color: 0x39456e, transparent: true, opacity: 0.5, depthWrite: false, fog: false }));
+      c.rotation.x = -Math.PI / 2;
+      c.position.set(FIELD.x + Math.cos(a) * 6, 1.3 + (i % 2) * 0.5, FIELD.z + Math.sin(a) * 6 - 1);
+      c.userData = { phase: a, baseX: c.position.x };
+      clouds.push(c); summitGroup.add(c);
+    }
+    summitGroup.userData.clouds = clouds;
+  }
+  group.add(summitGroup);
+
+  // field elements that HIDE when we cut to the summit (they were dream 1)
+  const fieldEls = [disc, wheat, center, ...outer, ...fogBanks, ...groundMist, beam, moonDisc, mountainGroup, cairns];
+  const setSummit = (on) => { summitGroup.visible = on; fieldEls.forEach((e) => { e.visible = !on; }); };
+
   let skyState = 0; // 0 idle · 1 descending (→mid) · 2 bowing (→low)
   const setOpacity = (k) => bodies.forEach((b) => {
     b.userData.halo.material.opacity = k * (b === sun ? 0.9 : b === moon ? 0.8 : 0.95);
@@ -720,21 +808,42 @@ function buildDreamField() {
   });
 
   return {
-    group, FIELD, center, outer, sun, moon, stars, beam,
-    showSky(k) { setOpacity(k); if (k > 0) beam.material.opacity = 0.14; },
+    group, FIELD, center, outer, sun, moon, stars, beam, SUMMIT_Y,
+    showSummit: setSummit,
+    // the moon shaft over the wheat field (dream 1)
+    showMoon(k) { beam.material.opacity = k * 0.22; moonDisc.material.opacity = k * 0.9; },
+    showSky(k) { setOpacity(k); },
     descendSky() { skyState = 1; },
     bowSky() { skyState = 2; },
     resetSky() {
       skyState = 0;
       setOpacity(0);
-      beam.material.opacity = 0;
+      beam.material.opacity = 0; moonDisc.material.opacity = 0;
+      setSummit(false);
       bodies.forEach((b) => b.position.copy(b.userData.high));
     },
     update(dt, t) {
       if (!this.group.visible) return;
+      // at the summit: drift the cloud sea + a touch of body motion only
+      if (summitGroup.visible) {
+        summitGroup.userData.clouds.forEach((c) => {
+          c.position.x = c.userData.baseX + Math.sin(t * 0.12 + c.userData.phase) * 1.6;
+          c.material.opacity = 0.42 + Math.sin(t * 0.3 + c.userData.phase) * 0.1;
+        });
+        bodies.forEach((b) => {
+          const tw = 1 + Math.sin(t * 2 + b.userData.twinkle) * 0.08;
+          if (b.userData.core) b.userData.core.material.rotation = t * 0.3 + b.userData.twinkle;
+          b.scale.setScalar(tw);
+          if (skyState === 1) b.position.lerp(b.userData.mid, Math.min(dt * 0.0006, 1));
+          else if (skyState === 2) b.position.lerp(b.userData.low, Math.min(dt * 0.0012, 1));
+        });
+        return;
+      }
       // field-wide wheat sway (cheap night wind)
       wheat.rotation.z = Math.sin(t * 0.7) * 0.015;
       wheat.rotation.x = Math.cos(t * 0.5) * 0.01;
+      // low ground mist breathes
+      groundMist.forEach((m) => { m.material.opacity = 0.24 + Math.sin(t * 0.25 + m.userData.phase) * 0.08; });
       // fog banks drift + breathe
       fogBanks.forEach((m) => {
         m.position.x = m.userData.baseX + Math.sin(t * 0.15 + m.userData.phase) * 1.2;
@@ -770,6 +879,7 @@ function buildDreamField() {
     },
     dispose() {
       glowTex.dispose(); fogTex.dispose(); beamTex.dispose();
+      mistTex.dispose(); moonDiscTex.dispose(); cloudTex.dispose();
       group.traverse((o) => {
         if (o.isInstancedMesh) o.dispose(); // frees the wheat instance buffers
         if (o.isMesh || o.isSprite || o.isPoints) { o.geometry?.dispose?.(); o.material?.dispose?.(); }
