@@ -331,7 +331,16 @@ export function createBeats(ctx) {
         ctx.sound('stinger.coat_gift');
         ctx.sparkle(4);
         jac.char.play('idle');
-        await wait(1800);
+        await wait(1400);
+      } },
+      // …then a cut BEHIND him: the many-colors pattern held clear on the BACK
+      // of the coat (D6 — the pattern must be seen, not implied).
+      { t: 'fn', fn: async () => {
+        const j = ctx.joseph.position;
+        // Joseph faces Jacob — put the camera on the opposite azimuth (his back)
+        const a = Math.atan2(j.x - jac.pos.x, j.z - jac.pos.z);
+        ctx.camera.cinematicMoveTo({ angle: a, target: { x: j.x, z: j.z }, distance: 1.9, height: 1.5, lookHeight: 1.15, duration: 1400 });
+        await wait(2400); // hold on the banded diamonds across his shoulders
       } },
       { t: 'verse', verse: WEB.gen_37_3 },
       { t: 'verseHide' },

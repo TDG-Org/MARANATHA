@@ -28,7 +28,8 @@ export function createStoryHud({ onHome } = {}) {
   obj.style.cssText = [
     'position:fixed',
     'top:calc(11vh + 12px + env(safe-area-inset-top))', 'left:50%', 'transform:translateX(-50%)', 'z-index:40',
-    'max-width:min(90vw,560px)', 'padding:11px 20px', 'border-radius:14px', 'text-align:center',
+    // D6 mobile pass: wider on phones so quest text never wraps to a wall
+    'max-width:min(94vw,560px)', 'padding:11px 20px', 'border-radius:14px', 'text-align:center',
     'font-family:"Segoe UI",system-ui,sans-serif', 'font-size:clamp(16px,2.4vw,21px)', 'font-weight:600',
     'letter-spacing:0.012em', 'color:#fff3d8', 'line-height:1.3',
     'background:rgba(12,10,20,0.7)', 'border:1px solid rgba(242,184,128,0.42)',
@@ -61,9 +62,17 @@ export function createStoryHud({ onHome } = {}) {
   document.body.append(home, obj, counter);
 
   let current = '';
+  // D6: the banner AUTO-HIDES while a cutscene sequence runs (the Sequencer
+  // drives this) — quest UI and narrator verse cards never share the frame.
+  let inCutscene = false;
+  const applyVisible = () => { obj.style.opacity = current && !inCutscene ? '1' : '0'; };
+  function setCutscene(on) {
+    inCutscene = !!on;
+    applyVisible();
+  }
   function setObjective(text, hint = '') {
     if (!text) { obj.style.opacity = '0'; current = ''; return; }
-    if (text === current) { pulse(); return; }
+    if (text === current) { if (!inCutscene) pulse(); return; }
     current = text;
     // Cross-fade the text so it never hard-swaps.
     obj.style.opacity = '0';
@@ -71,8 +80,8 @@ export function createStoryHud({ onHome } = {}) {
       objText.textContent = text;
       objHint.textContent = hint;
       objHint.style.display = hint ? 'block' : 'none';
-      obj.style.opacity = '1';
-      pulse();
+      applyVisible();
+      if (!inCutscene) pulse();
     }, 180);
   }
 
@@ -116,5 +125,5 @@ export function createStoryHud({ onHome } = {}) {
     counter.remove();
   }
 
-  return { setObjective, pulse, flashCount, destroy, homeButton: home, objectiveEl: obj, counterEl: counter };
+  return { setObjective, setCutscene, pulse, flashCount, destroy, homeButton: home, objectiveEl: obj, counterEl: counter };
 }

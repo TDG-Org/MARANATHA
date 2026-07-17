@@ -13,22 +13,41 @@ import { Audio } from '../systems/AudioSystem.js';
 //   await dlg.say('Jacob', 'You are my beloved son.', { color: '#d9a86a' });
 //
 // The scene freezes the player controller while dialogue is open.
+
+// D6: WHO is speaking is also told by the BOX itself — each speaker gets a
+// signature dark background + border (name color + box color together = zero
+// confusion). Joseph = dark blue · Jacob = dark green · each brother a
+// DISTINCT dark red · anyone else keeps the neutral style.
+const SPEAKER_STYLES = {
+  Joseph: { bg: 'rgba(13, 24, 48, 0.92)', border: 'rgba(120, 160, 230, 0.38)' },
+  Jacob: { bg: 'rgba(11, 32, 20, 0.92)', border: 'rgba(120, 200, 150, 0.35)' },
+  Reuben: { bg: 'rgba(52, 14, 12, 0.93)', border: 'rgba(230, 130, 110, 0.35)' },
+  Judah: { bg: 'rgba(44, 10, 16, 0.93)', border: 'rgba(225, 110, 130, 0.35)' },
+  Simeon: { bg: 'rgba(38, 12, 8, 0.93)', border: 'rgba(220, 125, 95, 0.35)' },
+  Levi: { bg: 'rgba(46, 16, 24, 0.93)', border: 'rgba(225, 120, 150, 0.35)' },
+};
+const NEUTRAL_STYLE = { bg: 'rgba(16,14,26,0.9)', border: 'rgba(242,184,128,0.22)' };
+
 export function createDialogue() {
   const box = document.createElement('div');
   box.style.cssText = [
     'position:fixed', 'left:50%', 'bottom:calc(26px + env(safe-area-inset-bottom))', 'transform:translateX(-50%) translateY(12px)',
-    'z-index:45', 'width:min(92vw,620px)', 'padding:16px 20px 14px',
-    'background:rgba(16,14,26,0.9)', 'border:1px solid rgba(242,184,128,0.22)',
+    // D6 mobile pass: wider on phones (96vw), same cap on desktop.
+    // border-box: the padding lives INSIDE the width — content-box pushed the
+    // box 13px off each side of a 375px phone.
+    'box-sizing:border-box', 'z-index:45', 'width:min(96vw,640px)', 'padding:16px 20px 14px',
+    `background:${NEUTRAL_STYLE.bg}`, `border:1px solid ${NEUTRAL_STYLE.border}`,
     'border-radius:14px', 'box-shadow:0 12px 40px rgba(0,0,0,0.4)', 'backdrop-filter:blur(4px)',
     'color:#fdf6e3', 'font-family:"Segoe UI",system-ui,sans-serif',
-    'opacity:0', 'transition:opacity 220ms ease, transform 220ms ease', 'pointer-events:none',
+    'opacity:0', 'transition:opacity 220ms ease, transform 220ms ease, background-color 260ms ease, border-color 260ms ease', 'pointer-events:none',
   ].join(';');
 
   const nameEl = document.createElement('div');
   nameEl.style.cssText = 'font-family:Georgia,serif; font-size:16px; font-weight:600; margin-bottom:5px; letter-spacing:0.02em;';
 
   const textEl = document.createElement('div');
-  textEl.style.cssText = 'font-size:15.5px; line-height:1.55; min-height:2.6em;';
+  // D6 mobile pass: text scales up a touch on small screens (readable at arm's length)
+  textEl.style.cssText = 'font-size:clamp(15.5px, 2.2vw + 8px, 17px); line-height:1.55; min-height:2.6em;';
 
   const choicesEl = document.createElement('div');
   choicesEl.style.cssText = 'display:none; flex-wrap:wrap; gap:8px; margin-top:12px;';
@@ -83,6 +102,10 @@ export function createDialogue() {
   function paint(entry, { typewrite = false } = {}) {
     nameEl.textContent = entry.speaker || '';
     nameEl.style.color = entry.color || '#f2b880';
+    // the box wears the speaker's signature dark tone (D6)
+    const st = SPEAKER_STYLES[entry.speaker] || NEUTRAL_STYLE;
+    box.style.background = st.bg;
+    box.style.borderColor = st.border;
     if (typewrite) return typeOn(entry.text);
     textEl.textContent = entry.text;
     return Promise.resolve();
@@ -165,6 +188,9 @@ export function createDialogue() {
   function choose(speaker, text, options, { color = '#f2b880' } = {}) {
     nameEl.textContent = speaker || '';
     nameEl.style.color = color;
+    const st = SPEAKER_STYLES[speaker] || NEUTRAL_STYLE;
+    box.style.background = st.bg;
+    box.style.borderColor = st.border;
     textEl.textContent = text;
     hint.style.display = 'none';
     backBtn.style.visibility = 'hidden';

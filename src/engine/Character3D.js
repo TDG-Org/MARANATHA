@@ -169,6 +169,24 @@ export class Character3D {
         this._ownedGeo.push(beardGeo);
         this.beardMesh = beard;
       }
+      // HEADBAND (D6, worn detail): a thin cloth band around the brow — cast
+      // config sets `colors.headband`. Joseph wears cream-with-terracotta: a
+      // touch of care in his dress, still humble beside the coat to come.
+      if (this.colors.headband) {
+        const bandGeo = new THREE.CylinderGeometry(0.235, 0.245, 0.075, 10, 1, true);
+        const band = new THREE.Mesh(bandGeo, this._toon(this.colors.headband, { side: THREE.DoubleSide }));
+        band.position.set(0, 0.11, 0.02);
+        band.rotation.x = -0.08;
+        headBone.add(band);
+        this._ownedGeo.push(bandGeo);
+        // the knot tail at the back of the band
+        const tailGeo = new THREE.PlaneGeometry(0.07, 0.16);
+        const tail = new THREE.Mesh(tailGeo, this._toon(this.colors.headbandTail ?? this.colors.headband, { side: THREE.DoubleSide }));
+        tail.position.set(0.03, 0.02, -0.24);
+        tail.rotation.x = 0.35;
+        headBone.add(tail);
+        this._ownedGeo.push(tailGeo);
+      }
       // MOUTH FLIPBOOK — a tiny plane on the head bone, in front of the face,
       // hidden until this character speaks (see play/update). Bone-local so it
       // rides every head movement for free.
@@ -235,46 +253,50 @@ export class Character3D {
     }
   }
 
-  // Joseph's coat of many colors: a rich ARGYLE — dye bands overlaid with a
-  // diamond lattice and cream cross-hatch, in period-plausible dyes (deep red,
-  // indigo, ochre, olive, cream). Clearly the finest garment in camp.
+  // Joseph's coat of many colors (D6 rework): BOLD geometric bands + diamond
+  // rows in earth-tone dyes — deep red, indigo, ochre, olive, cream — drawn
+  // big and high-contrast so the pattern is CLEARLY readable on the coat's
+  // BACK (the cape mesh is mostly back surface; the old fine argyle smeared
+  // into noise there). No neon, no pink — period dye colors only.
   _coatMaterial(dyeColors) {
     const hex = (h) => `#${(h >>> 0).toString(16).padStart(6, '0')}`;
     const dyes = (dyeColors && dyeColors.length ? dyeColors : [0xa8321f, 0xcf8a2c, 0x2c3f78, 0x6b7038, 0xe8dcc0]).map(hex);
     const cream = '#e9dcbf';
-    const W = 96, H = 128;
+    const W = 192, H = 256;
     const c = document.createElement('canvas');
     c.width = W; c.height = H;
     const ctx = c.getContext('2d');
 
-    // 1) horizontal dye bands (the base "many colors")
-    const bands = 7;
-    for (let i = 0; i < bands; i++) {
+    // 1) five BOLD horizontal dye bands — the "many colors", readable at range
+    const bandH = H / 5;
+    for (let i = 0; i < 5; i++) {
       ctx.fillStyle = dyes[i % dyes.length];
-      ctx.fillRect(0, Math.floor(i * H / bands), W, Math.ceil(H / bands) + 1);
+      ctx.fillRect(0, Math.floor(i * bandH), W, Math.ceil(bandH) + 1);
     }
-    // 2) argyle diamonds — rotated squares in alternating dyes, semi-opaque
-    const d = 26;
-    ctx.globalAlpha = 0.6;
-    for (let gy = -1; gy <= H / d + 1; gy++) {
-      for (let gx = -1; gx <= W / d + 1; gx++) {
-        ctx.save();
-        ctx.translate(gx * d + (gy % 2 ? d / 2 : 0), gy * d);
-        ctx.rotate(Math.PI / 4);
-        ctx.fillStyle = dyes[(gx + gy + 2) % dyes.length];
-        ctx.fillRect(-d * 0.32, -d * 0.32, d * 0.64, d * 0.64);
-        ctx.restore();
+    // 2) cream separator stripes between the bands (crisp structure)
+    ctx.fillStyle = cream;
+    for (let i = 1; i < 5; i++) ctx.fillRect(0, Math.floor(i * bandH) - 3, W, 6);
+    // 3) ONE row of large solid diamonds per band, alternating dye, outlined
+    //    cream — big enough to survive the cape's UV stretch on the back.
+    const dw = W / 3; // three diamonds across
+    for (let i = 0; i < 5; i++) {
+      const cy = i * bandH + bandH / 2;
+      const dye = dyes[(i + 2) % dyes.length];
+      for (let j = 0; j < 3; j++) {
+        const cx = dw / 2 + j * dw;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy - bandH * 0.34);
+        ctx.lineTo(cx + dw * 0.3, cy);
+        ctx.lineTo(cx, cy + bandH * 0.34);
+        ctx.lineTo(cx - dw * 0.3, cy);
+        ctx.closePath();
+        ctx.fillStyle = dye;
+        ctx.fill();
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = cream;
+        ctx.stroke();
       }
     }
-    // 3) cream cross-hatch diagonals tying it together
-    ctx.globalAlpha = 0.85;
-    ctx.strokeStyle = cream;
-    ctx.lineWidth = 1.6;
-    for (let x = -H; x < W + H; x += d) {
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x + H, H); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x - H, H); ctx.stroke();
-    }
-    ctx.globalAlpha = 1;
 
     const tex = new THREE.CanvasTexture(c);
     tex.colorSpace = THREE.SRGBColorSpace;

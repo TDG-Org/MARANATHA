@@ -47,7 +47,13 @@ export class Sequencer {
   async run(steps) {
     this.running = true;
     const c = this.ctx;
+    // D6: the quest banner stands down whenever a sequence is playing (it must
+    // never share the frame with verse cards / title cards). Depth-counted so
+    // overlapping runs can't flicker it.
+    this._depth = (this._depth || 0) + 1;
+    if (this._depth === 1) c.hud?.setCutscene?.(true);
     const wait = (ms) => pausableWait(ms, c.isPaused);
+    try {
     for (const s of steps) {
       switch (s.t) {
         case 'letterbox':
@@ -114,6 +120,11 @@ export class Sequencer {
           console.warn('[sequencer] unknown step', s.t);
       }
     }
-    this.running = false;
+    } finally {
+      // a throwing step must never leave the quest banner stuck hidden
+      this._depth -= 1;
+      if (this._depth === 0) c.hud?.setCutscene?.(false);
+      this.running = this._depth > 0;
+    }
   }
 }
