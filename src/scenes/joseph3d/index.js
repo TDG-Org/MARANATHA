@@ -140,6 +140,11 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
 
   const interactables = new Interactables({ camera, dom: renderer.domElement, getPlayerPos: () => joseph?.position || { x: 0, z: 0 } });
 
+  // Right-click does nothing in-game (no camera use) — swallow the browser
+  // context menu on the canvas so it never pops over the scene.
+  const onCanvasContextMenu = (e) => e.preventDefault();
+  renderer.domElement.addEventListener('contextmenu', onCanvasContextMenu);
+
   let inputOn = true;
   const setInput = (on) => {
     inputOn = on;
@@ -316,6 +321,7 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
 
   function dispose() {
     disposed = true; // stops the story loop, zombie async init, sound/finish
+    renderer.domElement.removeEventListener('contextmenu', onCanvasContextMenu);
     Object.values(beds).forEach((b) => b.stop(0.6));
     music.stop(0.6);
     Audio.ambience({ wind: 0, birds: 0, night: 0 });

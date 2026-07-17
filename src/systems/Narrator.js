@@ -11,6 +11,12 @@ import { Audio } from './AudioSystem.js';
 class NarratorSystem {
   constructor() {
     this.voice = null;
+    // The story must speak in ONE voice start to finish. We lock the first
+    // good voice we pick (persisted), and never switch mid-story even when the
+    // browser fires onvoiceschanged again (that late reload was making the
+    // narrator change voice partway through the dream).
+    this._lockedName = null;
+    try { this._lockedName = localStorage.getItem('maranatha-voice') || null; } catch { /* ignore */ }
     this.supported = typeof window !== 'undefined' && 'speechSynthesis' in window;
     if (this.supported) {
       const pick = () => this.pickVoice();
@@ -28,6 +34,13 @@ class NarratorSystem {
   pickVoice() {
     const voices = window.speechSynthesis.getVoices();
     if (!voices.length) return;
+    // Already locked to a live voice → keep it. Never switch mid-story.
+    if (this.voice && voices.some((v) => v.name === this.voice.name)) return;
+    // Prefer the voice we locked earlier (this session or a prior one).
+    if (this._lockedName) {
+      const prev = voices.find((v) => v.name === this._lockedName);
+      if (prev) { this.voice = prev; return; }
+    }
     const en = voices.filter((v) => /^en/i.test(v.lang));
     const score = (v) => {
       const n = v.name;
@@ -42,6 +55,9 @@ class NarratorSystem {
       return s;
     };
     this.voice = en.sort((a, b) => score(b) - score(a))[0] ?? voices[0];
+    // Lock it for the rest of the story (and remember it next time).
+    this._lockedName = this.voice?.name || null;
+    try { if (this._lockedName) localStorage.setItem('maranatha-voice', this._lockedName); } catch { /* ignore */ }
   }
 
   estimateMs(text) {

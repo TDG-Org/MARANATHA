@@ -51,9 +51,35 @@ export class SheepFlock {
       lamb: !penned,   // strays read as LAMBS — smaller, easier to spot
       state: 'graze', vx: 0, vz: 0,
       timer: 600 + this.rnd() * 2200, walk: 0,
+      stuckT: 0,       // ms of near-zero real movement while trying to move
       phase: this.rnd() * Math.PI * 2,
       circle: { type: 'circle', x, z, r: 0.42 },
     };
+  }
+
+  // Whisker steering: if a prop sits straight ahead, turn the velocity toward
+  // the clearer side so the sheep flows AROUND it instead of grinding on it.
+  _avoid(s) {
+    const spd = Math.hypot(s.vx, s.vz);
+    if (spd < 0.05) return;
+    const dirx = s.vx / spd, dirz = s.vz / spd;
+    const look = 1.0;
+    const blocked = (ang) => {
+      const c = Math.cos(ang), sn = Math.sin(ang);
+      const rx = dirx * c - dirz * sn;
+      const rz = dirx * sn + dirz * c;
+      return this.world.overlaps(s.x + rx * look, s.z + rz * look, 0.45);
+    };
+    if (!blocked(0)) return; // clear ahead
+    const leftClear = !blocked(-0.7);
+    const rightClear = !blocked(0.7);
+    let turn;
+    if (leftClear && !rightClear) turn = -0.9;
+    else if (rightClear && !leftClear) turn = 0.9;
+    else turn = s.phase > Math.PI ? 0.9 : -0.9; // both blocked: commit one way
+    const c = Math.cos(turn), sn = Math.sin(turn);
+    s.vx = (dirx * c - dirz * sn) * spd;
+    s.vz = (dirx * sn + dirz * c) * spd;
   }
 
   get straysLeft() {
@@ -138,11 +164,31 @@ export class SheepFlock {
 
       // integrate + collide (sheep respect props/fences too)
       if (s.vx || s.vz) {
+        this._avoid(s); // steer around props before committing the step
+        const px0 = s.x, pz0 = s.z;
         s.x += s.vx * s001;
         s.z += s.vz * s001;
         s.circle.skip = true; // don't collide with self
         this.world.resolve(s, 0.42, null);
         s.circle.skip = false;
+        // UNSTICK: if a fleeing sheep is pinned (barely moved for ~2s), redirect
+        // it along the perpendicular to slip past whatever it's caught on.
+        const intended = Math.hypot(s.vx, s.vz) * s001;
+        const moved = Math.hypot(s.x - px0, s.z - pz0);
+        if (s.state === 'flee' && intended > 0.001 && moved < intended * 0.3) {
+          s.stuckT += dt;
+          if (s.stuckT > 2000) {
+            const sp = Math.hypot(s.vx, s.vz) || 1;
+            const side = s.phase > Math.PI ? 1 : -1;    // consistent per sheep
+            const nx = (-s.vz / sp) * side;             // unit perpendicular
+            const nz = (s.vx / sp) * side;
+            s.vx = nx * 2.2;
+            s.vz = nz * 2.2;
+            s.stuckT = 0;
+          }
+        } else {
+          s.stuckT = 0;
+        }
         // keep penned grazers inside; clamp everyone to bounds
         const b = this.bounds;
         s.x = Math.min(b.maxX, Math.max(b.minX, s.x));

@@ -172,6 +172,11 @@ export class AmbientNPCs {
     }
   }
 
-  freeze(npc, on = true) { npc.frozen = on; }
+  // Freeze for a cutscene: stop the walk/run cycle immediately (a frozen NPC
+  // must never moon-walk in place). The beat sets talk/idle + facing itself.
+  freeze(npc, on = true) {
+    npc.frozen = on;
+    if (on && (npc.char.state === 'walk' || npc.char.state === 'run')) npc.char.play('idle');
+  }
   dispose() { this.npcs.length = 0; this._circles.length = 0; }
 }

@@ -17,10 +17,16 @@ export function createBeats(ctx) {
   // positions — camera behind the listener's shoulder, speaker favored on the
   // near third. Alternate `side` sign between cuts to swap shoulders.
   const posOf = (who) => (who === 'joseph' ? ctx.joseph.position : ctx.cast[who].pos);
+  const charOf = (who) => (who === 'joseph' ? ctx.joseph : ctx.cast[who].char);
   const shot = (speaker, listener, { side = 0.42, dist = 2.9, height = 1.55, look = 1.3, ms = 850 } = {}) => ({
     t: 'fn',
     fn: async () => {
       const sp = posOf(speaker), li = posOf(listener);
+      // the two face each other; the speaker plays the calm talk gesture
+      // (never a walk/run cycle) — cutscene facing is always correct.
+      charOf(speaker).turnToward(li.x - sp.x, li.z - sp.z);
+      charOf(speaker).play('talk');
+      charOf(listener).turnToward(sp.x - li.x, sp.z - li.z);
       const a = Math.atan2(sp.x - li.x, sp.z - li.z) + side;
       ctx.camera.cinematicMoveTo({
         angle: a,
@@ -264,36 +270,47 @@ export function createBeats(ctx) {
     ctx.setInput(true);
   }
 
-  // ---------- beat 4 · 🌙 dusk falls: the brothers ring the fire ----------
+  // ---------- beat 4 · 🌙 dusk falls: sit with your brothers by the fire ----
   async function dusk() {
     ctx.setInput(true);
-    ctx.hud.setObjective('Walk to the fire and rest.');
-    ctx.guide.setTargetXZ(1.4, -5.0);
+    ctx.hud.setObjective('Sit with your brothers by the fire.', 'Walk to the fire, then press the prompt to sit.');
+    ctx.guide.setTargetXZ(0.6, -4.4);
     ctx.setMusic('music.dusk_calm');
     ctx.grading.grade('dusk', 3200);
     ctx.onDusk?.(); // fireflies fade in (wired by the scene)
-    await new Promise((resolve) => {
-      ctx.interactables.addTrigger({ id: 'rest', x: 1.4, z: -5.0, r: 1.7, once: true, onEnter: resolve });
-    });
-    ctx.guide.setTarget(null);
 
-    // the brothers gather and SIT in a ring around the fire — sparks rise,
-    // the camera holds a low close arc as the light dies (world vibe: the
-    // deeper campfire scene)
-    ctx.setInput(false);
-    await seq([{ t: 'letterbox', on: true }]);
+    // the brothers drift over and sit around the fire WHILE you walk up — the
+    // camp settles for the night (they're alive, not waiting on a trigger)
     const ring = [['judah', -0.4], ['reuben', 0.7], ['simeon', 1.9], ['levi', 2.9]];
-    await Promise.all(ring.map(async ([k, a]) => {
+    ring.forEach(([k, a]) => {
       const n = ctx.cast[k];
-      await ctx.npcs.sendTo(n, Math.cos(a) * 1.8, -6 + Math.sin(a) * 1.8, { speed: 1.5 });
-      ctx.npcs.freeze(n, true);
-      n.char.turnToward(0 - n.pos.x, -6 - n.pos.z);
-      n.char.play('kneel'); // Sit_Floor_Idle — seated by the firelight
-    }));
-    await seq([
-      { t: 'cam', angle: Math.PI * 0.35, target: { x: 0.2, z: -5.9 }, distance: 4.0, height: 1.4, lookHeight: 0.85, duration: 2800 },
-      { t: 'wait', ms: 1600 },
-    ]);
+      ctx.npcs.sendTo(n, Math.cos(a) * 1.8, -6 + Math.sin(a) * 1.8, { speed: 1.4 }).then(() => {
+        ctx.npcs.freeze(n, true);
+        n.char.turnToward(0 - n.pos.x, -6 - n.pos.z);
+        n.char.play('kneel'); // Sit_Floor_Idle — seated by the firelight
+      });
+    });
+
+    // the campfire beat's ONE action: the player chooses to sit down too.
+    await new Promise((resolve) => {
+      ctx.interactables.addPrompt({
+        id: 'sit-fire', label: 'Sit by the fire',
+        getPos: () => ({ x: 0.6, z: -4.4 }), r: 2.6, lift: 0.7,
+        onInteract: async () => {
+          ctx.setInput(false);
+          ctx.guide.setTarget(null);
+          ctx.joseph.turnToward(0.2 - ctx.joseph.position.x, -6 - ctx.joseph.position.z);
+          ctx.joseph.play('kneel'); // Joseph sits (Sit_Floor_Idle / kneel fallback)
+          // cozy fireside camera settles in as the light dies + sparks rise
+          await seq([
+            { t: 'letterbox', on: true },
+            { t: 'cam', angle: Math.PI * 0.34, target: { x: 0.25, z: -5.7 }, distance: 3.7, height: 1.25, lookHeight: 0.85, duration: 2600 },
+            { t: 'wait', ms: 1500 },
+          ]);
+          resolve();
+        },
+      });
+    });
     // (letterbox stays up — the dream rises straight out of this stillness)
   }
 
