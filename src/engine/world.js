@@ -195,6 +195,10 @@ export function makeRidgeFlat({ width, height, baseline, waves, seed, color, z }
 }
 
 // A standard 3-ridge backdrop at proven depths. Pass a palette to re-tint.
+// The group also exposes `userData.materials` [veryFar, far, mid] so mood
+// grading can tint the MOUNTAINS with the time of day (lighting-mood hard
+// rule: the whole horizon tells the time — ridges never stay one fixed color
+// while the sky turns).
 export function makeRidges(pal = {}) {
   const veryFar = pal.veryFar ?? 0x9a90ad;
   const far = pal.far ?? 0x8a7f9e;
@@ -203,6 +207,7 @@ export function makeRidges(pal = {}) {
   group.add(makeRidgeFlat({ width: 700, height: 120, baseline: 42, z: -210, color: veryFar, waves: [[1, 34], [2, 15], [5, 5]], seed: 100 }));
   group.add(makeRidgeFlat({ width: 560, height: 90, baseline: 26, z: -150, color: far, waves: [[1, 22], [2, 11], [5, 4]], seed: 101 }));
   group.add(makeRidgeFlat({ width: 440, height: 60, baseline: 12, z: -95, color: mid, waves: [[2, 9], [4, 4.5], [9, 1.6]], seed: 102 }));
+  group.userData.materials = group.children.map((m) => m.material);
   return group;
 }
 
@@ -334,23 +339,30 @@ export function yawToCamera(obj, camera) {
   obj.rotation.y = Math.atan2(camera.position.x - obj.position.x, camera.position.z - obj.position.z);
 }
 
-// --- Minimal geometry merge (positions + uvs) so we skip the addons bundle --
+// --- Minimal geometry merge (positions + uvs + colors) — skips the addons ---
+// If ANY input geometry carries a `color` attribute the merged geometry gets
+// one too (inputs without it fill white) — so a whole prop-clutter set can
+// bake per-part dyes into ONE vertex-colored mesh = ONE draw call.
 
 export function mergeGeometries(geos) {
   let vertCount = 0;
   let indexCount = 0;
+  let anyColor = false;
   for (const g of geos) {
     vertCount += g.attributes.position.count;
     indexCount += g.index ? g.index.count : g.attributes.position.count;
+    if (g.attributes.color) anyColor = true;
   }
   const positions = new Float32Array(vertCount * 3);
   const uvs = new Float32Array(vertCount * 2);
-  const indices = new Uint16Array(indexCount);
+  const colors = anyColor ? new Float32Array(vertCount * 3).fill(1) : null;
+  const indices = vertCount > 65535 ? new Uint32Array(indexCount) : new Uint16Array(indexCount);
   let vOff = 0;
   let iOff = 0;
   for (const g of geos) {
     positions.set(g.attributes.position.array, vOff * 3);
     if (g.attributes.uv) uvs.set(g.attributes.uv.array, vOff * 2);
+    if (colors && g.attributes.color) colors.set(g.attributes.color.array, vOff * 3);
     const idx = g.index ? g.index.array : [...Array(g.attributes.position.count).keys()];
     for (let i = 0; i < idx.length; i++) indices[iOff + i] = idx[i] + vOff;
     vOff += g.attributes.position.count;
@@ -360,6 +372,18 @@ export function mergeGeometries(geos) {
   const merged = new THREE.BufferGeometry();
   merged.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   merged.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+  if (colors) merged.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   merged.setIndex(new THREE.BufferAttribute(indices, 1));
   return merged;
+}
+
+// Fill (or create) a geometry's vertex-color attribute with one flat dye —
+// the building block for single-draw merged prop clutter.
+export function dyeGeometry(geo, color) {
+  const c = new THREE.Color(color);
+  const n = geo.attributes.position.count;
+  const arr = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) { arr[i * 3] = c.r; arr[i * 3 + 1] = c.g; arr[i * 3 + 2] = c.b; }
+  geo.setAttribute('color', new THREE.BufferAttribute(arr, 3));
+  return geo;
 }

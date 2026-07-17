@@ -59,8 +59,12 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
   // the dream field, the pit, and Jacob's tent interior. D4: the ground is a
   // sun-lit GRASS field — green base with brighter grass + dry-dirt patches.
   const ground = makeGround({
-    color: 0x63763c, // sunlit grass green (tints the grass texture)
-    mottle: [0x8aa055, 0x9c7a44], // brighter grass tufts + dry dirt patches
+    // D6: vertex colors recentred on WHITE — the grass photo already carries
+    // the green (it averages ~0.13 linear), so any green vertex tint MULTIPLIES
+    // it into mud (the "gray ground" complaint). White base + near-white mottle
+    // keeps the patch variety while the texture keeps its true richness.
+    color: 0xffffff,
+    mottle: [0xeaf7c0, 0xd8b98a], // sun-bright tufts + warm dry patches
     map: grassTex,
     segX: 96, segZ: 30,
     pads: [
@@ -71,7 +75,8 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
     ],
   });
   scene.add(ground);
-  scene.add(makeRidges());
+  const ridges = makeRidges();
+  scene.add(ridges);
   scene.add(makeSun());
   const motes = makeMotes({ count: Graphics.particles(70) });
   scene.add(motes.points);
@@ -139,7 +144,7 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
   const dialogue = createDialogue();
   const nameTags = createNameTags();
   const guide = new Guidance(scene);
-  const grading = new MoodGrading({ sky, fog: scene.fog, keyLight, hemiLight, cinema });
+  const grading = new MoodGrading({ sky, fog: scene.fog, keyLight, hemiLight, cinema, ridges: ridges.userData.materials });
 
   // --- camera (authored, close) ---
   // base follow comes from CAMERA_TUNING (raised + a touch more zoom-out in D4);

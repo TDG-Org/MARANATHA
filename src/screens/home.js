@@ -17,7 +17,23 @@ export function buildHome({ scene, camera, app }) {
 
   const sky = makeSky({ top: 0xf2b880, bottom: 0xffe9c9 });
   scene.add(sky.mesh);
-  scene.add(makeGround());
+  // D6: the home ground is REAL sunlit grass, never an untextured sheet
+  // (world-density hard rule) — same texture + mottle language as the camp.
+  const grassTex = new THREE.TextureLoader().load('textures/grass.jpg');
+  grassTex.wrapS = grassTex.wrapT = THREE.RepeatWrapping;
+  grassTex.repeat.set(16, 7); // wider tiles — home views the field at a shallow angle
+  grassTex.colorSpace = THREE.SRGBColorSpace;
+  grassTex.anisotropy = 4;
+  // vertex colors recentred on WHITE: the grass photo already carries the
+  // green; a green vertex tint would multiply it into mud (the black-ground
+  // bug). White base + near-white mottle = variety without the crush.
+  scene.add(makeGround({ color: 0xffffff, mottle: [0xeaf7c0, 0xd8b98a], map: grassTex }));
+  // home is always golden hour — a generous warm sun + hemi so the Lambert
+  // grass reads sunlit (it rendered near-black unlit before — the gray bug)
+  scene.add(new THREE.HemisphereLight(0xffe4b6, 0x6a7a44, 1.2));
+  const homeSun = new THREE.DirectionalLight(0xffe1ad, 1.5);
+  homeSun.position.set(-9, 13, 6);
+  scene.add(homeSun);
   scene.add(makeRidges());
   scene.add(makeSun());
   const motes = makeMotes({ count: 90 });

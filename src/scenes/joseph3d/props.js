@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { mulberry32, canvasTexture, toonMat, mergeGeometries } from '../../engine/world.js';
+import { mulberry32, canvasTexture, toonMat, mergeGeometries, dyeGeometry } from '../../engine/world.js';
 
 // The camp PROP KIT (world-density skill): small makers + a layout assembler.
 // Everything repeated is instanced; every prop registers its colliders and
@@ -84,16 +84,34 @@ export function makeFires(spots) {
   };
 }
 
-export function makeWell(x, z) {
+// D6: the well is a real LANDMARK now — noticeably bigger ring, taller posts,
+// a wide shade roof. Still the 'well' collider group (occluder-fade list).
+export function makeWell(x, z, rockTex = null) {
   const group = new THREE.Group();
-  const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.95, 0.8, 9, 1, true), toonMat(C.stone, { side: THREE.DoubleSide }));
-  ring.position.set(x, 0.4, z);
-  const posts = inst(new THREE.CylinderGeometry(0.05, 0.06, 1.6, 5), C.wood, [[x - 0.7, z, 1, 0.8], [x + 0.7, z, 1, 0.8]]);
-  const roof = new THREE.Mesh(new THREE.ConeGeometry(1.15, 0.55, 4), toonMat(C.tentDark));
-  roof.position.set(x, 1.75, z);
+  const ring = new THREE.Mesh(
+    new THREE.CylinderGeometry(1.3, 1.45, 1.0, 10, 1, true),
+    toonMat(rockTex ? 0xb0a89e : C.stone, { side: THREE.DoubleSide, ...(rockTex ? { map: rockTex } : {}) }),
+  );
+  ring.position.set(x, 0.5, z);
+  const posts = inst(new THREE.CylinderGeometry(0.07, 0.085, 2.3, 5), C.wood, [[x - 1.05, z, 1, 1.15], [x + 1.05, z, 1, 1.15]]);
+  const roof = new THREE.Mesh(new THREE.ConeGeometry(1.8, 0.8, 4), toonMat(C.tentDark));
+  roof.position.set(x, 2.55, z);
   roof.rotation.y = Math.PI / 4;
-  group.add(ring, posts, roof);
-  return { mesh: group, colliders: [{ type: 'circle', x, z, r: 1.15, group: 'well' }], blockers: [ring, roof] };
+  // the crossbar + rope + bucket that make it read WELL at a glance —
+  // merged into ONE dyed mesh (1 draw, not 3; the budget lives at the ceiling)
+  const bar = new THREE.CylinderGeometry(0.05, 0.05, 2.3, 5);
+  bar.rotateZ(Math.PI / 2); bar.translate(x, 2.05, z);
+  dyeGeometry(bar, C.woodDark);
+  const bucket = new THREE.CylinderGeometry(0.16, 0.13, 0.24, 7, 1, true);
+  bucket.translate(x, 1.35, z);
+  dyeGeometry(bucket, C.woodDark);
+  const rope = new THREE.CylinderGeometry(0.015, 0.015, 0.6, 4);
+  rope.translate(x, 1.75, z);
+  dyeGeometry(rope, C.cloth);
+  const rig = new THREE.Mesh(mergeGeometries([bar, bucket, rope]), toonMat(0xffffff, { vertexColors: true, side: THREE.DoubleSide }));
+  rig.geometry.computeVertexNormals();
+  group.add(ring, posts, roof, rig);
+  return { mesh: group, colliders: [{ type: 'circle', x, z, r: 1.7, group: 'well' }], blockers: [ring, roof] };
 }
 
 export function makeLaundry(x1, z1, x2, z2) {
@@ -139,15 +157,19 @@ export function makePots(spots) {
 }
 
 export function makeRugs(spots) {
-  const group = new THREE.Group();
-  spots.forEach((s, i) => {
-    const rug = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 1.1), toonMat(i % 2 ? C.rug1 : C.rug2));
-    rug.rotation.x = -Math.PI / 2;
-    rug.rotation.z = s.rot ?? 0;
-    rug.position.set(s.x, 0.03, s.z);
-    group.add(rug);
+  // ALL rugs merged into one vertex-dyed mesh — 1 draw for the whole set
+  // (they were 1 draw EACH before; the camp budget lives at the ceiling).
+  const parts = spots.map((s, i) => {
+    const g = new THREE.PlaneGeometry(1.7, 1.1);
+    dyeGeometry(g, i % 2 ? C.rug1 : C.rug2);
+    g.rotateX(-Math.PI / 2);
+    g.rotateY(s.rot ?? 0);
+    g.translate(s.x, 0.03, s.z);
+    return g;
   });
-  return { mesh: group, colliders: [] };
+  const mesh = new THREE.Mesh(mergeGeometries(parts), toonMat(0xffffff, { vertexColors: true }));
+  mesh.geometry.computeVertexNormals();
+  return { mesh, colliders: [] };
 }
 
 export function makePaths(spots, dirtTex = null) {
@@ -316,23 +338,34 @@ export function makeTentInterior(x, z) {
   };
 }
 
-// Sheep pen: fence posts + rails around a rect with a west gate opening.
+// Sheep pen: fence posts + rails around a rect with TWO open gates — the main
+// herding gate on the west (minX) side and a second opening opposite on the
+// east (maxX) side (D6: sheep approached from the east used to pile on the
+// fence; now either approach has a way in).
 export function makePen(rect) {
-  const { minX, maxX, minZ, maxZ, gate } = rect; // gate: {z0,z1} opening on minX side
+  const { minX, maxX, minZ, maxZ, gate, gateEast } = rect; // gate/gateEast: {z0,z1}
   const posts = [];
   const railSegs = [];
   const step = 1.4;
   const addRun = (x0, z0, x1, z1) => {
     const len = Math.hypot(x1 - x0, z1 - z0);
+    if (len < 0.4) return; // a degenerate sliver next to a gate — skip
     const n = Math.max(1, Math.round(len / step));
     for (let i = 0; i <= n; i++) posts.push([x0 + (x1 - x0) * (i / n), z0 + (z1 - z0) * (i / n), 1, 0.5]);
     railSegs.push([(x0 + x1) / 2, (z0 + z1) / 2, len, Math.atan2(x1 - x0, z1 - z0)]);
   };
   addRun(minX, minZ, maxX, minZ);
-  addRun(maxX, minZ, maxX, maxZ);
   addRun(minX, maxZ, maxX, maxZ);
+  // west wall, split around the main gate
   addRun(minX, minZ, minX, gate.z0);
   addRun(minX, gate.z1, minX, maxZ);
+  // east wall, split around the second gate (or solid if none)
+  if (gateEast) {
+    addRun(maxX, minZ, maxX, gateEast.z0);
+    addRun(maxX, gateEast.z1, maxX, maxZ);
+  } else {
+    addRun(maxX, minZ, maxX, maxZ);
+  }
 
   const group = new THREE.Group();
   group.add(inst(new THREE.CylinderGeometry(0.06, 0.07, 1.0, 5), C.wood, posts, { seedRot: 44 }));
@@ -348,11 +381,79 @@ export function makePen(rect) {
   const colliders = [
     { type: 'aabb', minX, maxX, minZ: minZ - t, maxZ: minZ + t, group: 'pen' },
     { type: 'aabb', minX, maxX, minZ: maxZ - t, maxZ: maxZ + t, group: 'pen' },
-    { type: 'aabb', minX: maxX - t, maxX: maxX + t, minZ, maxZ, group: 'pen' },
     { type: 'aabb', minX: minX - t, maxX: minX + t, minZ, maxZ: gate.z0, group: 'pen' },
     { type: 'aabb', minX: minX - t, maxX: minX + t, minZ: gate.z1, maxZ, group: 'pen' },
   ];
+  if (gateEast) {
+    colliders.push(
+      { type: 'aabb', minX: maxX - t, maxX: maxX + t, minZ, maxZ: gateEast.z0, group: 'pen' },
+      { type: 'aabb', minX: maxX - t, maxX: maxX + t, minZ: gateEast.z1, maxZ, group: 'pen' },
+    );
+  } else {
+    colliders.push({ type: 'aabb', minX: maxX - t, maxX: maxX + t, minZ, maxZ, group: 'pen' });
+  }
   return { mesh: group, colliders };
+}
+
+// D6 lived-in CLUTTER — firewood stacks, baskets, water skins, stools, rope
+// coils — ALL merged into ONE vertex-colored mesh = ONE draw call for the
+// entire set (the draw budget sits near its ceiling; per-type InstancedMeshes
+// would cost 5+). Spots: { kind, x, z, rot?, scale? }. Solid kinds (firewood,
+// stool) register small colliders; the rest are ground dressing (law 2).
+export function makeCampClutter(spots) {
+  const parts = [];
+  const colliders = [];
+  const add = (geo, color, x, z, rotY = 0, s = 1) => {
+    dyeGeometry(geo, color);
+    geo.scale(s, s, s);
+    geo.rotateY(rotY);
+    geo.translate(x, 0, z);
+    parts.push(geo);
+  };
+  for (const p of spots) {
+    const { kind, x, z, rot = 0, scale = 1 } = p;
+    if (kind === 'firewood') {
+      // a 3+2 pyramid of cut logs
+      const L = (dx, y, dz) => { const g = new THREE.CylinderGeometry(0.085, 0.095, 0.85, 5); g.rotateZ(Math.PI / 2); g.translate(dx, y, dz); return g; };
+      [[-0.1, 0.09, -0.2], [-0.05, 0.09, 0], [-0.12, 0.09, 0.2], [-0.07, 0.26, -0.1], [-0.1, 0.26, 0.1]]
+        .forEach(([dx, y, dz]) => add(L(dx, y, dz), C.woodDark, x, z, rot, scale));
+      colliders.push({ type: 'circle', x, z, r: 0.52 * scale, group: 'clutter' });
+    } else if (kind === 'basket') {
+      const g = new THREE.CylinderGeometry(0.26, 0.18, 0.34, 8, 1, true);
+      g.translate(0, 0.17, 0);
+      add(g, 0xb08a4f, x, z, rot, scale);
+      const rim = new THREE.TorusGeometry(0.26, 0.028, 5, 10);
+      rim.rotateX(Math.PI / 2); rim.translate(0, 0.34, 0);
+      add(rim, 0x8a6a3a, x, z, rot, scale);
+    } else if (kind === 'skin') {
+      // a plump water skin leaning on its side
+      const g = new THREE.SphereGeometry(0.2, 7, 6);
+      g.scale(1, 0.78, 1.25); g.translate(0, 0.16, 0);
+      add(g, 0x7a4f30, x, z, rot, scale);
+      const neck = new THREE.CylinderGeometry(0.045, 0.06, 0.12, 5);
+      neck.rotateZ(0.7); neck.translate(0.16, 0.3, 0.16);
+      add(neck, 0x54381f, x, z, rot, scale);
+    } else if (kind === 'stool') {
+      const seat = new THREE.CylinderGeometry(0.21, 0.21, 0.07, 8);
+      seat.translate(0, 0.3, 0);
+      add(seat, C.wood, x, z, rot, scale);
+      for (let i = 0; i < 3; i++) {
+        const a = (i / 3) * Math.PI * 2;
+        const leg = new THREE.CylinderGeometry(0.03, 0.035, 0.3, 4);
+        leg.rotateX(Math.cos(a) * 0.22); leg.rotateZ(Math.sin(a) * 0.22);
+        leg.translate(Math.cos(a) * 0.13, 0.15, Math.sin(a) * 0.13);
+        add(leg, C.woodDark, x, z, rot, scale);
+      }
+      colliders.push({ type: 'circle', x, z, r: 0.26 * scale, group: 'clutter' });
+    } else if (kind === 'rope') {
+      const g = new THREE.TorusGeometry(0.19, 0.05, 5, 12);
+      g.rotateX(Math.PI / 2); g.translate(0, 0.05, 0);
+      add(g, 0xc9b285, x, z, rot, scale);
+    }
+  }
+  const mesh = new THREE.Mesh(mergeGeometries(parts), toonMat(0xffffff, { vertexColors: true }));
+  mesh.geometry.computeVertexNormals(); // merged geometry must never render black
+  return { mesh, colliders };
 }
 
 // --- the Scene 1 camp layout (data) -----------------------------------------
@@ -377,7 +478,7 @@ export function buildCamp(colliderWorld, tex = {}) {
     { x: 5, z: -14, scale: 0.9 }, { x: 16, z: -3, scale: 1.0 },
   ]));
   addAll(makeFires([{ x: 0, z: -6 }, { x: -8.5, z: 4 }]));
-  addAll(makeWell(4.5, -1));
+  addAll(makeWell(4.5, -1, tex.rock)); // D6: a real landmark now
   addAll(makeLaundry(-3, 8.5, 2, 9.5));
   addAll(makeCrates([{ x: 7.6, z: -6.2 }, { x: 8.4, z: -5.6, scale: 0.85 }, { x: 7.9, z: -5.3, scale: 0.7 }, { x: -12.6, z: -4.9, scale: 0.9 }]));
   addAll(makePots([
@@ -388,28 +489,61 @@ export function buildCamp(colliderWorld, tex = {}) {
   addAll(makeRugs([
     { x: 1.6, z: -6.4, rot: 0.3 }, { x: -1.7, z: -5.2, rot: -0.5 }, { x: -9.6, z: 2.8, rot: 1.1 },
     { x: 6.2, z: 4.1, rot: -0.7 },
+    // D6: woven mats at the tent doors too
+    { x: -9.4, z: -7.8, rot: 0.5 }, { x: 8.2, z: -9.1, rot: -0.2 },
   ]));
   addAll(makePaths([
     { x: 0, z: -2.5, r: 2.6, sx: 1.4 }, { x: -5, z: -5, r: 2.2, sx: 1.5, rot: 0.7 },
     { x: 5.5, z: 3, r: 2.0, sx: 1.6, rot: -0.9 }, { x: 10, z: 8, r: 2.2, sx: 1.4, rot: -0.4 },
   ], tex.dirt));
-  addAll(makeCrates([{ x: 10.5, z: 7.3, scale: 0.8 }])); // clear of the tent (audit-verified)
-  // gate widened (D3: lambs must be EASY to pen)
-  const pen = { minX: 10, maxX: 17, minZ: 8.5, maxZ: 14, gate: { z0: 9.9, z1: 12.9 } };
+  // (D6: the lone crate at 10.5,7.3 is DELETED — sheep stuck on it at the pen approach)
+  // D6 lived-in clutter — ONE merged draw for all of it, clustered by use-area
+  addAll(makeCampClutter([
+    // the main fire: firewood, stools to sit on, a rope coil
+    { kind: 'firewood', x: 1.9, z: -7.4, rot: 0.4 }, { kind: 'stool', x: -1.4, z: -6.9 },
+    { kind: 'stool', x: 1.3, z: -4.8, rot: 1.1 }, { kind: 'rope', x: 2.5, z: -5.5 },
+    // the west fire
+    { kind: 'firewood', x: -9.9, z: 5.2, rot: 1.8 }, { kind: 'stool', x: -7.2, z: 4.7 },
+    // the well gathering: water skins + a rope for the bucket
+    { kind: 'skin', x: 3.1, z: -2.4, rot: 0.7 }, { kind: 'skin', x: 6.1, z: -2.3, rot: 2.4 },
+    { kind: 'rope', x: 6.3, z: -0.3 },
+    // Jacob's tent door: baskets + a skin
+    { kind: 'basket', x: -9.6, z: -8.6 }, { kind: 'basket', x: -12.5, z: -8.7, scale: 0.85 },
+    { kind: 'skin', x: -9.0, z: -6.3, rot: 4.1 },
+    // the other tents, lived-in
+    { kind: 'basket', x: 8.0, z: -8.7, scale: 0.9 }, { kind: 'firewood', x: 10.7, z: -8.9, rot: 2.6, scale: 0.9 },
+    { kind: 'basket', x: -12.9, z: 2.0 }, { kind: 'skin', x: -13.5, z: 4.7, rot: 1.2 },
+    { kind: 'basket', x: 12.5, z: 4.6, scale: 0.9 },
+    // laundry corner
+    { kind: 'basket', x: 0.7, z: 8.3, scale: 1.1 },
+  ]));
+  // pen: main WEST gate (widened D3 — lambs must be EASY to pen) + a second
+  // open gate on the EAST side (D6 — no dead-end approach)
+  const pen = { minX: 10, maxX: 17, minZ: 8.5, maxZ: 14, gate: { z0: 9.9, z1: 12.9 }, gateEast: { z0: 10.2, z1: 12.6 } };
   addAll(makePen(pen));
 
-  // NATURAL WALLS (D4 Task 5): tree lines east/west/south + BIG rock clusters
-  // wrap the camp so it feels safe and enclosed. The north keeps a gap for the
-  // ridge vista, but bigger boulders now anchor its corners. Colliders live ON
-  // the visible props — no invisible barriers. Run directions chosen so each
-  // staggered second tree row lands INSIDE the play area.
+  // NATURAL WALLS (D4 Task 5, reworked D6): tree lines EAST/WEST only + rock
+  // walls north AND south. The SOUTH treeline is GONE — the follow camera
+  // lives on the south side (spawn + pen framing both look north), and tall
+  // canopies there sat behind/over the camera and hid the sheep pen
+  // (level-layout law 7: the spawn frame is sacred). A LOW boulder rail now
+  // holds the south border — visible enclosure, nothing at camera height.
   addAll(makeTreeline([
     { x0: 18.9, z0: -14, x1: 18.9, z1: 16.8, gap: 1.7 },       // east  (dense)
     { x0: -18.9, z0: 16.8, x1: -18.9, z1: -14, gap: 1.7 },     // west  (dense)
-    { x0: 17.5, z0: 17.0, x1: -17.5, z1: 17.0, gap: 1.7 },     // south (dense)
     { x0: -18.8, z0: -14.5, x1: -10, z1: -16.6, gap: 2.0 },    // NW corner trees
     { x0: 10, z0: -16.6, x1: 18.8, z1: -14.5, gap: 2.0 },      // NE corner trees
   ], colliderWorld));
+  addAll(makeBoulders([
+    // SOUTH low rock rail (replaces the treeline): tight spacing, small scales —
+    // the border reads, the camera sees clean over it
+    { x: -17.2, z: 17.0, scale: 1.15 }, { x: -15.0, z: 17.1, scale: 0.95 }, { x: -12.8, z: 17.0, scale: 1.1 },
+    { x: -10.6, z: 17.1, scale: 0.9 }, { x: -8.4, z: 17.0, scale: 1.05 }, { x: -6.2, z: 17.1, scale: 0.95 },
+    { x: -4.0, z: 17.0, scale: 1.1 }, { x: -1.8, z: 17.1, scale: 0.9 }, { x: 0.4, z: 17.0, scale: 1.05 },
+    { x: 2.6, z: 17.1, scale: 0.95 }, { x: 4.8, z: 17.0, scale: 1.1 }, { x: 7.0, z: 17.1, scale: 0.9 },
+    { x: 9.2, z: 17.0, scale: 1.05 }, { x: 11.4, z: 17.1, scale: 0.95 }, { x: 13.6, z: 17.0, scale: 1.1 },
+    { x: 15.8, z: 17.1, scale: 0.95 }, { x: 17.6, z: 17.0, scale: 1.2 },
+  ], colliderWorld, tex.rock));
   addAll(makeBoulders([
     // north wall — a two-depth rock berm: a taller BACK row (behind the bound,
     // for the silhouette) + a FRONT row whose colliders actually stop the
