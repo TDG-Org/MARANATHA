@@ -238,12 +238,14 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
   ctx.sequencer = new Sequencer(ctx);
 
   // --- sheep (independent of GLB load) ---
-  // strays start NEAR the spawn→pen path and read as LAMBS (smaller, warmer)
-  // so a first-time player finds all three without wandering (Nate's note).
+  // The 3 stray LAMBS sit DEEP in the camp, all WEST/SW of the pen in open
+  // ground, so the player's natural push funnels each toward the pen ENTRANCE
+  // (the west gate ~10,11.4) — never toward the trap-prone SE corner. (Nate
+  // restarted 3× on the old SE spawn; this + the un-stick makes it un-failable.)
   ctx.sheep = new SheepFlock({
     scene, colliderWorld: colliders, pen: camp.pen, bounds,
     count: 9,
-    strays: [{ x: -5.5, z: 10.5 }, { x: 2.5, z: 13 }, { x: 12, z: 2 }],
+    strays: [{ x: 3.5, z: 6.5 }, { x: 6.5, z: 4.5 }, { x: 8, z: 8 }],
     onPenned: (n) => { Audio.play('sfx.pen_gate'); ctx.onStrayPenned?.(n); },
   });
 

@@ -19,12 +19,16 @@ export class SheepFlock {
     lumps.push(mk(0.34, 0, 0.52, 0), mk(0.27, 0.22, 0.6, 0.1), mk(0.27, -0.2, 0.58, -0.08), mk(0.22, 0, 0.45, 0.22), mk(0.2, 0.05, 0.48, -0.24));
     [-0.16, 0.16].forEach((x) => [-0.14, 0.16].forEach((z) => lumps.push((() => { const g = new THREE.CylinderGeometry(0.045, 0.05, 0.3, 5); g.translate(x, 0.15, z); return g; })())));
     const bodyGeo = mergeGeometries(lumps);
+    // The minimal merge drops normals; a LIT (toon) material with no normals
+    // renders BLACK. Regenerate them — this is why the sheep were turning dark.
+    bodyGeo.computeVertexNormals();
     const headGeo = new THREE.SphereGeometry(0.14, 7, 5);
     headGeo.scale(1, 1.15, 1.3);
     headGeo.translate(0, 0.5, 0.42);
 
     this.total = count + strays.length;
-    this.bodies = new THREE.InstancedMesh(bodyGeo, toonMat(0xf3eee2), this.total);
+    // emissive base keeps the wool WHITE even in low light (never goes dark).
+    this.bodies = new THREE.InstancedMesh(bodyGeo, toonMat(0xf6f1e6, { emissive: 0x59544b }), this.total);
     this.heads = new THREE.InstancedMesh(headGeo, toonMat(0x5a4d3f), this.total);
     scene.add(this.bodies, this.heads);
 
