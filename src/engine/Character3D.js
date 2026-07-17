@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { blobShadow } from './world.js';
 
 // A 3D toon character. Two modes, ONE API:
 //   • 'glb'     — a real rigged character (KayKit-style: one skin, named part
@@ -282,6 +283,17 @@ export class Character3D {
   setPosition(x, z) { this.root.position.set(x, 0, z); return this; }
   get position() { return this.root.position; }
 
+  // A soft fake contact shadow under the feet (Graphics High only). It's a
+  // child of root, so it follows the character for free.
+  addContactShadow(width = 1.15) {
+    if (this.shadowMesh) return this;
+    const blob = blobShadow(width);
+    blob.position.y = 0.03;
+    this.root.add(blob);
+    this.shadowMesh = blob;
+    return this;
+  }
+
   play(state) {
     if (!CHARACTER_STATES.includes(state) || state === this.state) { this.state = state; return; }
     if (this.mode === 'glb' && this.actions) {
@@ -336,6 +348,11 @@ export class Character3D {
     this._ownedGeo.forEach((g) => g.dispose());
     this._coatTex?.dispose();
     this._mats.forEach((m) => m.dispose());
+    if (this.shadowMesh) {
+      this.shadowMesh.geometry.dispose();
+      this.shadowMesh.material.map?.dispose();
+      this.shadowMesh.material.dispose();
+    }
     this.root.parent?.remove(this.root);
   }
 }

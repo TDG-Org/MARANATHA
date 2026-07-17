@@ -1,6 +1,7 @@
 import { Audio } from '../systems/AudioSystem.js';
 import { Settings } from '../systems/Settings.js';
 import { Narrator } from '../systems/Narrator.js';
+import { Graphics, GRAPHICS_PRESETS } from '../systems/Graphics.js';
 import { resetProgress } from '../systems/SaveSystem.js';
 import { confirmModal, isModalOpen } from './modal.js';
 
@@ -67,6 +68,44 @@ export function openSettings({ onReset } = {}) {
       () => Narrator.speak('The Lord was with Joseph.'),
     ),
   );
+
+  // --- Graphics Quality (Low / Medium / High) ---
+  const gfxWrap = document.createElement('div');
+  gfxWrap.style.cssText = 'margin:20px 0 6px; font-family:"Segoe UI",system-ui,sans-serif;';
+  const gfxHead = document.createElement('div');
+  gfxHead.style.cssText = 'display:flex; justify-content:space-between; font-size:13.5px; margin-bottom:8px; opacity:0.9;';
+  const gfxName = document.createElement('span'); gfxName.textContent = 'Graphics quality';
+  const gfxHint = document.createElement('span');
+  gfxHint.style.cssText = 'font-size:11.5px; opacity:0.6;';
+  gfxHead.append(gfxName, gfxHint);
+  const gfxRow = document.createElement('div');
+  gfxRow.style.cssText = 'display:flex; gap:8px;';
+  const gfxBtns = {};
+  const paintGfx = () => {
+    Object.entries(gfxBtns).forEach(([k, b]) => {
+      const on = Graphics.name === k;
+      b.style.background = on ? '#f2b880' : 'rgba(255,255,255,0.06)';
+      b.style.color = on ? '#241f38' : '#fdf6e3';
+      b.style.fontWeight = on ? '700' : '500';
+    });
+    gfxHint.textContent = Graphics.autoDetected ? 'auto-detected' : 'applies on next scene';
+  };
+  Object.keys(GRAPHICS_PRESETS).forEach((key) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = GRAPHICS_PRESETS[key].label;
+    b.style.cssText = [
+      'flex:1', 'padding:9px 0', 'border-radius:9px', 'cursor:pointer',
+      'font:600 13px "Segoe UI",system-ui,sans-serif',
+      'border:1px solid rgba(242,184,128,0.4)', 'transition:filter 140ms ease',
+    ].join(';');
+    b.onclick = () => { Audio.uiClick?.(); Graphics.set(key); paintGfx(); };
+    gfxBtns[key] = b;
+    gfxRow.append(b);
+  });
+  gfxWrap.append(gfxHead, gfxRow);
+  panel.append(gfxWrap);
+  paintGfx();
 
   // --- HUD toggle ---
   const hudRow = document.createElement('label');

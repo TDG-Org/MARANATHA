@@ -4,6 +4,7 @@ import { detectTier, AdaptiveQuality, DebugHud } from './quality.js';
 import { disposeDeep } from './dispose.js';
 import { createVeil } from '../ui/veil.js';
 import { Settings } from '../systems/Settings.js';
+import { Graphics } from '../systems/Graphics.js';
 
 // The app shell: owns the renderer, camera, loop, adaptive quality, and the
 // always-on perf HUD, and manages screens (home, joseph, …). Each screen is a
@@ -11,8 +12,16 @@ import { Settings } from '../systems/Settings.js';
 // the game-scene contract. Transitions fade through black — never a hard cut.
 export function createApp(container) {
   const renderer = createRenderer(container);
-  const { tier, basePixelRatio } = detectTier();
-  const quality = new AdaptiveQuality(renderer, { basePixelRatio });
+  const { tier } = detectTier();
+  // The DPR ceiling comes from the player's Graphics Quality preset (Low/Med/
+  // High); AdaptiveQuality may still shed BELOW it on a struggling device.
+  const dpr = () => window.devicePixelRatio || 1;
+  const quality = new AdaptiveQuality(renderer, { basePixelRatio: Math.min(dpr(), Graphics.dprCap) });
+  Graphics.subscribe(() => {
+    quality.base = Math.min(dpr(), Graphics.dprCap);
+    quality.recovered = false;
+    quality.set(quality.base); // apply the new DPR ceiling live
+  });
   const camera = new THREE.PerspectiveCamera(46, window.innerWidth / window.innerHeight, 0.1, 900);
   const hud = new DebugHud(renderer);
   Settings.bindHud(hud); // apply the player's saved HUD-visibility choice

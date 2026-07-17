@@ -1,11 +1,11 @@
 import * as THREE from 'three';
-import { mulberry32, canvasTexture } from '../../engine/world.js';
+import { mulberry32, canvasTexture, toonMat } from '../../engine/world.js';
 
 // The camp PROP KIT (world-density skill): small makers + a layout assembler.
 // Everything repeated is instanced; every prop registers its colliders and
 // particle emitters. Returns { group, colliders[], fireEmitters[], pen } so a
-// future scene rebuilds a different camp from data only. Flat colors, unlit
-// (MeshBasicMaterial + fog) — the Alto world look; characters carry the lights.
+// future scene rebuilds a different camp from data only. D4: props are now
+// toon-LIT (toonMat) so the sun shapes them; glows/sprites stay additive.
 const C = {
   tent: 0xb08d62, tentDark: 0x8d6f4c, jacobTent: 0x9a6f4e,
   wood: 0x6b4a2c, woodDark: 0x54381f,
@@ -16,7 +16,7 @@ const C = {
 };
 
 function inst(geo, color, spots, { yBase = 0, seedRot = 5 } = {}) {
-  const mesh = new THREE.InstancedMesh(geo, new THREE.MeshBasicMaterial({ color, fog: true }), spots.length);
+  const mesh = new THREE.InstancedMesh(geo, toonMat(color), spots.length);
   const d = new THREE.Object3D();
   const rnd = mulberry32(seedRot);
   spots.forEach((s, i) => {
@@ -81,10 +81,10 @@ export function makeFires(spots) {
 
 export function makeWell(x, z) {
   const group = new THREE.Group();
-  const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.95, 0.8, 9, 1, true), new THREE.MeshBasicMaterial({ color: C.stone, fog: true, side: THREE.DoubleSide }));
+  const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.95, 0.8, 9, 1, true), toonMat(C.stone, { side: THREE.DoubleSide }));
   ring.position.set(x, 0.4, z);
   const posts = inst(new THREE.CylinderGeometry(0.05, 0.06, 1.6, 5), C.wood, [[x - 0.7, z, 1, 0.8], [x + 0.7, z, 1, 0.8]]);
-  const roof = new THREE.Mesh(new THREE.ConeGeometry(1.15, 0.55, 4), new THREE.MeshBasicMaterial({ color: C.tentDark, fog: true }));
+  const roof = new THREE.Mesh(new THREE.ConeGeometry(1.15, 0.55, 4), toonMat(C.tentDark));
   roof.position.set(x, 1.75, z);
   roof.rotation.y = Math.PI / 4;
   group.add(ring, posts, roof);
@@ -102,7 +102,7 @@ export function makeLaundry(x1, z1, x2, z2) {
   for (let i = 1; i <= n; i++) {
     const t = i / (n + 1);
     const cx = x1 + (x2 - x1) * t, cz = z1 + (z2 - z1) * t;
-    const cloth = new THREE.Mesh(new THREE.PlaneGeometry(0.55, 0.7), new THREE.MeshBasicMaterial({ color: i % 2 ? C.cloth : C.rug2, fog: true, side: THREE.DoubleSide }));
+    const cloth = new THREE.Mesh(new THREE.PlaneGeometry(0.55, 0.7), toonMat(i % 2 ? C.cloth : C.rug2, { side: THREE.DoubleSide }));
     cloth.position.set(cx, 1.22, cz);
     cloth.rotation.y = Math.atan2(x2 - x1, z2 - z1) + Math.PI / 2;
     cloth.userData.sway = { baseX: cloth.rotation.x, phase: i * 1.7 };
@@ -136,7 +136,7 @@ export function makePots(spots) {
 export function makeRugs(spots) {
   const group = new THREE.Group();
   spots.forEach((s, i) => {
-    const rug = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 1.1), new THREE.MeshBasicMaterial({ color: i % 2 ? C.rug1 : C.rug2, fog: true }));
+    const rug = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 1.1), toonMat(i % 2 ? C.rug1 : C.rug2));
     rug.rotation.x = -Math.PI / 2;
     rug.rotation.z = s.rot ?? 0;
     rug.position.set(s.x, 0.03, s.z);
@@ -148,7 +148,7 @@ export function makeRugs(spots) {
 export function makePaths(spots) {
   const group = new THREE.Group();
   spots.forEach((s) => {
-    const p = new THREE.Mesh(new THREE.CircleGeometry(s.r ?? 2.2, 10), new THREE.MeshBasicMaterial({ color: C.path, fog: true }));
+    const p = new THREE.Mesh(new THREE.CircleGeometry(s.r ?? 2.2, 10), toonMat(C.path));
     p.rotation.x = -Math.PI / 2;
     p.position.set(s.x, 0.015, s.z);
     p.scale.set(s.sx ?? 1, s.sz ?? 1, 1);
@@ -235,23 +235,23 @@ export function makeTentInterior(x, z) {
   // the tent shell seen from inside
   const shell = new THREE.Mesh(
     new THREE.ConeGeometry(4.3, 4.4, 8, 1, true),
-    new THREE.MeshBasicMaterial({ color: 0x9a7550, side: THREE.BackSide, fog: true }),
+    toonMat(0x9a7550, { side: THREE.BackSide }),
   );
   shell.position.set(x, 2.2, z);
   group.add(shell);
   // floor rug layers
-  const rug = new THREE.Mesh(new THREE.CircleGeometry(3.4, 18), new THREE.MeshBasicMaterial({ color: 0x7c4038, fog: true }));
+  const rug = new THREE.Mesh(new THREE.CircleGeometry(3.4, 18), toonMat(0x7c4038));
   rug.rotation.x = -Math.PI / 2;
   rug.position.set(x, 0.015, z);
-  const rug2 = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.6), new THREE.MeshBasicMaterial({ color: 0x4f6b8a, fog: true }));
+  const rug2 = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.6), toonMat(0x4f6b8a));
   rug2.rotation.x = -Math.PI / 2;
   rug2.rotation.z = 0.5;
   rug2.position.set(x + 0.4, 0.03, z + 0.4);
   group.add(rug, rug2);
   // the lamp: a small pot with a warm glow (no real lights — art-style rule)
-  const lampPot = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), new THREE.MeshBasicMaterial({ color: 0x54381f, fog: true }));
+  const lampPot = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), toonMat(0x54381f));
   lampPot.position.set(x - 1.1, 0.45, z - 0.7);
-  const lampPost = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.45, 5), new THREE.MeshBasicMaterial({ color: 0x54381f, fog: true }));
+  const lampPost = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.45, 5), toonMat(0x54381f));
   lampPost.position.set(x - 1.1, 0.2, z - 0.7);
   const glowTex = canvasTexture(64, 64, (ctx, w, h) => {
     const g = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
@@ -266,12 +266,12 @@ export function makeTentInterior(x, z) {
   group.add(lampPot, lampPost, lampGlow);
   // cushions + a cedar chest
   [[x + 1.1, z - 0.9, 0xa8622f], [x + 1.5, z - 0.2, 0x96473e], [x - 0.6, z + 1.3, 0x4f6b8a]].forEach(([cx, cz, col]) => {
-    const cushion = new THREE.Mesh(new THREE.SphereGeometry(0.34, 8, 6), new THREE.MeshBasicMaterial({ color: col, fog: true }));
+    const cushion = new THREE.Mesh(new THREE.SphereGeometry(0.34, 8, 6), toonMat(col));
     cushion.scale.set(1, 0.45, 1);
     cushion.position.set(cx, 0.15, cz);
     group.add(cushion);
   });
-  const chest = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.5, 0.55), new THREE.MeshBasicMaterial({ color: C.wood, fog: true }));
+  const chest = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.5, 0.55), toonMat(C.wood));
   chest.position.set(x - 0.2, 0.25, z - 1.6);
   chest.rotation.y = 0.3;
   group.add(chest);
@@ -307,7 +307,7 @@ export function makePen(rect) {
   group.add(inst(new THREE.CylinderGeometry(0.06, 0.07, 1.0, 5), C.wood, posts, { seedRot: 44 }));
   railSegs.forEach(([cx, cz, len, ang]) => {
     [0.45, 0.8].forEach((h) => {
-      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.05, len), new THREE.MeshBasicMaterial({ color: C.woodDark, fog: true }));
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.05, len), toonMat(C.woodDark));
       rail.position.set(cx, h, cz);
       rail.rotation.y = ang;
       group.add(rail);

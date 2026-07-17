@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { mulberry32, mergeGeometries } from '../../engine/world.js';
+import { mulberry32, mergeGeometries, toonMat } from '../../engine/world.js';
 
 // The camp flock: instanced low-poly sheep (2 draw calls total — bodies +
 // heads), graze-wander loops, and the HERD mechanic: walk near a stray and it
@@ -24,8 +24,8 @@ export class SheepFlock {
     headGeo.translate(0, 0.5, 0.42);
 
     this.total = count + strays.length;
-    this.bodies = new THREE.InstancedMesh(bodyGeo, new THREE.MeshBasicMaterial({ color: 0xefe9dc, fog: true }), this.total);
-    this.heads = new THREE.InstancedMesh(headGeo, new THREE.MeshBasicMaterial({ color: 0x5a4d3f, fog: true }), this.total);
+    this.bodies = new THREE.InstancedMesh(bodyGeo, toonMat(0xf3eee2), this.total);
+    this.heads = new THREE.InstancedMesh(headGeo, toonMat(0x5a4d3f), this.total);
     scene.add(this.bodies, this.heads);
 
     this._d = new THREE.Object3D();

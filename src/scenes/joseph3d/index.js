@@ -12,6 +12,7 @@ import { MoodGrading, MOODS } from '../../engine/MoodGrading.js';
 import { Sequencer } from '../../engine/Sequencer.js';
 import { makeSmoke, makeEmbers, makeFireflies } from '../../engine/particles.js';
 import { CharacterFactory } from '../../engine/CharacterFactory.js';
+import { Graphics } from '../../systems/Graphics.js';
 import { createCinema } from '../../ui/cinema.js';
 import { createVerseCard } from '../../ui/verseCard.js';
 import { createDialogue } from '../../ui/dialogue.js';
@@ -34,14 +35,15 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
   // --- world (Alto look, D3 grade: warmer, more saturated, earthier ground).
   // Base palette comes straight from MOODS.goldenHour — one source of truth.
   const gh = MOODS.goldenHour;
-  scene.fog = new THREE.Fog(gh.fog, gh.fogNear, 250);
+  scene.fog = new THREE.Fog(gh.fog, gh.fogNear, Graphics.fogFar);
   const sky = makeSky({ top: gh.skyTop, bottom: gh.skyBottom });
   scene.add(sky.mesh);
   // Every story STAGE carves its own flat pad (level-layout law 1): the camp,
-  // the dream field, the pit, and Jacob's tent interior.
+  // the dream field, the pit, and Jacob's tent interior. D4: the ground is a
+  // sun-lit GRASS field — green base with brighter grass + dry-dirt patches.
   const ground = makeGround({
-    color: 0x6a5140, // dark warm earth (Nate: "darker and earthier")
-    mottle: [0x7d6148, 0x5d6b45], // sunlit earth + olive-grass patches
+    color: 0x63763c, // sunlit grass green
+    mottle: [0x76893f, 0x8a6a3d], // brighter grass tufts + dry dirt patches
     segX: 96, segZ: 30,
     pads: [
       { x: 0, z: 0, flatCore: 27, falloff: 42 },    // the camp
@@ -53,13 +55,15 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
   scene.add(ground);
   scene.add(makeRidges());
   scene.add(makeSun());
-  const motes = makeMotes({ count: 70 });
+  const motes = makeMotes({ count: Graphics.particles(70) });
   scene.add(motes.points);
 
-  // character light rig (the deliberate exception — no shadows)
+  // The SUN — a real warm directional key light that now shapes the WHOLE
+  // world (props, ground, characters), plus a hemisphere sky/ground fill.
+  // MoodGrading arcs its position + color across the day (afternoon→dusk→night).
   const keyLight = new THREE.DirectionalLight(gh.key, gh.keyI);
-  keyLight.position.set(-6, 10, 5);
-  const hemiLight = new THREE.HemisphereLight(gh.skyBottom, 0x5d4a3a, gh.hemi);
+  keyLight.position.set(...(gh.sun ?? [-9, 13, 6]));
+  const hemiLight = new THREE.HemisphereLight(gh.hemiSky ?? gh.skyBottom, 0x4a5a34, gh.hemi);
   scene.add(keyLight, hemiLight);
 
   // --- camp set + collision ---
@@ -68,11 +72,11 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
   scene.add(camp.group);
 
   // --- particles ---
-  const smoke = makeSmoke({ count: 30 });
-  const embers = makeEmbers({ count: 16 });
+  const smoke = makeSmoke({ count: Graphics.particles(30) });
+  const embers = makeEmbers({ count: Graphics.particles(16) });
   camp.fireEmitters.forEach((e) => { smoke.addEmitter(e.x, e.y, e.z); embers.addEmitter(e.x, e.y, e.z); });
   smoke.init(); embers.init();
-  const fireflies = makeFireflies({ count: 26, span: 34 });
+  const fireflies = makeFireflies({ count: Graphics.particles(26), span: 34 });
   fireflies.init();
   scene.add(smoke.points, embers.points, fireflies.points);
 
@@ -247,6 +251,12 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
     nameTags.add(cast.judah.char, 'Judah');
     nameTags.add(cast.simeon.char, 'Simeon');
     nameTags.add(cast.levi.char, 'Levi');
+
+    // soft contact-shadow blobs under every character (Graphics High only)
+    if (Graphics.contactShadow) {
+      joseph.addContactShadow();
+      Object.values(cast).forEach((n) => n.char?.addContactShadow(n.char === cast.child?.char ? 0.7 : 1.15));
+    }
 
     controller = new PlayerController3D({
       camera, character: joseph, bounds, colliders, radius: 0.42,

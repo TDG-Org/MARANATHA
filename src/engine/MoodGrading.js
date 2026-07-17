@@ -5,18 +5,22 @@ import { easeInOut } from './world.js';
 // in one eased tween — sky stops, fog color/near, the character light rig, and
 // a whisper of DOM tint. Scenes pass their own mood table; beats call
 // grade('dusk'). Update per frame.
-// D3 grade: richer saturation + contrast (Nate's cozy mandate) — deeper
-// orange golden hour, hotter dusk sunset, more magical dream violet.
+// D4 grade: the environment is now LIT by the sun, so each mood also carries a
+// SUN DIRECTION (`sun: [x,y,z]` — the directional light's position; it points
+// at the origin) and a hemi fill color, and the whole day cycle re-shades the
+// camp: golden afternoon (high warm sun) → orange dusk (low, raking) → cool
+// night (low moonlight from the far side). Key intensities are tuned so lit
+// surfaces read rich, not blown out.
 export const MOODS = {
-  goldenHour: { skyTop: 0xefa45e, skyBottom: 0xffe4b6, fog: 0xffd6a2, fogNear: 44, key: 0xffedc2, keyI: 1.28, hemi: 0.66, tint: '#000000', tintA: 0 },
+  goldenHour: { skyTop: 0xefa45e, skyBottom: 0xffe4b6, fog: 0xffd6a2, fogNear: 44, key: 0xffe1ad, keyI: 1.05, hemi: 0.5, hemiSky: 0xffe4b6, sun: [-9, 13, 6], tint: '#000000', tintA: 0 },
   // The pit (cold open): trapped, airless — fog crushes in to ~18 (environment-vibes).
-  pit: { skyTop: 0x3a3550, skyBottom: 0x6b5a63, fog: 0x5a5464, fogNear: 18, key: 0x9a8fb0, keyI: 0.55, hemi: 0.35, tint: '#1c1830', tintA: 0.12 },
-  // Jacob's tent interior: lamplight, close air, wool and cedar.
-  tentWarm: { skyTop: 0x4a4e8f, skyBottom: 0xe88d67, fog: 0x2e2118, fogNear: 11, key: 0xffcf96, keyI: 1.05, hemi: 0.55, tint: '#2a1c10', tintA: 0.08 },
-  dusk: { skyTop: 0x434b9e, skyBottom: 0xf28a58, fog: 0xc08a70, fogNear: 38, key: 0xffd2a0, keyI: 0.9, hemi: 0.52, tint: '#3a2f55', tintA: 0.08 },
-  ominous: { skyTop: 0x3a3550, skyBottom: 0x6b5a63, fog: 0x5a5464, fogNear: 26, key: 0xd9c2b0, keyI: 0.7, hemi: 0.42, tint: '#251f33', tintA: 0.12 },
-  dream: { skyTop: 0x2b3a67, skyBottom: 0x9a8fd2, fog: 0x6f6ca4, fogNear: 34, key: 0xd4dcff, keyI: 0.95, hemi: 0.58, tint: '#1d2547', tintA: 0.1 },
-  night: { skyTop: 0x0b1026, skyBottom: 0x2b3a67, fog: 0x1b2340, fogNear: 30, key: 0x9fb0d8, keyI: 0.6, hemi: 0.4, tint: '#060a18', tintA: 0.12 },
+  pit: { skyTop: 0x3a3550, skyBottom: 0x6b5a63, fog: 0x5a5464, fogNear: 18, key: 0x9a8fb0, keyI: 0.5, hemi: 0.4, hemiSky: 0x6b5a63, sun: [0, 12, 5], tint: '#1c1830', tintA: 0.12 },
+  // Jacob's tent interior: warm lamplight raking from one side.
+  tentWarm: { skyTop: 0x4a4e8f, skyBottom: 0xe88d67, fog: 0x2e2118, fogNear: 11, key: 0xffc888, keyI: 1.0, hemi: 0.45, hemiSky: 0xe8a86a, sun: [-3.5, 5, 2.5], tint: '#2a1c10', tintA: 0.08 },
+  dusk: { skyTop: 0x434b9e, skyBottom: 0xf28a58, fog: 0xc08a70, fogNear: 38, key: 0xffb877, keyI: 0.82, hemi: 0.46, hemiSky: 0xf28a58, sun: [-15, 4.5, 3], tint: '#3a2f55', tintA: 0.08 },
+  ominous: { skyTop: 0x3a3550, skyBottom: 0x6b5a63, fog: 0x5a5464, fogNear: 26, key: 0xcab39a, keyI: 0.66, hemi: 0.4, hemiSky: 0x6b5a63, sun: [-7, 8, 3], tint: '#251f33', tintA: 0.12 },
+  dream: { skyTop: 0x2b3a67, skyBottom: 0x9a8fd2, fog: 0x6f6ca4, fogNear: 34, key: 0xc8d4ff, keyI: 0.72, hemi: 0.5, hemiSky: 0x9a8fd2, sun: [7, 10, -7], tint: '#1d2547', tintA: 0.1 },
+  night: { skyTop: 0x0b1026, skyBottom: 0x2b3a67, fog: 0x1b2340, fogNear: 30, key: 0x9fb6e0, keyI: 0.5, hemi: 0.36, hemiSky: 0x2b3a67, sun: [11, 7, -6], tint: '#060a18', tintA: 0.12 },
 };
 
 export class MoodGrading {
@@ -30,6 +34,10 @@ export class MoodGrading {
     this._toFog = new THREE.Color();
     this._fromKey = new THREE.Color();
     this._toKey = new THREE.Color();
+    this._fromHemiSky = new THREE.Color();
+    this._toHemiSky = new THREE.Color();
+    this._fromSun = new THREE.Vector3();
+    this._toSun = new THREE.Vector3();
   }
 
   // Eased transition to a named mood. Resolves when the grade completes.
@@ -43,6 +51,10 @@ export class MoodGrading {
     this._toFog.set(m.fog);
     this._fromKey.copy(r.keyLight.color);
     this._toKey.set(m.key);
+    this._fromHemiSky.copy(r.hemiLight.color);
+    this._toHemiSky.set(m.hemiSky ?? m.skyBottom);
+    this._fromSun.copy(r.keyLight.position);
+    this._toSun.set(...(m.sun ?? [-9, 13, 6]));
     r.cinema?.setTint(m.tint, m.tintA);
     return new Promise((resolve) => {
       this._tween = {
@@ -66,6 +78,9 @@ export class MoodGrading {
     r.keyLight.color.lerpColors(this._fromKey, this._toKey, k);
     r.keyLight.intensity = tw.keyI0 + (tw.keyI1 - tw.keyI0) * k;
     r.hemiLight.intensity = tw.hemi0 + (tw.hemi1 - tw.hemi0) * k;
+    r.hemiLight.color.lerpColors(this._fromHemiSky, this._toHemiSky, k);
+    // the sun ARCS across the day (direction re-shades the whole camp)
+    r.keyLight.position.lerpVectors(this._fromSun, this._toSun, k);
     if (k >= 1) { tw.resolve(); this._tween = null; }
   }
 

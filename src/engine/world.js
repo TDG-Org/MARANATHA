@@ -38,6 +38,32 @@ export function canvasTexture(w, h, draw) {
   return tex;
 }
 
+// --- Lit materials (D4): the environment is now SHAPED by the sun --------------
+// A shared 4-band toon gradient so lit props read stylized (matching the toon
+// characters), not smoothly shaded. RedFormat 1D ramp = the three.js idiom.
+let _toonGrad = null;
+export function toonGradient() {
+  if (_toonGrad) return _toonGrad;
+  const steps = new Uint8Array([96, 160, 214, 255]);
+  const tex = new THREE.DataTexture(steps, steps.length, 1, THREE.RedFormat);
+  tex.minFilter = THREE.NearestFilter;
+  tex.magFilter = THREE.NearestFilter;
+  tex.needsUpdate = true;
+  _toonGrad = tex;
+  return tex;
+}
+
+// toonMat — banded toon shading for props (lit by the sun + hemi fill).
+export function toonMat(color, opts = {}) {
+  return new THREE.MeshToonMaterial({ color, fog: true, gradientMap: toonGradient(), ...opts });
+}
+
+// litMat — smooth Lambert shading for big surfaces (ground) where banding would
+// look harsh; still shaped by the sun.
+export function litMat(color, opts = {}) {
+  return new THREE.MeshLambertMaterial({ color, fog: true, ...opts });
+}
+
 export function glowTexture(px = 256) {
   return canvasTexture(px, px, (ctx, w, h) => {
     const g = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
@@ -239,7 +265,9 @@ export function makeGround({
     }
   }
   geo.computeVertexNormals();
-  const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial(
+  // D4: the ground is now LIT by the sun (Lambert) — swells catch light, dirt
+  // and grass patches read with real form instead of a flat sheet.
+  const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial(
     colAttr ? { vertexColors: true, fog: true } : { color, fog: true },
   ));
   mesh.position.z = z;
