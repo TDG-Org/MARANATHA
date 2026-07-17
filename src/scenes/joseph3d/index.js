@@ -83,6 +83,25 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
   // --- presentation ---
   let disposed = false; // set on dispose(); async init + the story loop check it
   const cinema = createCinema({ isPaused: () => app.paused });
+
+  // FUTURE-VIGNETTE (cold open): a dark border + drained/desaturated grade that
+  // says "this is the future," lifted the moment golden morning fades in — so no
+  // one confuses the flash-forward for now.
+  const vignette = document.createElement('div');
+  vignette.style.cssText = [
+    'position:fixed', 'inset:0', 'z-index:25', 'pointer-events:none', 'opacity:0',
+    'transition:opacity 1200ms ease',
+    'box-shadow:inset 0 0 22vw 9vw rgba(6,5,10,0.92)',
+    'background:radial-gradient(ellipse at center, rgba(20,22,30,0) 42%, rgba(10,10,16,0.55) 100%)',
+  ].join(';');
+  document.body.append(vignette);
+  const canvasEl = renderer.domElement;
+  const futureVignette = (on) => {
+    vignette.style.opacity = on ? '1' : '0';
+    canvasEl.style.transition = 'filter 1200ms ease';
+    canvasEl.style.filter = on ? 'saturate(0.32) contrast(1.06) brightness(0.86)' : 'none';
+  };
+
   const verseCard = createVerseCard();
   const dialogue = createDialogue();
   const nameTags = createNameTags();
@@ -201,7 +220,7 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
     camera: director, sequencer: null, setInput,
     isPaused: () => app.paused,
     sound: (key) => { if (!disposed) Audio.play(key); },
-    setMusic, camp, dream, pit, tentInterior, bounds,
+    setMusic, camp, dream, pit, tentInterior, bounds, futureVignette,
     get joseph() { return joseph; },
     get cast() { return cast; },
     npcs,
@@ -335,6 +354,8 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
 
   function dispose() {
     disposed = true; // stops the story loop, zombie async init, sound/finish
+    canvasEl.style.filter = 'none'; // never leave the desaturate on the home screen
+    vignette.remove();
     renderer.domElement.removeEventListener('contextmenu', onCanvasContextMenu);
     Object.values(beds).forEach((b) => b.stop(0.6));
     music.stop(0.6);
@@ -396,66 +417,91 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
 function buildPitStage() {
   const group = new THREE.Group();
   const PIT = { x: -62, z: 6 };
+  const rnd = mulberry32(37);
 
-  // walls — an open cylinder seen from inside (BackSide), dry-earth dark
-  const wall = new THREE.Mesh(
-    new THREE.CylinderGeometry(3.4, 2.7, 5.2, 20, 1, true),
-    new THREE.MeshBasicMaterial({ color: 0x4a4258, side: THREE.BackSide, fog: true }),
-  );
-  wall.position.set(PIT.x, 2.6, PIT.z);
-  group.add(wall);
+  // harsh rocky ground around the pit (Shechem wilderness — paler, rougher)
+  const patch = new THREE.Mesh(new THREE.CircleGeometry(10, 26), new THREE.MeshBasicMaterial({ color: 0x8a7c60, fog: true }));
+  patch.rotation.x = -Math.PI / 2; patch.position.set(PIT.x, 0.02, PIT.z);
+  group.add(patch);
+  const rockGeo = new THREE.DodecahedronGeometry(0.5, 0); rockGeo.translate(0, 0.18, 0);
+  const rspots = [];
+  for (let i = 0; i < 12; i++) { const a = rnd() * Math.PI * 2, r = 3.8 + rnd() * 5; rspots.push([PIT.x + Math.cos(a) * r, PIT.z + Math.sin(a) * r]); }
+  const rocks = new THREE.InstancedMesh(rockGeo, new THREE.MeshBasicMaterial({ color: 0x796d55, fog: true }), rspots.length);
+  const rd = new THREE.Object3D();
+  rspots.forEach((s, i) => { rd.position.set(s[0], 0, s[1]); rd.scale.setScalar(0.6 + rnd() * 1.3); rd.rotation.y = rnd() * 6; rd.updateMatrix(); rocks.setMatrixAt(i, rd.matrix); });
+  rocks.instanceMatrix.needsUpdate = true; group.add(rocks);
 
-  // floor — packed dry earth (the pit was EMPTY; no water in it)
-  const floor = new THREE.Mesh(new THREE.CircleGeometry(2.75, 20), new THREE.MeshBasicMaterial({ color: 0x332e44, fog: true }));
-  floor.rotation.x = -Math.PI / 2;
-  floor.position.set(PIT.x, 0.01, PIT.z);
-  group.add(floor);
+  // the pit MOUTH — a dark hole in the ground
+  const mouth = new THREE.Mesh(new THREE.CircleGeometry(2.4, 22), new THREE.MeshBasicMaterial({ color: 0x120e18, fog: true }));
+  mouth.rotation.x = -Math.PI / 2; mouth.position.set(PIT.x, 0.04, PIT.z); group.add(mouth);
 
-  // the light shaft — dusty light falling from the rim (additive, fog-exempt)
-  const shaft = new THREE.Mesh(
-    new THREE.CylinderGeometry(1.05, 1.9, 6.4, 14, 1, true),
-    new THREE.MeshBasicMaterial({
-      color: 0xfff0d0, transparent: true, opacity: 0.09, fog: false,
-      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
-    }),
-  );
-  shaft.position.set(PIT.x + 0.4, 3.1, PIT.z - 0.3);
-  shaft.rotation.z = 0.1;
-  group.add(shaft);
+  // the pit INTERIOR (below ground) — walls + dark floor for the fall shot
+  const wall = new THREE.Mesh(new THREE.CylinderGeometry(2.5, 2.05, 4.6, 20, 1, true), new THREE.MeshBasicMaterial({ color: 0x372f47, side: THREE.BackSide, fog: true }));
+  wall.position.set(PIT.x, -2.05, PIT.z); group.add(wall);
+  const floor = new THREE.Mesh(new THREE.CircleGeometry(2.15, 20), new THREE.MeshBasicMaterial({ color: 0x1a1622, fog: true }));
+  floor.rotation.x = -Math.PI / 2; floor.position.set(PIT.x, -4.0, PIT.z); group.add(floor);
 
-  // the brothers — ink silhouettes leaning over the rim, against the sky
+  // the SKY-LIGHT above the pit — a bright disc that SHRINKS as he falls in
+  const ringTex = (() => {
+    const c = document.createElement('canvas'); c.width = c.height = 64;
+    const ctx = c.getContext('2d');
+    const g = ctx.createRadialGradient(32, 32, 6, 32, 32, 32);
+    g.addColorStop(0, 'rgba(255,246,220,0.95)'); g.addColorStop(1, 'rgba(255,246,220,0)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, 64, 64);
+    return new THREE.CanvasTexture(c);
+  })();
+  const skyLight = new THREE.Sprite(new THREE.SpriteMaterial({ map: ringTex, color: 0xfff2cf, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+  skyLight.position.set(PIT.x, 3.6, PIT.z); skyLight.scale.setScalar(8);
+  group.add(skyLight);
+
+  // the brothers — ink silhouettes (converge over the boy, then walk away)
   const silTone = new THREE.MeshBasicMaterial({ color: 0x241f38, fog: false });
-  const camAngle = Math.PI * 0.15; // must match the cold-open shot
   const figures = [];
-  [-0.75, -0.25, 0.3, 0.85].forEach((off, i) => {
+  for (let i = 0; i < 4; i++) {
     const fig = new THREE.Group();
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 8, 6), silTone);
-    head.position.y = 0.34;
-    const shoulders = new THREE.Mesh(new THREE.SphereGeometry(0.3, 8, 6), silTone);
-    shoulders.scale.set(1.25, 0.72, 0.8);
-    fig.add(head, shoulders);
-    const a = camAngle + off;
-    fig.position.set(PIT.x + Math.sin(a) * 3.15, 5.05 + (i % 2) * 0.14, PIT.z + Math.cos(a) * 3.15);
-    fig.lookAt(PIT.x, 4.4, PIT.z);   // lean in toward the boy below
-    fig.rotateX(0.35);
-    fig.userData.baseY = fig.position.y;
-    fig.userData.phase = i * 1.9;
-    figures.push(fig);
-    group.add(fig);
-  });
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.19, 8, 6), silTone);
+    head.position.y = 1.55;
+    const body = new THREE.Mesh(new THREE.ConeGeometry(0.42, 1.5, 6), silTone);
+    body.position.y = 0.75;
+    fig.add(head, body);
+    fig.userData = { phase: i * 1.7 };
+    figures.push(fig); group.add(fig);
+  }
+
+  // the torn coat a brother carries off (argyle-red cloth)
+  const coatProp = new THREE.Mesh(new THREE.PlaneGeometry(0.55, 0.8), new THREE.MeshBasicMaterial({ color: 0xb5643c, side: THREE.DoubleSide, fog: true }));
+  coatProp.visible = false; group.add(coatProp);
 
   return {
-    group, PIT,
-    // never-static: the dust shaft breathes; the watchers shift their weight
+    group, PIT, figures, coatProp, skyLight,
+    // place the 4 brothers in a ring around the pit, facing in (the mob)
+    ringBrothers() {
+      figures.forEach((f, i) => {
+        const a = Math.PI * 0.15 + (i - 1.5) * 0.5;
+        f.position.set(PIT.x + Math.sin(a) * 2.9, 0, PIT.z + Math.cos(a) * 2.9);
+        f.lookAt(PIT.x, 0.9, PIT.z);
+      });
+    },
+    // walk the brothers away from the pit (toward +x, back to camp) over k=0..1
+    walkAway(k) {
+      figures.forEach((f, i) => {
+        f.position.x = PIT.x + Math.sin(Math.PI * 0.15 + (i - 1.5) * 0.5) * 2.9 + k * 7;
+        f.position.z = PIT.z + Math.cos(Math.PI * 0.15 + (i - 1.5) * 0.5) * 2.9 - k * 2;
+        f.rotation.y = Math.PI * 0.15;
+      });
+      // the lead brother carries the coat
+      coatProp.visible = true;
+      coatProp.position.set(figures[0].position.x + 0.4, 0.9, figures[0].position.z);
+    },
+    setSkyLight(k) { skyLight.material.opacity = 0.9 * k; },
+    shrinkSkyLight(k) { skyLight.scale.setScalar(8 - 6.5 * k); }, // k 0→1 closes over him
     update(dt, t) {
       if (!group.visible) return;
-      shaft.material.opacity = 0.085 + Math.sin(t * 0.7) * 0.02;
-      for (const f of figures) {
-        f.position.y = f.userData.baseY + Math.sin(t * 0.9 + f.userData.phase) * 0.035;
-      }
+      for (const f of figures) f.position.y = Math.sin(t * 0.9 + f.userData.phase) * 0.02;
     },
     dispose() {
-      group.traverse((o) => { if (o.isMesh) { o.geometry?.dispose?.(); o.material?.dispose?.(); } });
+      ringTex.dispose();
+      group.traverse((o) => { if (o.isInstancedMesh) o.dispose(); if (o.isMesh || o.isSprite) { o.geometry?.dispose?.(); o.material?.dispose?.(); } });
       group.parent?.remove(group);
     },
   };

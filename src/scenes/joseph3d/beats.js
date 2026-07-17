@@ -37,52 +37,75 @@ export function createBeats(ctx) {
     },
   });
 
-  // ---------- beat 0 · 🕳️ COLD OPEN (Gen 37:24) → 🌅 the golden camp ----------
+  // ---------- beat 0 · 🕳️ COLD OPEN v2: the betrayal → 🌅 the golden morning --
   async function intro() {
     ctx.setInput(false);
     const P = ctx.pit;
+    const jRoot = ctx.joseph.root;
 
-    // THE PIT — a flash of where this story is going. Black. Wind. A boy at
-    // the bottom of a dry cistern; his brothers' silhouettes over the rim.
-    // (bounds must move WITH him — the controller clamp runs even with input
-    // off, and camp bounds would yank him 40u out of the shot)
+    // THE BETRAYAL — a flash of where this story is going, worn in a drained
+    // "future" grade + dark vignette so no one mistakes it for now. Harsh
+    // daylight at a rocky pit; the brothers tear off his coat and throw him in.
+    ctx.futureVignette(true);
     ctx.grading.set('pit');
     P.group.visible = true;
-    ctx.joseph.setCoat(false);
-    ctx.controller.bounds = { minX: P.PIT.x - 2.4, maxX: P.PIT.x + 2.4, minZ: P.PIT.z - 2.4, maxZ: P.PIT.z + 2.4 };
-    ctx.joseph.setPosition(P.PIT.x, P.PIT.z);
-    ctx.joseph.play('kneel');
-    ctx.camera.cinematicMoveTo({ angle: Math.PI * 0.15, target: { x: P.PIT.x, z: P.PIT.z }, distance: 2.3, height: 0.7, lookHeight: 1.0, duration: 1 });
+    P.ringBrothers();
+    P.setSkyLight(1); P.shrinkSkyLight(0);
+    ctx.joseph.setCoat(true); // in the flash he STILL wears the coat — they rip it off
+    ctx.controller.bounds = { minX: P.PIT.x - 4, maxX: P.PIT.x + 4, minZ: P.PIT.z - 4, maxZ: P.PIT.z + 4 };
+    ctx.joseph.setPosition(P.PIT.x, P.PIT.z - 0.4);
+    ctx.joseph.play('idle');
+    ctx.camera.cinematicMoveTo({ angle: Math.PI * 0.12, target: { x: P.PIT.x, z: P.PIT.z }, distance: 6, height: 3.2, lookHeight: 1.2, duration: 1 });
     await seq([
-      { t: 'fade', on: true, ms: 0 },     // open on black
+      { t: 'fade', on: true, ms: 0 },
       { t: 'letterbox', on: true },
       { t: 'wait', ms: 500 },
-      { t: 'fade', on: false, ms: 2800 }, // the pit fades in: dust, one shaft of light
-      { t: 'wait', ms: 800 },
+      { t: 'fade', on: false, ms: 1500 }, // reveal: harsh daylight at the pit
+      { t: 'wait', ms: 900 },
+      // (1) the brothers TEAR OFF the ornate coat
+      { t: 'cam', angle: Math.PI * 0.08, target: () => ({ x: ctx.joseph.position.x, z: ctx.joseph.position.z }), distance: 3.6, height: 1.8, lookHeight: 1.2, duration: 1300 },
+      { t: 'fn', fn: async () => { ctx.sound('sfx.cloth_equip'); ctx.joseph.setCoat(false); await wait(650); } },
+      // (2) thrown in — SLOW-MO fall into the dark, the light closing above
+      { t: 'cam', angle: Math.PI * 0.08, target: { x: P.PIT.x, z: P.PIT.z }, distance: 5.4, height: 6.2, lookHeight: -1.6, duration: 1500 },
+      { t: 'fn', fn: async () => {
+        ctx.sound('stinger.hatred');
+        const D = 2200; let e = 0;
+        while (e < D) { await wait(50); e += 50; const k = e / D;
+          jRoot.position.y = -k * 3.2;                       // the fall
+          jRoot.position.x += (P.PIT.x - jRoot.position.x) * 0.12;
+          jRoot.position.z += (P.PIT.z - jRoot.position.z) * 0.12;
+          P.shrinkSkyLight(k);                                // light shrinks above
+        }
+      } },
       { t: 'verse', verse: WEB.gen_37_24 },
       { t: 'verseHide' },
-      // Joseph looks up — the camera lifts to the rim, the silhouettes
-      { t: 'cam', angle: Math.PI * 0.15, target: { x: P.PIT.x, z: P.PIT.z }, distance: 1.9, height: 0.5, lookHeight: 4.6, duration: 2800 },
-      { t: 'wait', ms: 400 },
-      { t: 'sound', key: 'stinger.hatred' },
-      { t: 'fade', on: true, ms: 130 },   // SMASH to black
+      // (3) cut: the brothers walking away, coat in hand. cold.
+      { t: 'fade', on: true, ms: 500 },
+      { t: 'fn', fn: () => { jRoot.position.y = -3.2; P.walkAway(0); ctx.grading.set('ominous'); } },
+      { t: 'cam', angle: Math.PI * 0.95, target: { x: P.PIT.x + 3.5, z: P.PIT.z - 1 }, distance: 6.5, height: 2.2, lookHeight: 1.2, duration: 1, awaitMs: false },
+      { t: 'fade', on: false, ms: 650 },
+      { t: 'fn', fn: async () => { const D = 2400; let e = 0; while (e < D) { await wait(60); e += 60; P.walkAway(e / D); } } },
+      { t: 'wait', ms: 500 },
+      // (4) slow fade to black → the drained "future" look LIFTS as morning comes
+      { t: 'fade', on: true, ms: 1600 },
       { t: 'fn', fn: () => {
         P.group.visible = false;
-        ctx.joseph.play('idle');
+        jRoot.position.y = 0;
+        ctx.joseph.setCoat(false);
+        ctx.controller.bounds = ctx.bounds;
+        ctx.joseph.setPosition(-7, -2.5); // by his tent in the camp
         ctx.grading.set('goldenHour');
-        ctx.controller.bounds = ctx.bounds; // back to the camp
-        ctx.joseph.setPosition(0, 15);
-        ctx.camera.cinematicMoveTo({ angle: Math.PI * 0.9, target: { x: 0, z: -2 }, distance: 17, height: 9, lookHeight: 0.5, duration: 1 });
+        ctx.futureVignette(false);        // NOW — the desaturate + border lift
+        ctx.camera.cinematicMoveTo({ angle: Math.PI * 0.9, target: { x: -5, z: -3 }, distance: 14, height: 7, lookHeight: 1, duration: 1 });
       } },
-      // the time-jump card plays OVER black (the Bible gives no number of
-      // years, so the card says only "Earlier")
-      { t: 'title', heading: 'Earlier', sub: 'Hebron, Canaan · c. 1898 BC · Genesis 37', holdMs: 3400 },
-      { t: 'fade', on: false, ms: 1600 },
-      // crane-down over the golden camp
-      { t: 'cam', angle: Math.PI * 1.12, target: { x: 0, z: 0 }, distance: 12, height: 5.5, lookHeight: 1.2, duration: 9000, awaitMs: false },
+      { t: 'title', heading: 'Hebron, Canaan', sub: 'The next morning · c. 1898 BC · Genesis 37', holdMs: 3200 },
+      { t: 'fade', on: false, ms: 1800 },
+      // (5) a slow, beautiful pan across the golden camp; Joseph steps out
+      { t: 'cam', angle: Math.PI * 1.1, target: { x: 2, z: -2 }, distance: 12, height: 5.5, lookHeight: 1.3, duration: 9000, awaitMs: false },
       { t: 'verse', verse: WEB.gen_37_1 },
       { t: 'verse', verse: WEB.gen_37_2_short },
       { t: 'verseHide' },
+      { t: 'fn', fn: () => { ctx.joseph.turnToward(1, 1); } },
       { t: 'camRelease', ms: 1600 },
       { t: 'letterbox', on: false },
     ]);
