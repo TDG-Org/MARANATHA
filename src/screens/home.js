@@ -45,8 +45,13 @@ export function buildHome({ scene, camera, app }) {
   const camPos = new THREE.Vector3();
   const camLook = new THREE.Vector3();
 
-  // Warm ambience + a whisper of the music bed once audio is unlocked.
-  const startBeds = () => { Audio.ambience({ wind: 0.22, birds: 0.18 }); Audio.musicPad(0.028); };
+  // Warm ambience + REAL soft looping music once audio is unlocked (D6 —
+  // the camp theme at low gain; falls back to the procedural pad if missing).
+  let homeMusic = null;
+  const startBeds = () => {
+    Audio.ambience({ wind: 0.22, birds: 0.18 });
+    homeMusic = Audio.playLoop('music.camp_warm', { gain: 0.45 });
+  };
   if (Audio.on) startBeds();
   else window.addEventListener('pointerdown', startBeds, { once: true });
 
@@ -235,6 +240,9 @@ export function buildHome({ scene, camera, app }) {
   }
 
   function dispose() {
+    window.removeEventListener('pointerdown', startBeds);
+    homeMusic?.stop(0.8);
+    Audio.ambience({ wind: 0, birds: 0 });
     root.remove();
     gear.remove();
     links.remove();

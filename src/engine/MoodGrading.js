@@ -16,7 +16,10 @@ import { easeInOut } from './world.js';
 // light together, so evening turns the mountains warm-red, night turns them
 // cool, morning turns them golden (lighting-mood hard rule).
 export const MOODS = {
-  goldenHour: { skyTop: 0xefa45e, skyBottom: 0xffe4b6, fog: 0xffd6a2, fogNear: 44, key: 0xffe1ad, keyI: 1.05, hemi: 0.5, hemiSky: 0xffe4b6, sun: [-9, 13, 6], ridge: [0xc9a184, 0xb08a8a, 0x74597a], tint: '#000000', tintA: 0 },
+  // goldenHour key light comes FROM the north-low morning sun the player can
+  // SEE in the ridge saddle (D6 sunrise) — shading and sky agree on where the
+  // light is. The warm hemi keeps camera-facing sides painterly, not backlit.
+  goldenHour: { skyTop: 0xefa45e, skyBottom: 0xffe4b6, fog: 0xffd6a2, fogNear: 44, key: 0xffe1ad, keyI: 1.05, hemi: 0.62, hemiSky: 0xffe4b6, sun: [2, 9, -12], ridge: [0xc9a184, 0xb08a8a, 0x74597a], tint: '#000000', tintA: 0 },
   // The pit (cold open): trapped, airless — fog crushes in to ~18 (environment-vibes).
   pit: { skyTop: 0x3a3550, skyBottom: 0x6b5a63, fog: 0x5a5464, fogNear: 18, key: 0x9a8fb0, keyI: 0.5, hemi: 0.4, hemiSky: 0x6b5a63, sun: [0, 12, 5], ridge: [0x8b8496, 0x776f84, 0x565064], tint: '#1c1830', tintA: 0.12 },
   // Jacob's tent interior: warm lamplight raking from one side.

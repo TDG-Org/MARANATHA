@@ -24,7 +24,10 @@ export function createApp(container) {
     quality.recovered = false;
     quality.set(quality.base); // apply the new DPR ceiling live
   });
-  const camera = new THREE.PerspectiveCamera(46, window.innerWidth / window.innerHeight, 0.1, 900);
+  // Guard the aspect: a tab booted in the background can report 0×0 —
+  // 0/0 = NaN would poison the projection matrix until the next resize.
+  const safeAspect = () => (window.innerHeight > 0 ? window.innerWidth / window.innerHeight : 16 / 9);
+  const camera = new THREE.PerspectiveCamera(46, safeAspect(), 0.1, 900);
   const hud = new DebugHud(renderer);
   Settings.bindHud(hud); // apply the player's saved HUD-visibility choice
 
@@ -43,6 +46,7 @@ export function createApp(container) {
   // mobile). DPR stays clamped ≤2 (detectTier + AdaptiveQuality).
   const onResize = () => {
     const w = window.innerWidth, h = window.innerHeight;
+    if (!w || !h) return; // a hidden/zero-sized pass must never poison aspect
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
     renderer.setPixelRatio(Math.min(2, quality.ratio));

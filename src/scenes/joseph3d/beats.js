@@ -218,9 +218,10 @@ export function createBeats(ctx) {
           lev.char.turnToward(j.x - lev.pos.x, j.z - lev.pos.z);
           lev.char.play('talk');
           await ctx.dialogue.say('Levi', 'Mind the flock, little brother. It’s all you’re good for.', { color: J.Levi });
-          // a shared, mocking laugh — the slow burn of their scorn begins
+          // Levi laughs ALONE at his own jab (the solo laugh file); the shared
+          // group laughs are saved for the bigger envy beats.
           sim.char.play('talk'); lev.char.play('talk');
-          ctx.sound('sfx.men_laughing');
+          ctx.sound('sfx.man_laugh');
           await wait(1500);
           sim.char.play('idle'); lev.char.play('idle');
           ctx.dialogue.hide();
@@ -350,7 +351,8 @@ export function createBeats(ctx) {
       { t: 'cam', angle: Math.PI * 0.55, target: { x: 0.8, z: -7.6 }, distance: 5.4, height: 1.8, lookHeight: 1.3, duration: 1, awaitMs: false },
       { t: 'grade', mood: 'ominous', ms: 10 },
       { t: 'sound', key: 'stinger.hatred' },
-      { t: 'fn', fn: () => { ctx.npcs.freeze(ctx.cast.judah, true); ctx.npcs.freeze(ctx.cast.reuben, true); } },
+      // the TENSION music takes over while envy talks (D6: use the real track)
+      { t: 'fn', fn: () => { ctx.setMusic('music.ominous_turn'); ctx.npcs.freeze(ctx.cast.judah, true); ctx.npcs.freeze(ctx.cast.reuben, true); } },
       { t: 'fade', on: false, ms: 420 },
       shot('judah', 'reuben', { side: 0.45, dist: 3.1 }),
       { t: 'anim', get char() { return ctx.cast.judah.char; }, state: 'talk' },
@@ -367,9 +369,11 @@ export function createBeats(ctx) {
       { t: 'verse', verse: WEB.gen_37_4 },
       { t: 'verseHide' },
       { t: 'fn', fn: () => { ctx.npcs.freeze(ctx.cast.judah, false); ctx.npcs.freeze(ctx.cast.reuben, false); } },
-      // Joseph steps back out into the gold, wearing the coat
+      // Joseph steps back out into the gold, wearing the coat — the warm theme
+      // returns as the tension passes (for now)
       { t: 'fade', on: true, ms: 300 },
       { t: 'fn', fn: () => {
+        ctx.setMusic('music.camp_warm');
         T.group.visible = false;
         jac.pos.x = jacHome.x; jac.pos.z = jacHome.z;
         jac.char.setPosition(jacHome.x, jacHome.z);
@@ -442,6 +446,7 @@ export function createBeats(ctx) {
     await seq([
       { t: 'cam', angle: -Math.PI * 0.62, target: { x: 0.4, z: -6.4 }, distance: 3.4, height: 1.35, lookHeight: 0.95, duration: 1200 },
       { t: 'fn', fn: () => {
+        ctx.setMusic('music.ominous_turn'); // tension under the fireside jeer
         jd.char.turnToward(ctx.joseph.position.x - jd.pos.x, ctx.joseph.position.z - jd.pos.z);
         jd.char.play('talk');
       } },
@@ -461,8 +466,12 @@ export function createBeats(ctx) {
     ]);
 
     // the calm walk to his tent to rest — so the dream rises from a quiet night
-    // instead of popping out of nowhere.
+    // instead of popping out of nowhere. Their laughter follows him out (D6:
+    // the laugh fires again as the walk-back quest begins), then the night
+    // quiets back down.
     let rested = false;
+    ctx.setMusic('music.dusk_calm');
+    ctx.sound('sfx.men_laughing');
     ctx.hud.setObjective('The night has turned cold with them. Go to your tent and rest.', 'Walk to your tent.');
     const rest = { x: -8.6, z: -4.4 };
     ctx.guide.setTargetXZ(rest.x, rest.z);

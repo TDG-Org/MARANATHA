@@ -170,7 +170,7 @@ export function makeSky({ top = 0xf2b880, bottom = 0xffe9c9, offset = 0.12, expo
 
 // --- Ridge flats: Alto silhouette crests standing at real depths ------------
 
-export function makeRidgeFlat({ width, height, baseline, waves, seed, color, z }) {
+export function makeRidgeFlat({ width, height, baseline, waves, seed, color, z, notch = null }) {
   const rnd = mulberry32(seed);
   const phases = waves.map(() => rnd() * Math.PI * 2);
   const shape = new THREE.Shape();
@@ -182,6 +182,9 @@ export function makeRidgeFlat({ width, height, baseline, waves, seed, color, z }
     waves.forEach(([f, a], j) => {
       y += Math.sin((i / steps) * Math.PI * 2 * f + phases[j]) * a;
     });
+    // optional SADDLE notch — a smooth gaussian dip between two crests, so a
+    // sunrise has a guaranteed "between the mountains" to rise in (D6).
+    if (notch) y -= notch.depth * Math.exp(-(((x - notch.x) / notch.width) ** 2));
     shape.lineTo(x, Math.min(y, height));
   }
   shape.lineTo(width / 2, -40);
@@ -203,10 +206,14 @@ export function makeRidges(pal = {}) {
   const veryFar = pal.veryFar ?? 0x9a90ad;
   const far = pal.far ?? 0x8a7f9e;
   const mid = pal.mid ?? 0x5d5378;
+  // sunNotch: carve the SAME saddle into all three ridge rows so the sun can
+  // rise clean between two crests (pass { x, width, depth } — the nearer rows
+  // get proportionally shallower dips).
+  const notch = pal.sunNotch ?? null;
   const group = new THREE.Group();
-  group.add(makeRidgeFlat({ width: 700, height: 120, baseline: 42, z: -210, color: veryFar, waves: [[1, 34], [2, 15], [5, 5]], seed: 100 }));
-  group.add(makeRidgeFlat({ width: 560, height: 90, baseline: 26, z: -150, color: far, waves: [[1, 22], [2, 11], [5, 4]], seed: 101 }));
-  group.add(makeRidgeFlat({ width: 440, height: 60, baseline: 12, z: -95, color: mid, waves: [[2, 9], [4, 4.5], [9, 1.6]], seed: 102 }));
+  group.add(makeRidgeFlat({ width: 700, height: 120, baseline: 42, z: -210, color: veryFar, waves: [[1, 34], [2, 15], [5, 5]], seed: 100, notch }));
+  group.add(makeRidgeFlat({ width: 560, height: 90, baseline: 26, z: -150, color: far, waves: [[1, 22], [2, 11], [5, 4]], seed: 101, notch: notch ? { ...notch, depth: notch.depth * 0.55 } : null }));
+  group.add(makeRidgeFlat({ width: 440, height: 60, baseline: 12, z: -95, color: mid, waves: [[2, 9], [4, 4.5], [9, 1.6]], seed: 102, notch: notch ? { ...notch, depth: notch.depth * 0.3 } : null }));
   group.userData.materials = group.children.map((m) => m.material);
   return group;
 }

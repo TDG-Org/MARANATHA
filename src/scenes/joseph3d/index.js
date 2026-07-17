@@ -75,9 +75,13 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
     ],
   });
   scene.add(ground);
-  const ridges = makeRidges();
+  // D6 SUNRISE: a saddle carved into the ridge rows due NORTH — the exact
+  // direction the follow camera faces at every spawn (default yaw π) — and
+  // the sun sits LOW in that gap: the player always wakes looking into the
+  // sunrise between the two mountains, never anywhere else.
+  const ridges = makeRidges({ sunNotch: { x: 8, width: 34, depth: 30 } });
   scene.add(ridges);
-  scene.add(makeSun());
+  scene.add(makeSun({ x: 8, y: 22, z: -200, core: 62, halo: 165 }));
   const motes = makeMotes({ count: Graphics.particles(70) });
   scene.add(motes.points);
 
