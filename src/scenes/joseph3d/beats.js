@@ -13,6 +13,13 @@ export function createBeats(ctx) {
   const seq = (steps) => ctx.sequencer.run(steps);
   const wait = (ms) => pausableWait(ms, ctx.isPaused); // honours the pause menu
 
+  // the morning fire the brothers CIRCLE around for the telling (Task 9). One
+  // source of truth so beat 6 (gather), beat 7 (close) and checkpoint-resume
+  // all agree on the ring.
+  const FIRE = { x: 0, z: -6 };
+  const TELL_RING = [['judah', -0.5], ['reuben', 0.6], ['simeon', 2.0], ['levi', 3.1]];
+  const ringXZ = (a) => ({ x: FIRE.x + Math.cos(a) * 2.2, z: FIRE.z + Math.sin(a) * 2.2 });
+
   // Dialogue cinematography: an over-the-shoulder SHOT computed from LIVE
   // positions — camera behind the listener's shoulder, speaker favored on the
   // near third. Alternate `side` sign between cuts to swap shoulders.
@@ -564,12 +571,36 @@ export function createBeats(ctx) {
     ctx.guide.setTarget(null);
     ctx.setInput(false);
     ctx.grading.grade('goldenHour', 500); // the morning after the dream
-    const freezeAll = (on) => ['judah', 'reuben', 'simeon', 'levi'].forEach((k) => ctx.npcs.freeze(ctx.cast[k], on));
-    // group scene: establish WIDE, then cut to whoever speaks
+
+    // the brothers CIRCLE UP around the morning fire to hear him (Task 9). They
+    // walk in under the letterbox, then sit facing the centre — a real ring.
     await seq([
       { t: 'letterbox', on: true },
-      { t: 'fn', fn: () => { freezeAll(true); ctx.npcs.freeze(jac, true); } },
-      { t: 'cam', angle: Math.PI * 0.6, target: { x: 0.8, z: -7.4 }, distance: 5.2, height: 2.0, lookHeight: 1.3, duration: 1500 },
+      { t: 'cam', angle: Math.PI * 0.62, target: { x: 0.4, z: -6.2 }, distance: 6.6, height: 3.1, lookHeight: 1.3, duration: 1500, awaitMs: false },
+    ]);
+    await Promise.all(TELL_RING.map(([k, a]) => {
+      const n = ctx.cast[k];
+      const p = ringXZ(a);
+      // walk them in; then SNAP to the exact ring slot so a brother the fire-pit
+      // blocked can't leave the circle lopsided (invisible under the letterbox).
+      return ctx.npcs.sendTo(n, p.x, p.z, { speed: 1.7 }).then(() => {
+        n.char.setPosition(p.x, p.z); n.pos.x = p.x; n.pos.z = p.z;
+        ctx.npcs.freeze(n, true);
+        n.char.turnToward(FIRE.x - p.x, FIRE.z - p.z);
+        n.char.play('kneel'); // seated round the fire, facing the centre
+      });
+    }));
+    // Jacob steps in to preside just outside the ring
+    await ctx.npcs.sendTo(jac, -2.6, -4.4, { speed: 1.4 });
+    jac.char.setPosition(-2.6, -4.4); jac.pos.x = -2.6; jac.pos.z = -4.4;
+    ctx.npcs.freeze(jac, true);
+    jac.char.turnToward(FIRE.x - jac.pos.x, FIRE.z - jac.pos.z);
+    ctx.joseph.setPosition(0.9, -4.1);
+    ctx.joseph.turnToward(FIRE.x - 0.9, FIRE.z + 4.1);
+
+    // the telling — establish the CIRCLE wide, then cut to whoever speaks
+    await seq([
+      { t: 'cam', angle: Math.PI * 0.55, target: { x: 0.3, z: -5.7 }, distance: 5.7, height: 2.7, lookHeight: 1.2, duration: 1600 },
       { t: 'fn', fn: () => { ctx.joseph.play('talk'); } },
       shot('joseph', 'judah', { side: 0.4 }),
       { t: 'say', who: 'Joseph', text: 'Brothers — hear this dream I dreamed.', color: J.Joseph },
@@ -588,33 +619,57 @@ export function createBeats(ctx) {
       { t: 'dialogueHide' },
       { t: 'verse', verse: WEB.gen_37_8 },
       { t: 'verseHide' },
-      shot('joseph', 'judah', { side: 0.44, dist: 2.7 }),
+      shot('joseph', 'reuben', { side: 0.44, dist: 2.7 }),
       { t: 'fn', fn: () => { ctx.joseph.play('talk'); } },
       { t: 'say', who: 'Joseph', text: 'And again — the sun, the moon, eleven stars… all of them bowed to me.', color: J.Joseph },
       { t: 'fn', fn: () => { ctx.joseph.play('idle'); jac.char.play('talk'); } },
-      // Jacob's brief, worried caution — the verse 37:10 (narrator) carries his
-      // full canonical rebuke; his spoken line does NOT quote it.
+      // Jacob's rebuke — sharp, but the verse 37:10 (narrator) carries his full
+      // canonical words; his spoken line does NOT quote it (script-routing rule).
       shot('jacob', 'joseph', { side: -0.4, dist: 2.8 }),
-      { t: 'say', who: 'Jacob', text: 'Joseph… you must not speak so, even of a dream.', color: J.Jacob },
+      { t: 'say', who: 'Jacob', text: 'Joseph! Enough. You must not speak so — not even of a dream.', color: J.Jacob },
       { t: 'dialogueHide' },
       { t: 'fn', fn: () => { jac.char.play('idle'); } },
       { t: 'verse', verse: WEB.gen_37_10_short },
       { t: 'verseHide' },
-      { t: 'wait', ms: 700 },
-      { t: 'fn', fn: () => { freezeAll(false); ctx.npcs.freeze(jac, false); } },
+      { t: 'wait', ms: 600 },
+      // (brothers stay seated + frozen — the close holds on their envy)
     ]);
   }
 
-  // ---------- beat 7 · 🎬 close: the glare, the verse, the tease ----------
+  // ---------- beat 7 · 🎬 close: the envy, the lone walk, the tease ----------
   async function close() {
+    // ENVY SHOT (37:11): hold on the circle's jealous faces as the light hardens
     await seq([
-      // hold on the brothers' jealous glare as the light hardens
-      { t: 'cam', angle: Math.PI * 0.5, target: { x: 0.8, z: -7.6 }, distance: 3.2, height: 1.6, lookHeight: 1.35, duration: 2200, awaitMs: false },
+      { t: 'cam', angle: Math.PI * 0.5, target: { x: 0.2, z: -6.6 }, distance: 3.5, height: 1.75, lookHeight: 1.3, duration: 2200 },
       { t: 'grade', mood: 'ominous', ms: 2000 },
       { t: 'verse', verse: WEB.gen_37_11 },
-      { t: 'wait', ms: 600 },
+      { t: 'wait', ms: 900 },
       { t: 'verseHide' },
-      { t: 'grade', mood: 'goldenHour', ms: 2400 },
+    ]);
+    // Joseph turns and walks back ALONE; their envy follows him out of the ring
+    const lone = { x: -4.6, z: -2.0 };
+    ctx.joseph.turnToward(lone.x - ctx.joseph.position.x, lone.z - ctx.joseph.position.z);
+    ctx.joseph.play('walk');
+    await seq([
+      // a wide, lonely frame — Joseph small, the seated circle left behind him
+      { t: 'cam', angle: Math.PI * 0.9, target: () => ({ x: ctx.joseph.position.x, z: ctx.joseph.position.z }), distance: 6.4, height: 3.1, lookHeight: 1.2, duration: 3200, awaitMs: false },
+      { t: 'fn', fn: async () => {
+        let e = 0; const D = 3400;
+        while (e < D) { await wait(60); e += 60;
+          const p = ctx.joseph.position;
+          const dx = lone.x - p.x, dz = lone.z - p.z; const d = Math.hypot(dx, dz);
+          if (d < 0.2) break;
+          ctx.joseph.setPosition(p.x + (dx / d) * 2.4 * 0.06, p.z + (dz / d) * 2.4 * 0.06);
+          ctx.joseph.turnToward(dx, dz);
+        }
+        ctx.joseph.play('idle');
+      } },
+    ]);
+    // hold on him alone, then dip to the tease
+    await seq([
+      { t: 'cam', angle: Math.PI * 0.95, target: () => ({ x: ctx.joseph.position.x, z: ctx.joseph.position.z }), distance: 4.4, height: 2.1, lookHeight: 1.3, duration: 2000 },
+      { t: 'wait', ms: 900 },
+      { t: 'grade', mood: 'goldenHour', ms: 2200 },
       { t: 'fade', on: true, ms: 1800 },
       { t: 'title', heading: 'To be continued', sub: 'Genesis 37:12 — the road to Dothan', holdMs: 4200 },
     ]);
@@ -626,10 +681,25 @@ export function createBeats(ctx) {
     // world/story state that earlier beats would have produced
     if (n >= 2) c.sheep.sheep.forEach((s) => { if (!s.counted) { s.counted = true; s.penned = true; s.x = c.camp.pen.minX + 2 + Math.random() * 3; s.z = c.camp.pen.minZ + 1.5 + Math.random() * 3; } });
     if (n >= 4) c.joseph.setCoat(true);
-    const spawns = { 1: [2, 12.5], 2: [1, 1.5], 3: [-8.2, -4.6], 4: [-7.5, -4], 5: [1.4, -4.6], 6: [-6, -3], 7: [0.6, -6.6] };
+    const spawns = { 1: [2, 12.5], 2: [1, 1.5], 3: [-8.2, -4.6], 4: [-7.5, -4], 5: [1.4, -4.6], 6: [-6, -3], 7: [0.9, -4.1] };
     const s = spawns[n] || [0, 12];
     c.joseph.setPosition(s[0], s[1]);
     c.camera.snap();
+    // resuming INTO the close (beat 7): the telling already happened, so seat the
+    // brothers in their frozen circle round the fire (beat 6 does this live).
+    if (n >= 7) {
+      TELL_RING.forEach(([k, a]) => {
+        const npc = c.cast[k]; const p = ringXZ(a);
+        npc.char.setPosition(p.x, p.z); npc.pos.x = p.x; npc.pos.z = p.z;
+        c.npcs.freeze(npc, true);
+        npc.char.turnToward(FIRE.x - p.x, FIRE.z - p.z);
+        npc.char.play('kneel');
+      });
+      const jc = c.cast.jacob;
+      jc.char.setPosition(-2.6, -4.4); jc.pos.x = -2.6; jc.pos.z = -4.4;
+      c.npcs.freeze(jc, true);
+      jc.char.turnToward(FIRE.x + 2.6, FIRE.z + 4.4);
+    }
     // beat 5 (dream) sets its own night/dream grade on entry; beats 6-7 (the
     // telling) now happen the NEXT MORNING (Task 8 wakes in the tent at dawn).
     c.grading.set('goldenHour');
