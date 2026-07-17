@@ -5,7 +5,8 @@ export default defineConfig({
   // project subpath (tdg-org.github.io/MARANATHA/) or any static host / itch.
   base: './',
   server: {
-    // Honor an externally assigned port (preview tooling); default 5173.
-    port: Number(process.env.PORT) || 5173,
+    // MARANATHA's fixed, unique dev port (1225 = "Maranatha", 1 Cor 16:22).
+    // An externally assigned PORT (preview tooling) still wins.
+    port: Number(process.env.PORT) || 1225,
   },
 });

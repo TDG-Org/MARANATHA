@@ -54,9 +54,12 @@ it — the real verse (Berean Standard Bible) shown on screen and read aloud on 
 
 ```bash
 npm install
-npm run dev      # http://localhost:5173
-npm run build    # production build → dist/
+npm start         # dev server on http://localhost:1225 — auto-opens your browser
+npm run build     # production build → dist/
 ```
+
+`npm start` always uses port **1225** (fixed, so it never clashes with other local
+apps) and opens the game for you. (`npm run dev` is the plain server without auto-open.)
 
 ## 🛠️ Tech
 
