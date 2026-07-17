@@ -44,65 +44,133 @@ export function createBeats(ctx) {
     },
   });
 
-  // ---------- beat 0 · 🕳️ COLD OPEN v2: the betrayal → 🌅 the golden morning --
+  // ---------- beat 0 · 🕳️ COLD OPEN v3: carried, thrown, left → 🌅 morning ----
+  // REAL rigged cast only (level-layout law 8) — the story runner starts after
+  // the GLBs load, so the four named brothers and Joseph play this themselves.
   async function intro() {
     ctx.setInput(false);
     const P = ctx.pit;
     const jRoot = ctx.joseph.root;
+    const B = ['reuben', 'judah', 'simeon', 'levi'].map((k) => ctx.cast[k]);
+    const homes = B.map((n) => ({ x: n.pos.x, z: n.pos.z }));
+    const put = (n, x, z) => { n.pos.x = x; n.pos.z = z; n.char.setPosition(x, z); };
 
-    // THE BETRAYAL — a flash of where this story is going, worn in a drained
-    // "future" grade + dark vignette so no one mistakes it for now. Harsh
-    // daylight at a rocky pit; the brothers tear off his coat and throw him in.
+    // Stage the procession behind black, worn in the drained FUTURE filter
+    // (gloomy vignette + blur + drained color) so no one mistakes it for now.
     ctx.futureVignette(true);
     ctx.grading.set('pit');
     P.group.visible = true;
-    P.ringBrothers();
     P.setSkyLight(1); P.shrinkSkyLight(0);
-    ctx.joseph.setCoat(true); // in the flash he STILL wears the coat — they rip it off
-    ctx.controller.bounds = { minX: P.PIT.x - 4, maxX: P.PIT.x + 4, minZ: P.PIT.z - 4, maxZ: P.PIT.z + 4 };
-    ctx.joseph.setPosition(P.PIT.x, P.PIT.z - 0.4);
-    ctx.joseph.play('idle');
-    ctx.camera.cinematicMoveTo({ angle: Math.PI * 0.12, target: { x: P.PIT.x, z: P.PIT.z }, distance: 6, height: 3.2, lookHeight: 1.2, duration: 1 });
+    ctx.joseph.setCoat(true); // in the flash he STILL wears the coat — they strip it (37:23)
+    if (ctx.joseph.shadowMesh) ctx.joseph.shadowMesh.visible = false; // carried/lying — no foot blob
+    ctx.controller.bounds = { minX: P.PIT.x - 6, maxX: P.PIT.x + 10, minZ: P.PIT.z - 6, maxZ: P.PIT.z + 6 };
+    B.forEach((n) => ctx.npcs.freeze(n, true));
+
+    // (1) the CARRY — the brothers bear Joseph to the pit mouth. Two bearers
+    // flank the limp boy (held off the ground, tipped back); one ahead, one
+    // behind. Real walk cycles; Joseph hangs in the seated pose.
+    const from = { x: P.PIT.x + 8.2, z: P.PIT.z + 1.6 };
+    const to = { x: P.PIT.x + 2.35, z: P.PIT.z + 0.2 };
+    const dir = { x: to.x - from.x, z: to.z - from.z };
+    const OFF = [
+      { n: B[0], dx: -1.7, dz: -0.4 }, // reuben ahead
+      { n: B[1], dx: 0.55, dz: 0.8 },  // judah — left bearer
+      { n: B[2], dx: 0.55, dz: -0.8 }, // simeon — right bearer
+      { n: B[3], dx: 1.8, dz: 0.5 },   // levi behind
+    ];
+    const AWAY = [[2.6, 1.2], [3.4, 0.2], [3.0, -1.0], [4.2, 0.8]]; // walk-off spread
+    const place = (k) => {
+      const px = from.x + dir.x * k, pz = from.z + dir.z * k;
+      OFF.forEach(({ n, dx, dz }) => { put(n, px + dx, pz + dz); n.char.turnToward(dir.x, dir.z); });
+      ctx.joseph.setPosition(px, pz);
+      jRoot.position.y = 0.42;   // held clear of the ground
+      jRoot.rotation.x = -0.5;   // tipped back — limp between the bearers
+      ctx.joseph.turnToward(dir.x, dir.z);
+    };
+    place(0);
+    ctx.joseph.play('kneel'); // slumped carried pose
+    B.forEach((n) => n.char.play('walk'));
     await seq([
       { t: 'fade', on: true, ms: 0 },
       { t: 'letterbox', on: true },
-      { t: 'wait', ms: 500 },
-      { t: 'fade', on: false, ms: 1500 }, // reveal: harsh daylight at the pit
-      { t: 'wait', ms: 900 },
-      // (1) the brothers TEAR OFF the ornate coat
-      { t: 'cam', angle: Math.PI * 0.08, target: () => ({ x: ctx.joseph.position.x, z: ctx.joseph.position.z }), distance: 3.6, height: 1.8, lookHeight: 1.2, duration: 1300 },
-      { t: 'fn', fn: async () => { ctx.sound('sfx.cloth_equip'); ctx.joseph.setCoat(false); await wait(650); } },
-      // (2) thrown in — SLOW-MO fall into the dark, the light closing above
-      { t: 'cam', angle: Math.PI * 0.08, target: { x: P.PIT.x, z: P.PIT.z }, distance: 5.4, height: 6.2, lookHeight: -1.6, duration: 1500 },
+      // low, angled tracking shot alongside the procession, drifting with it
+      { t: 'cam', angle: Math.PI * 0.42, target: { x: from.x + dir.x * 0.5, z: from.z + dir.z * 0.5 }, distance: 5.6, height: 1.35, lookHeight: 1.0, duration: 1, awaitMs: false },
+      { t: 'wait', ms: 400 },
+      { t: 'fade', on: false, ms: 1400 }, // reveal: harsh daylight, the march
+      { t: 'cam', angle: Math.PI * 0.52, target: { x: to.x + 0.6, z: to.z }, distance: 4.4, height: 1.5, lookHeight: 0.9, duration: 4600, awaitMs: false },
       { t: 'fn', fn: async () => {
-        ctx.sound('stinger.hatred');
-        const D = 2200; let e = 0;
-        while (e < D) { await wait(50); e += 50; const k = e / D;
-          jRoot.position.y = -k * 3.2;                       // the fall
-          jRoot.position.x += (P.PIT.x - jRoot.position.x) * 0.12;
-          jRoot.position.z += (P.PIT.z - jRoot.position.z) * 0.12;
-          P.shrinkSkyLight(k);                                // light shrinks above
-        }
+        const D = 4400; let e = 0;
+        while (e < D) { await wait(50); e += 50; place(e / D); }
+        B.forEach((n) => n.char.play('idle'));
       } },
+      { t: 'wait', ms: 500 },
+      // (2) at the rim they STRIP the tunic (37:23) — it hangs from Judah's hand
+      { t: 'cam', angle: Math.PI * 0.22, target: () => ({ x: ctx.joseph.position.x, z: ctx.joseph.position.z }), distance: 3.1, height: 1.6, lookHeight: 1.0, duration: 1300 },
+      { t: 'fn', fn: async () => {
+        ctx.sound('sfx.cloth_equip');
+        ctx.joseph.setCoat(false);
+        P.coatProp.visible = true;
+        P.coatProp.position.set(B[1].pos.x + 0.35, 0.85, B[1].pos.z);
+        await wait(700);
+      } },
+      // (3) THE THROW — a small heave, then the SLOW-MOTION fall: Joseph turns
+      // FLAT ONTO HIS BACK as he drops, the camera close and angled, drifting
+      // down WITH him; the ring of daylight shrinks away above. Alone, and sad.
+      { t: 'cam', angle: Math.PI * 0.18, target: { x: P.PIT.x, z: P.PIT.z }, distance: 3.0, height: 2.3, lookHeight: 0.5, duration: 900 },
+      { t: 'fn', fn: () => { ctx.sound('stinger.hatred'); B[1].char.play('talk'); B[2].char.play('talk'); } },
+      { t: 'cam', angle: Math.PI * 0.13, target: { x: P.PIT.x, z: P.PIT.z }, distance: 2.6, height: 0.6, lookHeight: -2.9, duration: 3400, awaitMs: false },
+      { t: 'fn', fn: async () => {
+        // the heave up…
+        const H = 260; let e = 0;
+        while (e < H) { await wait(40); e += 40; jRoot.position.y = 0.42 + (e / H) * 0.5; }
+        B[1].char.play('idle'); B[2].char.play('idle');
+        // …and the long slow fall — rotating flat onto his back
+        const D = 3000; e = 0;
+        const x0 = jRoot.position.x, z0 = jRoot.position.z;
+        while (e < D) { await wait(40); e += 40; const k = Math.min(1, e / D);
+          jRoot.position.y = 0.92 - k * 4.72;                        // → -3.8 (pit floor)
+          jRoot.position.x = x0 + (P.PIT.x - x0) * k;
+          jRoot.position.z = z0 + (P.PIT.z - z0) * k;
+          jRoot.rotation.x = -0.5 - k * (Math.PI / 2 - 0.5);         // → flat on his back
+          P.shrinkSkyLight(k);                                        // daylight closes over him
+        }
+        ctx.sound('sfx.sheaf_bow'); // the dull landing thump
+      } },
+      // the lonely hold: straight down the shaft at the boy on his back
+      { t: 'cam', angle: 0, target: { x: P.PIT.x, z: P.PIT.z }, distance: 1.6, height: 4.6, lookHeight: -3.2, duration: 1800 },
       { t: 'verse', verse: WEB.gen_37_24 },
       { t: 'verseHide' },
-      // (3) cut: the brothers walking away, coat in hand. cold.
-      { t: 'fade', on: true, ms: 500 },
-      { t: 'fn', fn: () => { jRoot.position.y = -3.2; P.walkAway(0); ctx.grading.set('ominous'); } },
-      { t: 'cam', angle: Math.PI * 0.95, target: { x: P.PIT.x + 3.5, z: P.PIT.z - 1 }, distance: 6.5, height: 2.2, lookHeight: 1.2, duration: 1, awaitMs: false },
-      { t: 'fade', on: false, ms: 650 },
-      { t: 'fn', fn: async () => { const D = 2400; let e = 0; while (e < D) { await wait(60); e += 60; P.walkAway(e / D); } } },
-      { t: 'wait', ms: 500 },
-      // (4) slow fade to black → the drained "future" look LIFTS as morning comes
+      // (4) cut: the brothers walk away, coat in hand. cold. no one looks back.
+      { t: 'fade', on: true, ms: 450 },
+      { t: 'fn', fn: () => {
+        ctx.grading.set('ominous');
+        B.forEach((n, i) => { put(n, P.PIT.x + AWAY[i][0], P.PIT.z + AWAY[i][1]); n.char.turnToward(1, -0.25); n.char.play('walk'); });
+      } },
+      { t: 'cam', angle: Math.PI * 0.95, target: { x: P.PIT.x + 5.5, z: P.PIT.z - 0.5 }, distance: 6.8, height: 2.1, lookHeight: 1.1, duration: 1, awaitMs: false },
+      { t: 'fade', on: false, ms: 600 },
+      { t: 'fn', fn: async () => {
+        const D = 2800; let e = 0;
+        while (e < D) { await wait(50); e += 50; const k = e / D;
+          B.forEach((n, i) => put(n, P.PIT.x + AWAY[i][0] + k * 7.5, P.PIT.z + AWAY[i][1] - k * 2));
+          P.coatProp.position.set(B[1].pos.x + 0.35, 0.85, B[1].pos.z); // Judah carries it off
+        }
+      } },
+      { t: 'wait', ms: 400 },
+      // (5) slow fade to black → the drained "future" look LIFTS as morning comes
       { t: 'fade', on: true, ms: 1600 },
       { t: 'fn', fn: () => {
         P.group.visible = false;
+        P.coatProp.visible = false;
         jRoot.position.y = 0;
+        jRoot.rotation.x = 0;             // back on his feet
+        if (ctx.joseph.shadowMesh) ctx.joseph.shadowMesh.visible = true;
         ctx.joseph.setCoat(false);
+        // the brothers return to their camp-morning spots, alive again
+        B.forEach((n, i) => { put(n, homes[i].x, homes[i].z); n.char.play('idle'); ctx.npcs.freeze(n, false); });
         ctx.controller.bounds = ctx.bounds;
         ctx.joseph.setPosition(-7, -2.5); // by his tent in the camp
         ctx.grading.set('goldenHour');
-        ctx.futureVignette(false);        // NOW — the desaturate + border lift
+        ctx.futureVignette(false);        // NOW — the gloom, blur and drain lift
         ctx.camera.cinematicMoveTo({ angle: Math.PI * 0.9, target: { x: -5, z: -3 }, distance: 14, height: 7, lookHeight: 1, duration: 1 });
       } },
       { t: 'title', heading: 'Hebron, Canaan', sub: 'The next morning · c. 1898 BC · Genesis 37', holdMs: 3200 },

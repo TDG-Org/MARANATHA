@@ -113,15 +113,15 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
   let disposed = false; // set on dispose(); async init + the story loop check it
   const cinema = createCinema({ isPaused: () => app.paused });
 
-  // FUTURE-VIGNETTE (cold open): a dark border + drained/desaturated grade that
-  // says "this is the future," lifted the moment golden morning fades in — so no
-  // one confuses the flash-forward for now.
+  // FUTURE-VIGNETTE (cold open): a gloomy dark border + heavier BLUR + drained
+  // color that says "this is the future," fully lifted the moment golden
+  // morning fades in — so no one confuses the flash-forward for now.
   const vignette = document.createElement('div');
   vignette.style.cssText = [
     'position:fixed', 'inset:0', 'z-index:25', 'pointer-events:none', 'opacity:0',
     'transition:opacity 1200ms ease',
-    'box-shadow:inset 0 0 22vw 9vw rgba(6,5,10,0.92)',
-    'background:radial-gradient(ellipse at center, rgba(20,22,30,0) 42%, rgba(10,10,16,0.55) 100%)',
+    'box-shadow:inset 0 0 26vw 11vw rgba(5,4,9,0.95)',
+    'background:radial-gradient(ellipse at center, rgba(20,22,30,0) 38%, rgba(8,8,14,0.62) 100%)',
   ].join(';');
   document.body.append(vignette);
   const canvasEl = renderer.domElement;
@@ -132,7 +132,7 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
   const futureVignette = (on) => {
     vignette.style.opacity = on ? '1' : '0';
     canvasEl.style.transition = 'filter 1200ms ease';
-    canvasEl.style.filter = on ? 'saturate(0.32) contrast(1.06) brightness(0.86)' : VIBRANT;
+    canvasEl.style.filter = on ? 'saturate(0.28) contrast(1.1) brightness(0.8) blur(2.2px)' : VIBRANT;
   };
 
   const verseCard = createVerseCard();
@@ -232,7 +232,7 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
   scene.add(dream.group);
 
   // --- the pit (far west; the cold-open flash of Gen 37:24) ---
-  const pit = buildPitStage();
+  const pit = buildPitStage(worldTextures);
   pit.group.visible = false;
   scene.add(pit.group);
 
@@ -454,17 +454,21 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
   };
 }
 
-// --- the pit: the cold-open stage (Genesis 37:24) ----------------------------
-// A dry cistern seen from inside: earthen walls, a dusty shaft of light from
-// the rim, and the brothers' silhouettes peering over the edge. Shown for
-// ~15 seconds at the very start, then never again this scene.
-function buildPitStage() {
+// --- the pit: the cold-open stage (Genesis 37:23–24) -------------------------
+// A dry cistern in the Shechem wilderness. The cold open plays here with the
+// REAL rigged cast (the story runner starts only after the GLBs load — no
+// primitive stand-ins ever, level-layout law 8): the brothers carry Joseph in,
+// tear off the tunic, and throw him down. Shown once, then never again.
+function buildPitStage(tex = {}) {
   const group = new THREE.Group();
   const PIT = { x: -62, z: 6 };
   const rnd = mulberry32(37);
 
-  // harsh rocky ground around the pit (Shechem wilderness — paler, rougher)
-  const patch = new THREE.Mesh(new THREE.CircleGeometry(10, 26), new THREE.MeshBasicMaterial({ color: 0x8a7c60, fog: true }));
+  // harsh rocky ground around the pit (Shechem wilderness — paler, rougher).
+  // Real dirt texture, warm-tinted — never a flat gray disc (world-density law).
+  const patchOpts = { color: 0xa89468, fog: true };
+  if (tex.dirt) patchOpts.map = tex.dirt;
+  const patch = new THREE.Mesh(new THREE.CircleGeometry(10, 26), new THREE.MeshBasicMaterial(patchOpts));
   patch.rotation.x = -Math.PI / 2; patch.position.set(PIT.x, 0.02, PIT.z);
   group.add(patch);
   const rockGeo = new THREE.DodecahedronGeometry(0.5, 0); rockGeo.translate(0, 0.18, 0);
@@ -498,51 +502,16 @@ function buildPitStage() {
   skyLight.position.set(PIT.x, 3.6, PIT.z); skyLight.scale.setScalar(8);
   group.add(skyLight);
 
-  // the brothers — ink silhouettes (converge over the boy, then walk away)
-  const silTone = new THREE.MeshBasicMaterial({ color: 0x241f38, fog: false });
-  const figures = [];
-  for (let i = 0; i < 4; i++) {
-    const fig = new THREE.Group();
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.19, 8, 6), silTone);
-    head.position.y = 1.55;
-    const body = new THREE.Mesh(new THREE.ConeGeometry(0.42, 1.5, 6), silTone);
-    body.position.y = 0.75;
-    fig.add(head, body);
-    fig.userData = { phase: i * 1.7 };
-    figures.push(fig); group.add(fig);
-  }
-
-  // the torn coat a brother carries off (argyle-red cloth)
+  // the torn coat a brother carries off (argyle-red cloth). A cloth PROP —
+  // characters in this cutscene are the real rigged cast, moved by the beat.
   const coatProp = new THREE.Mesh(new THREE.PlaneGeometry(0.55, 0.8), new THREE.MeshBasicMaterial({ color: 0xb5643c, side: THREE.DoubleSide, fog: true }));
   coatProp.visible = false; group.add(coatProp);
 
   return {
-    group, PIT, figures, coatProp, skyLight,
-    // place the 4 brothers in a ring around the pit, facing in (the mob)
-    ringBrothers() {
-      figures.forEach((f, i) => {
-        const a = Math.PI * 0.15 + (i - 1.5) * 0.5;
-        f.position.set(PIT.x + Math.sin(a) * 2.9, 0, PIT.z + Math.cos(a) * 2.9);
-        f.lookAt(PIT.x, 0.9, PIT.z);
-      });
-    },
-    // walk the brothers away from the pit (toward +x, back to camp) over k=0..1
-    walkAway(k) {
-      figures.forEach((f, i) => {
-        f.position.x = PIT.x + Math.sin(Math.PI * 0.15 + (i - 1.5) * 0.5) * 2.9 + k * 7;
-        f.position.z = PIT.z + Math.cos(Math.PI * 0.15 + (i - 1.5) * 0.5) * 2.9 - k * 2;
-        f.rotation.y = Math.PI * 0.15;
-      });
-      // the lead brother carries the coat
-      coatProp.visible = true;
-      coatProp.position.set(figures[0].position.x + 0.4, 0.9, figures[0].position.z);
-    },
+    group, PIT, coatProp, skyLight,
     setSkyLight(k) { skyLight.material.opacity = 0.9 * k; },
     shrinkSkyLight(k) { skyLight.scale.setScalar(8 - 6.5 * k); }, // k 0→1 closes over him
-    update(dt, t) {
-      if (!group.visible) return;
-      for (const f of figures) f.position.y = Math.sin(t * 0.9 + f.userData.phase) * 0.02;
-    },
+    update() { /* static set — the beat animates the cast */ },
     dispose() {
       ringTex.dispose();
       group.traverse((o) => { if (o.isInstancedMesh) o.dispose(); if (o.isMesh || o.isSprite) { o.geometry?.dispose?.(); o.material?.dispose?.(); } });
