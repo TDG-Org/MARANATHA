@@ -256,13 +256,18 @@ export function makeGround({
     const zz = pos.getZ(i);
     const worldZ = zz + z; // this vertex's world z (mesh is offset by z)
     let d = 1;
+    let sink = 0;
     for (const p of padList) {
       const dist = Math.hypot(x - p.x, worldZ - p.z);
       const pd = Math.min(1, Math.max(0, (dist - p.flatCore) / p.falloff));
       if (pd < d) d = pd;
+      // a pad with `sink` CRATERS the terrain — the vertices inside drop by
+      // sink units (eased at the edge), so a shaft/hole is genuinely open
+      // instead of the heightfield quietly flooring it (the pit-lid bug).
+      if (p.sink) sink = Math.max(sink, p.sink * (1 - Math.min(1, Math.max(0, (dist - p.flatCore) / p.falloff))));
     }
     const y = (Math.sin(x * 0.055 + p1) * 1.6 + Math.sin(x * 0.021 + zz * 0.045 + p2) * 2.4) * d * d;
-    pos.setY(i, y - 0.02);
+    pos.setY(i, y - 0.02 - sink);
 
     if (colAttr) {
       // two soft sine fields pick a tone + strength — organic, deterministic

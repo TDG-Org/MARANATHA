@@ -70,7 +70,11 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
     pads: [
       { x: 0, z: 0, flatCore: 27, falloff: 42 },    // the camp
       { x: 62, z: 0, flatCore: 17.5, falloff: 24 },  // the dream field
-      { x: -62, z: 6, flatCore: 9, falloff: 16 },    // the pit (cold open)
+      { x: -62, z: 6, flatCore: 9, falloff: 16 },    // the pit stage (flat)
+      // the SHAFT itself craters the terrain (D7: the hole is real — the
+      // heightfield used to run right under the rim and read as a lawn lid).
+      // Sized to catch the ~3.3–4.3u vertex grid; the r10 ring hides the dent.
+      { x: -62, z: 6, flatCore: 2.6, falloff: 3.2, sink: 5 },
       { x: -62, z: -34, flatCore: 8, falloff: 14 },  // Jacob's tent interior
     ],
   });
@@ -464,9 +468,12 @@ function buildPitStage(tex = {}) {
 
   // harsh rocky ground around the pit (Shechem wilderness — paler, rougher).
   // Real dirt texture, warm-tinted — never a flat gray disc (world-density law).
+  // D7: the ground is a RING with a REAL hole — the camera must see straight
+  // down the shaft to Joseph lying at the bottom (the old opaque "mouth" disc
+  // was a black lid that hid him completely).
   const patchOpts = { color: 0xa89468, fog: true };
   if (tex.dirt) patchOpts.map = tex.dirt;
-  const patch = new THREE.Mesh(new THREE.CircleGeometry(10, 26), new THREE.MeshBasicMaterial(patchOpts));
+  const patch = new THREE.Mesh(new THREE.RingGeometry(2.05, 10, 26, 1), new THREE.MeshBasicMaterial(patchOpts));
   patch.rotation.x = -Math.PI / 2; patch.position.set(PIT.x, 0.02, PIT.z);
   group.add(patch);
   const rockGeo = new THREE.DodecahedronGeometry(0.5, 0); rockGeo.translate(0, 0.18, 0);
@@ -477,15 +484,24 @@ function buildPitStage(tex = {}) {
   rspots.forEach((s, i) => { rd.position.set(s[0], 0, s[1]); rd.scale.setScalar(0.6 + rnd() * 1.3); rd.rotation.y = rnd() * 6; rd.updateMatrix(); rocks.setMatrixAt(i, rd.matrix); });
   rocks.instanceMatrix.needsUpdate = true; group.add(rocks);
 
-  // the pit MOUTH — a dark hole in the ground
-  const mouth = new THREE.Mesh(new THREE.CircleGeometry(2.4, 22), new THREE.MeshBasicMaterial({ color: 0x120e18, fog: true }));
-  mouth.rotation.x = -Math.PI / 2; mouth.position.set(PIT.x, 0.04, PIT.z); group.add(mouth);
+  // (D7: the old opaque "mouth" disc is GONE — the hole is real. Looking down
+  // the shaft you now see the walls, the floor, and the boy on his back.)
 
-  // the pit INTERIOR (below ground) — walls + dark floor for the fall shot
-  const wall = new THREE.Mesh(new THREE.CylinderGeometry(2.5, 2.05, 4.6, 20, 1, true), new THREE.MeshBasicMaterial({ color: 0x372f47, side: THREE.BackSide, fog: true }));
-  wall.position.set(PIT.x, -2.05, PIT.z); group.add(wall);
-  const floor = new THREE.Mesh(new THREE.CircleGeometry(2.15, 20), new THREE.MeshBasicMaterial({ color: 0x1a1622, fog: true }));
+  // the pit INTERIOR (below ground) — walls + floor, lit enough to READ from
+  // above: the shaft darkens with depth but Joseph at the bottom stays visible.
+  const wall = new THREE.Mesh(new THREE.CylinderGeometry(2.05, 1.85, 4.1, 20, 1, true), new THREE.MeshBasicMaterial({ color: 0x4a4058, side: THREE.BackSide, fog: true }));
+  wall.position.set(PIT.x, -2.0, PIT.z); group.add(wall);
+  const floor = new THREE.Mesh(new THREE.CircleGeometry(1.95, 20), new THREE.MeshBasicMaterial({ color: 0x3a3345, fog: true }));
   floor.rotation.x = -Math.PI / 2; floor.position.set(PIT.x, -4.0, PIT.z); group.add(floor);
+  // a faint pool of daylight on the floor — the light that follows him down
+  const floorGlow = new THREE.Mesh(new THREE.CircleGeometry(1.3, 18), new THREE.MeshBasicMaterial({ color: 0x8a7a68, transparent: true, opacity: 0.5, fog: true }));
+  floorGlow.rotation.x = -Math.PI / 2; floorGlow.position.set(PIT.x, -3.98, PIT.z); group.add(floorGlow);
+  // …and a real shaft of daylight ON HIM: one warm point light inside the pit
+  // (lives in this group, so it dies with the stage after the cold open —
+  // the boy at the bottom must be SEEN, not implied).
+  const shaftLight = new THREE.PointLight(0xfff0d0, 1.5, 8.5, 1.4);
+  shaftLight.position.set(PIT.x, -1.1, PIT.z);
+  group.add(shaftLight);
 
   // the SKY-LIGHT above the pit — a bright disc that SHRINKS as he falls in
   const ringTex = (() => {

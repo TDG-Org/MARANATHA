@@ -124,20 +124,33 @@ export function createBeats(ctx) {
         const H = 260; let e = 0;
         while (e < H) { await wait(40); e += 40; jRoot.position.y = 0.42 + (e / H) * 0.5; }
         B[1].char.play('idle'); B[2].char.play('idle');
-        // …and the long slow fall — rotating flat onto his back
+        // …and the long slow fall — rotating flat onto his BACK, face up to
+        // the closing daylight (D7: the old pitch sign left him face-down;
+        // pixel evidence — his up side read hemi-ground green, not lit robe)
         const D = 3000; e = 0;
         const x0 = jRoot.position.x, z0 = jRoot.position.z;
         while (e < D) { await wait(40); e += 40; const k = Math.min(1, e / D);
           jRoot.position.y = 0.92 - k * 4.72;                        // → -3.8 (pit floor)
           jRoot.position.x = x0 + (P.PIT.x - x0) * k;
           jRoot.position.z = z0 + (P.PIT.z - z0) * k;
-          jRoot.rotation.x = -0.5 - k * (Math.PI / 2 - 0.5);         // → flat on his back
+          jRoot.rotation.x = -0.5 + k * (Math.PI / 2 + 0.5);         // → flat, FACE UP
           P.shrinkSkyLight(k);                                        // daylight closes over him
         }
         ctx.sound('sfx.sheaf_bow'); // the dull landing thump
       } },
-      // the lonely hold: straight down the shaft at the boy on his back
-      { t: 'cam', angle: 0, target: { x: P.PIT.x, z: P.PIT.z }, distance: 1.6, height: 4.6, lookHeight: -3.2, duration: 1800 },
+      // the brothers pull WELL BACK from the rim — when the camera looks down
+      // the shaft, Joseph is utterly alone over the pit (D7). The nearest
+      // bearer starts ~0.7u from the hole; they walk off ~3.8u so no body can
+      // catch the edge of the top-down frame.
+      { t: 'fn', fn: async () => {
+        B.forEach((n) => { n.char.turnToward(1, 0.2); n.char.play('walk'); });
+        const D = 1150; let e = 0;
+        while (e < D) { await wait(45); e += 45; B.forEach((n) => put(n, n.pos.x + 0.152, n.pos.z + 0.024)); }
+        B.forEach((n) => n.char.play('idle'));
+      } },
+      // the lonely hold: straight down the shaft — the boy on his back, small,
+      // in the pool of daylight at the bottom (the hole is REAL now)
+      { t: 'cam', angle: 0, target: { x: P.PIT.x, z: P.PIT.z }, distance: 1.1, height: 5.0, lookHeight: -3.4, duration: 1800 },
       { t: 'verse', verse: WEB.gen_37_24 },
       { t: 'verseHide' },
       // (4) cut: the brothers walk away, coat in hand. cold. no one looks back.
