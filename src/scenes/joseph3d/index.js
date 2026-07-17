@@ -86,7 +86,9 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
   const grading = new MoodGrading({ sky, fog: scene.fog, keyLight, hemiLight, cinema });
 
   // --- camera (authored, close) ---
-  const director = new CameraDirector(camera, { yaw: Math.PI, distance: 5.6, height: 2.3, lookHeight: 1.5 });
+  // base follow comes from CAMERA_TUNING (raised + a touch more zoom-out in D4);
+  // zones below still override per-area framing.
+  const director = new CameraDirector(camera, { yaw: Math.PI });
   director.setZones([
     // pen area: swing the camera west so the pen + gate read clearly
     { shape: 'rect', minX: 7, maxX: 20, minZ: 5, maxZ: 17, yaw: Math.PI * 0.72, distance: 6.2, height: 2.7 },
