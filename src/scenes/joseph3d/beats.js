@@ -143,7 +143,11 @@ export function createBeats(ctx) {
           lev.char.turnToward(j.x - lev.pos.x, j.z - lev.pos.z);
           lev.char.play('talk');
           await ctx.dialogue.say('Levi', 'Mind the flock, little brother. It’s all you’re good for.', { color: J.Levi });
-          lev.char.play('idle');
+          // a shared, mocking laugh — the slow burn of their scorn begins
+          sim.char.play('talk'); lev.char.play('talk');
+          ctx.sound('sfx.men_laughing');
+          await wait(1500);
+          sim.char.play('idle'); lev.char.play('idle');
           ctx.dialogue.hide();
           ctx.npcs.freeze(sim, false);
           ctx.npcs.freeze(lev, false);
@@ -272,6 +276,9 @@ export function createBeats(ctx) {
       { t: 'anim', get char() { return ctx.cast.reuben.char; }, state: 'talk' },
       { t: 'say', who: 'Reuben', text: 'Not one kind word is left in me for that boy.', color: J.Reuben },
       { t: 'anim', get char() { return ctx.cast.reuben.char; }, state: 'idle' },
+      // envy hardens into a low, scornful laugh between them
+      { t: 'sound', key: 'sfx.men_laughing' },
+      { t: 'fn', fn: async () => { ctx.cast.judah.char.play('talk'); ctx.cast.reuben.char.play('talk'); await wait(1300); ctx.cast.judah.char.play('idle'); ctx.cast.reuben.char.play('idle'); } },
       { t: 'dialogueHide' },
       { t: 'verse', verse: WEB.gen_37_4 },
       { t: 'verseHide' },
@@ -337,25 +344,83 @@ export function createBeats(ctx) {
           await seq([
             { t: 'letterbox', on: true },
             { t: 'cam', angle: Math.PI * 0.34, target: { x: 0.25, z: -5.7 }, distance: 3.7, height: 1.25, lookHeight: 0.85, duration: 2600 },
-            { t: 'wait', ms: 1500 },
+            { t: 'wait', ms: 1200 },
           ]);
           resolve();
         },
       });
     });
-    // (letterbox stays up — the dream rises straight out of this stillness)
+
+    // slow-burn hatred, envy moment 3: even in the quiet, they can't let him
+    // warm himself in peace — a low mock and a shared laugh (Nate's men_laughing
+    // audio). Joseph, stung, rises to sleep alone.
+    const jd = ctx.cast.judah, sm = ctx.cast.simeon;
+    await seq([
+      { t: 'cam', angle: -Math.PI * 0.62, target: { x: 0.4, z: -6.4 }, distance: 3.4, height: 1.35, lookHeight: 0.95, duration: 1200 },
+      { t: 'fn', fn: () => {
+        jd.char.turnToward(ctx.joseph.position.x - jd.pos.x, ctx.joseph.position.z - jd.pos.z);
+        jd.char.play('talk');
+      } },
+      { t: 'say', who: 'Judah', text: 'Look at him — the little dreamer, warming himself in his fine new coat.', color: J.Judah },
+      { t: 'fn', fn: async () => {
+        sm.char.turnToward(ctx.joseph.position.x - sm.pos.x, ctx.joseph.position.z - sm.pos.z);
+        sm.char.play('talk');
+        ctx.sound('sfx.men_laughing');
+        await wait(1600);
+        jd.char.play('kneel'); sm.char.play('kneel'); // back to seated by the fire
+      } },
+      { t: 'dialogueHide' },
+      // Joseph looks down, rises, and turns away for his tent
+      { t: 'fn', fn: () => { ctx.joseph.play('idle'); } },
+      { t: 'wait', ms: 500 },
+      { t: 'letterbox', on: false },
+    ]);
+
+    // the calm walk to his tent to rest — so the dream rises from a quiet night
+    // instead of popping out of nowhere.
+    let rested = false;
+    ctx.hud.setObjective('The night has turned cold with them. Go to your tent and rest.', 'Walk to your tent.');
+    const rest = { x: -8.6, z: -4.4 };
+    ctx.guide.setTargetXZ(rest.x, rest.z);
+    ctx.camera.release(1);
+    ctx.setInput(true);
+    await new Promise((resolve) => {
+      ctx.interactables.addPrompt({
+        id: 'rest-night', label: 'Rest for the night',
+        getPos: () => rest, r: 2.3, lift: 1.4,
+        when: () => !rested,
+        onInteract: async () => {
+          if (rested) return;
+          rested = true;
+          ctx.setInput(false);
+          ctx.guide.setTarget(null);
+          ctx.joseph.setPosition(rest.x, rest.z);
+          ctx.joseph.turnToward(-0.9, -0.4); // face the tent
+          ctx.joseph.play('kneel'); // settle down to sleep
+          await seq([
+            { t: 'letterbox', on: true },
+            { t: 'cam', angle: Math.PI * 0.15, target: { x: rest.x - 0.3, z: rest.z - 0.4 }, distance: 3.0, height: 1.15, lookHeight: 0.6, duration: 2400 },
+            { t: 'wait', ms: 1200 },
+            { t: 'fade', on: true, ms: 1600 }, // sleep — down to black; the dream follows
+          ]);
+          resolve();
+        },
+      });
+    });
+    // (faded to black, letterbox up — the dream rises straight out of sleep)
   }
 
   // ---------- beat 5 · 💤 THE DREAM ----------
   async function dream() {
     const D = ctx.dream;
     ctx.setInput(false);
-    // dusk deepens by the fire, embers rising… then a match-fade into the dream
+    // we arrive already asleep in the dark (beat 4 faded to black at the tent).
+    // deepen to night behind the black, swap to the dream music, then slip in.
     await seq([
       { t: 'letterbox', on: true },
-      { t: 'grade', mood: 'night', ms: 2200 },
-      { t: 'fn', fn: async () => { ctx.setMusic('music.dream_wonder'); ctx.sound('stinger.dream_enter'); await wait(600); } },
-      { t: 'fade', on: true, ms: 1100 },
+      { t: 'fade', on: true, ms: 1 }, // ensure black on a checkpoint-resume too
+      { t: 'grade', mood: 'night', ms: 1400 },
+      { t: 'fn', fn: async () => { ctx.setMusic('music.dream_wonder'); ctx.sound('stinger.dream_enter'); await wait(500); } },
     ]);
     // slip into the dream field (behind the black). The campfire beat left the
     // camera HOLDING its authored ring shot — release the pose or the whole
