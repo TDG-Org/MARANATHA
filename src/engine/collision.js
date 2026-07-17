@@ -74,10 +74,13 @@ export class ColliderWorld {
     return true;
   }
 
-  // True if a circle at (x,z,r) would overlap anything (spawn checks).
-  overlaps(x, z, r) {
+  // True if a circle at (x,z,r) would overlap anything (spawn checks). Pass
+  // skipGroup to ignore a family of colliders (e.g. 'border' so clustering
+  // rocks/trees don't count as overlapping each other).
+  overlaps(x, z, r, skipGroup = null) {
     const p = { x, z };
     for (const c of this.statics) {
+      if (skipGroup && c.group === skipGroup) continue;
       if (c.type === 'circle') {
         const dx = p.x - c.x, dz = p.z - c.z, min = r + c.r;
         if (dx * dx + dz * dz < min * min) return true;

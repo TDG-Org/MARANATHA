@@ -193,7 +193,9 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
   scene.add(tentInterior.mesh);
 
   // --- beats context (everything the story data needs) ---
-  const bounds = { minX: -19, maxX: 19, minZ: -16.5, maxZ: 17 };
+  // bounds sit JUST BEHIND the visible tree/rock border so any stop reads as
+  // "blocked by the trees/rocks," never an invisible wall in open ground.
+  const bounds = { minX: -18.3, maxX: 18.3, minZ: -16, maxZ: 16.4 };
   const ctx = {
     scene, app, cinema, verseCard, dialogue, hud, guide, grading, interactables,
     camera: director, sequencer: null, setInput,

@@ -159,18 +159,36 @@ export function makePaths(spots) {
 }
 
 export function makeGrass(count = 90, span = 42, colliderWorld = null) {
-  const blade = new THREE.ConeGeometry(0.05, 0.42, 3);
-  blade.translate(0, 0.21, 0);
+  // A tuft = a few blades; per-instance GREEN shade + height variation so the
+  // ground reads as a living meadow, not a repeated sprite (world-density).
+  const blade = new THREE.ConeGeometry(0.055, 0.5, 3);
+  blade.translate(0, 0.25, 0);
   const rnd = mulberry32(77);
-  const spots = [];
-  let guard = 0;
-  while (spots.length < count && guard++ < count * 8) {
+  const greens = [
+    new THREE.Color(0x86a24f), new THREE.Color(0x6f8a3c),
+    new THREE.Color(0x94a856), new THREE.Color(0x5f7a38), new THREE.Color(0xa8a552),
+  ];
+  const mesh = new THREE.InstancedMesh(blade, toonMat(0xffffff), count); // white → tinted per-instance
+  const d = new THREE.Object3D();
+  let placed = 0, guard = 0;
+  while (placed < count && guard++ < count * 8) {
     const x = (rnd() - 0.5) * span;
     const z = (rnd() - 0.5) * span;
     if (colliderWorld && colliderWorld.overlaps(x, z, 0.3)) continue;
-    spots.push([x, z, 0.7 + rnd() * 1.1]);
+    const hgt = 0.55 + rnd() * 1.5;   // tuft height
+    const wid = 0.8 + rnd() * 0.7;
+    d.position.set(x, 0, z);
+    d.scale.set(wid, hgt, wid);
+    d.rotation.y = rnd() * Math.PI * 2;
+    d.updateMatrix();
+    mesh.setMatrixAt(placed, d.matrix);
+    mesh.setColorAt(placed, greens[(rnd() * greens.length) | 0]);
+    placed += 1;
   }
-  return { mesh: inst(blade, C.grass, spots, { seedRot: 43 }), colliders: [] };
+  mesh.count = placed;
+  mesh.instanceMatrix.needsUpdate = true;
+  if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+  return { mesh, colliders: [] };
 }
 
 // NATURAL BORDERS (level-layout law 5): the play space is enclosed by things
@@ -206,9 +224,9 @@ export function makeTreeline(runs, colliderWorld = null) {
         const x = r.x0 + (r.x1 - r.x0) * t + jx + nx * push;
         const z = r.z0 + (r.z1 - r.z0) * t + jz + nz * push;
         // never plant a border tree into a camp prop (pen fence, tents…)
-        if (colliderWorld && colliderWorld.overlaps(x, z, 0.85)) continue;
+        if (colliderWorld && colliderWorld.overlaps(x, z, 0.9)) continue;
         spots.push([x, z, 0.8 + rnd() * 0.7]);
-        colliders.push({ type: 'circle', x, z, r: 0.75, group: 'border' });
+        colliders.push({ type: 'circle', x, z, r: 0.9, group: 'border' });
       }
     }
   }
@@ -220,11 +238,14 @@ export function makeTreeline(runs, colliderWorld = null) {
   return { mesh: group, colliders, blockers: [canopyLo] };
 }
 
-export function makeBoulders(spots) {
+export function makeBoulders(spots, colliderWorld = null) {
   const geo = new THREE.DodecahedronGeometry(0.62, 0);
   geo.translate(0, 0.28, 0);
-  const mesh = inst(geo, C.boulder, spots.map((s) => [s.x, s.z, s.scale ?? 1, 0]), { seedRot: 52 });
-  const colliders = spots.map((s) => ({ type: 'circle', x: s.x, z: s.z, r: 0.62 * (s.scale ?? 1), group: 'border' }));
+  // never drop a rock into a tent/pen/prop (a camp collider already there fills
+  // that lane); overlaps with other BORDER props are fine (rocks cluster).
+  const keep = spots.filter((s) => !(colliderWorld && colliderWorld.overlaps(s.x, s.z, 0.62 * (s.scale ?? 1), 'border')));
+  const mesh = inst(geo, C.boulder, keep.map((s) => [s.x, s.z, s.scale ?? 1, 0]), { seedRot: 52 });
+  const colliders = keep.map((s) => ({ type: 'circle', x: s.x, z: s.z, r: 0.62 * (s.scale ?? 1), group: 'border' }));
   return { mesh, colliders };
 }
 
@@ -367,22 +388,39 @@ export function buildCamp(colliderWorld) {
   const pen = { minX: 10, maxX: 17, minZ: 8.5, maxZ: 14, gate: { z0: 9.9, z1: 12.9 } };
   addAll(makePen(pen));
 
-  // natural borders: tree lines east/west/south; low gappy boulders north so
-  // the ridge vista stays open. Colliders live ON the visible props.
-  // run directions chosen so each staggered second row lands INSIDE the play
-  // area (the normal points inward)
+  // NATURAL WALLS (D4 Task 5): tree lines east/west/south + BIG rock clusters
+  // wrap the camp so it feels safe and enclosed. The north keeps a gap for the
+  // ridge vista, but bigger boulders now anchor its corners. Colliders live ON
+  // the visible props — no invisible barriers. Run directions chosen so each
+  // staggered second tree row lands INSIDE the play area.
   addAll(makeTreeline([
-    { x0: 18.7, z0: -14, x1: 18.7, z1: 16.5 },       // east  (2nd row at ~x17.5)
-    { x0: -18.7, z0: 16.5, x1: -18.7, z1: -14 },     // west  (2nd row at ~x-17.5)
-    { x0: 17.5, z0: 16.8, x1: -17.5, z1: 16.8, gap: 2.1 }, // south (2nd row at ~z15.7)
+    { x0: 18.9, z0: -14, x1: 18.9, z1: 16.8, gap: 1.7 },       // east  (dense)
+    { x0: -18.9, z0: 16.8, x1: -18.9, z1: -14, gap: 1.7 },     // west  (dense)
+    { x0: 17.5, z0: 17.0, x1: -17.5, z1: 17.0, gap: 1.7 },     // south (dense)
+    { x0: -18.8, z0: -14.5, x1: -10, z1: -16.6, gap: 2.0 },    // NW corner trees
+    { x0: 10, z0: -16.6, x1: 18.8, z1: -14.5, gap: 2.0 },      // NE corner trees
   ], colliderWorld));
   addAll(makeBoulders([
-    { x: -17.5, z: -15.8, scale: 1.3 }, { x: -14.8, z: -16.2, scale: 0.9 }, { x: -12.4, z: -15.6, scale: 1.1 },
-    { x: -8.8, z: -16.3, scale: 0.8 }, { x: -3.2, z: -16 }, { x: 1.4, z: -16.4, scale: 0.85 },
-    { x: 7.2, z: -16.1, scale: 1.15 }, { x: 11.8, z: -15.7, scale: 0.9 }, { x: 15.6, z: -16.2, scale: 1.25 },
-    { x: 17.8, z: -13.4, scale: 0.95 },
-  ]));
-  addAll(makeGrass(110, 42, colliderWorld));
+    // north wall — a two-depth rock berm: a taller BACK row (behind the bound,
+    // for the silhouette) + a FRONT row whose colliders actually stop the
+    // player, spaced tight enough (~2.1) to leave no player-sized gap while
+    // staying low so the ridge vista still reads over them.
+    { x: -17.6, z: -16.2, scale: 1.95 }, { x: -13.2, z: -16.4, scale: 1.6 },
+    { x: -8.4, z: -16.5, scale: 1.4 }, { x: -3.2, z: -16.5, scale: 1.5 },
+    { x: 1.8, z: -16.6, scale: 1.35 }, { x: 7.0, z: -16.5, scale: 1.45 },
+    { x: 12.0, z: -16.4, scale: 1.6 }, { x: 16.8, z: -16.2, scale: 1.95 },
+    // FRONT row (z ~-15.4) — tight, this is what the player bumps
+    { x: -16.2, z: -15.4, scale: 1.1 }, { x: -14.1, z: -15.5, scale: 1.05 }, { x: -12.0, z: -15.4, scale: 1.1 },
+    { x: -9.9, z: -15.5, scale: 1.0 }, { x: -7.8, z: -15.4, scale: 1.05 }, { x: -5.7, z: -15.5, scale: 1.0 },
+    { x: -3.6, z: -15.4, scale: 1.1 }, { x: -1.5, z: -15.5, scale: 1.0 }, { x: 0.6, z: -15.4, scale: 1.05 },
+    { x: 2.7, z: -15.5, scale: 1.0 }, { x: 4.8, z: -15.4, scale: 1.1 }, { x: 6.9, z: -15.5, scale: 1.0 },
+    { x: 9.0, z: -15.4, scale: 1.05 }, { x: 11.1, z: -15.5, scale: 1.1 }, { x: 13.2, z: -15.4, scale: 1.0 },
+    { x: 15.3, z: -15.5, scale: 1.1 },
+    // corner clusters — the camp feels held (comfy, enclosed); clear of the pen
+    { x: -18.6, z: 14.8, scale: 1.7 }, { x: -17.4, z: 12.6, scale: 1.15 }, { x: -18.8, z: 10.0, scale: 1.35 },
+    { x: 18.6, z: 6.4, scale: 1.5 }, { x: 17.7, z: 4.4, scale: 1.15 }, { x: 18.8, z: 2.0, scale: 1.35 },
+  ], colliderWorld));
+  addAll(makeGrass(180, 42, colliderWorld));
 
   return { group, fireEmitters, sway, pen, cameraBlockers };
 }
