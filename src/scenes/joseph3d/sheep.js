@@ -236,8 +236,10 @@ export class SheepFlock {
   dispose() {
     this.bodies.geometry.dispose();
     this.bodies.material.dispose();
+    this.bodies.dispose(); // frees the instanceMatrix GPU buffer
     this.heads.geometry.dispose();
     this.heads.material.dispose();
+    this.heads.dispose();
     this.bodies.parent?.remove(this.bodies);
     this.heads.parent?.remove(this.heads);
   }

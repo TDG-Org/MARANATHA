@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { makeSky, makeRidges, makeGround, makeSun, makeMotes, mulberry32 } from '../../engine/world.js';
+import { makeSky, makeRidges, makeGround, makeSun, makeMotes, mulberry32, mergeGeometries } from '../../engine/world.js';
 import { Audio } from '../../systems/AudioSystem.js';
 import { getCheckpoint, setCheckpoint, clearCheckpoint, setSceneProgress } from '../../systems/SaveSystem.js';
 import { ColliderWorld } from '../../engine/collision.js';
@@ -503,18 +503,21 @@ function buildDreamField() {
   wheat.instanceMatrix.needsUpdate = true;
   group.add(wheat);
 
-  // a sheaf = a bundle of leaning stalks with a tie-band (the 7 that bow)
+  // a sheaf = a bundle of leaning stalks with a tie-band (the 7 that bow). The
+  // 6 stalks are MERGED into one mesh so a sheaf is 2 draws, not 7 (perf).
   const mkSheaf = (x, z, scale = 1) => {
     const g = new THREE.Group();
-    const mat = new THREE.MeshBasicMaterial({ color: 0xd9b96a, fog: true });
+    const stalkGeos = [];
     for (let i = 0; i < 6; i++) {
       const a = (i / 6) * Math.PI * 2;
-      const stalk = new THREE.Mesh(new THREE.ConeGeometry(0.07, 1.6, 4), mat);
-      stalk.position.set(Math.cos(a) * 0.17, 0.8, Math.sin(a) * 0.17);
-      stalk.rotation.z = Math.cos(a) * 0.22;
-      stalk.rotation.x = -Math.sin(a) * 0.22;
-      g.add(stalk);
+      const geo = new THREE.ConeGeometry(0.07, 1.6, 4);
+      geo.rotateZ(Math.cos(a) * 0.22);
+      geo.rotateX(-Math.sin(a) * 0.22);
+      geo.translate(Math.cos(a) * 0.17, 0.8, Math.sin(a) * 0.17);
+      stalkGeos.push(geo);
     }
+    const stalks = new THREE.Mesh(mergeGeometries(stalkGeos), new THREE.MeshBasicMaterial({ color: 0xd9b96a, fog: true }));
+    g.add(stalks);
     const band = new THREE.Mesh(new THREE.TorusGeometry(0.23, 0.05, 6, 10), new THREE.MeshBasicMaterial({ color: 0x8a5a2c, fog: true }));
     band.position.y = 0.58;
     band.rotation.x = Math.PI / 2;
@@ -553,10 +556,13 @@ function buildDreamField() {
     fogBanks.push(m); group.add(m);
   }
 
-  // the MOONBEAM — a visible cool shaft of light down onto the field
+  // the MOONBEAM — a visible cool shaft of light down onto the field.
+  // (beamTex is CAPTURED so dispose() can free it — an inline softTex here
+  // would leak one GPU texture on every scene exit.)
+  const beamTex = softTex('200,215,255');
   const beam = new THREE.Mesh(
     new THREE.CylinderGeometry(1.2, 4.2, 15, 18, 1, true),
-    new THREE.MeshBasicMaterial({ map: softTex('200,215,255'), color: 0xcfe0ff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }),
+    new THREE.MeshBasicMaterial({ map: beamTex, color: 0xcfe0ff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }),
   );
   beam.position.set(FIELD.x + 3, 7.5, FIELD.z - 3);
   beam.rotation.z = -0.12;
@@ -579,20 +585,24 @@ function buildDreamField() {
 
   // --- the celestial bodies: sun, moon, 11 stars (layered glow) ---
   const glowTex = softTex('255,255,255');
-  const mkBody = (size, color, coreBoost = 1) => {
+  const mkBody = (size, color, coreBoost = 1, layered = true) => {
     const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
     halo.scale.setScalar(size);
-    const core = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0xffffff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
-    core.scale.setScalar(size * 0.42 * coreBoost);
     const b = new THREE.Group();
-    b.add(halo, core);
+    b.add(halo);
+    let core = null;
+    if (layered) { // sun + moon get a bright inner core; stars stay single-sprite (perf)
+      core = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0xffffff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+      core.scale.setScalar(size * 0.42 * coreBoost);
+      b.add(core);
+    }
     b.userData = { halo, core, twinkle: rnd() * Math.PI * 2 };
     return b;
   };
   const sun = mkBody(4.6, 0xffe6a8);
   const moon = mkBody(3.4, 0xd2e0ff);
   const stars = [];
-  for (let i = 0; i < 11; i++) stars.push(mkBody(1.0, 0xfff6df, 1.2));
+  for (let i = 0; i < 11; i++) stars.push(mkBody(1.15, 0xfff6df, 1, false));
   const bodies = [sun, moon, ...stars];
   bodies.forEach((b) => group.add(b));
 
@@ -616,7 +626,7 @@ function buildDreamField() {
   let skyState = 0; // 0 idle · 1 descending (→mid) · 2 bowing (→low)
   const setOpacity = (k) => bodies.forEach((b) => {
     b.userData.halo.material.opacity = k * (b === sun ? 0.9 : b === moon ? 0.8 : 0.95);
-    b.userData.core.material.opacity = k * 0.9;
+    if (b.userData.core) b.userData.core.material.opacity = k * 0.9;
   });
 
   return {
@@ -662,15 +672,18 @@ function buildDreamField() {
       // celestial bodies: twinkle + descend/bow toward their target
       bodies.forEach((b) => {
         const tw = 1 + Math.sin(t * 2 + b.userData.twinkle) * 0.08;
-        b.userData.core.material.rotation = t * 0.3 + b.userData.twinkle;
+        if (b.userData.core) b.userData.core.material.rotation = t * 0.3 + b.userData.twinkle;
         b.scale.setScalar(tw);
         if (skyState === 1) b.position.lerp(b.userData.mid, Math.min(dt * 0.0006, 1));
         else if (skyState === 2) b.position.lerp(b.userData.low, Math.min(dt * 0.0012, 1));
       });
     },
     dispose() {
-      glowTex.dispose(); fogTex.dispose();
-      group.traverse((o) => { if (o.isMesh || o.isSprite || o.isPoints) { o.geometry?.dispose?.(); o.material?.dispose?.(); } });
+      glowTex.dispose(); fogTex.dispose(); beamTex.dispose();
+      group.traverse((o) => {
+        if (o.isInstancedMesh) o.dispose(); // frees the wheat instance buffers
+        if (o.isMesh || o.isSprite || o.isPoints) { o.geometry?.dispose?.(); o.material?.dispose?.(); }
+      });
       group.parent?.remove(group);
     },
   };

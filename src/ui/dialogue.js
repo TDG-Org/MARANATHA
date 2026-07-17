@@ -122,6 +122,9 @@ export function createDialogue() {
 
     return new Promise((resolve) => {
       const back = () => {
+        // stop the LIVE type-on first, or its next tick overwrites the re-read
+        // text (nameplate says one speaker, body shows another).
+        if (!revealed && typeOn._skip) { typeOn._skip(); revealed = true; }
         if (viewIdx > 0) {
           viewIdx -= 1;
           paint(history[viewIdx]);      // instant re-read, no typewriter

@@ -174,8 +174,29 @@ export function buildHome({ scene, camera, app }) {
   gear.onmouseleave = () => { gear.style.background = 'rgba(16,14,26,0.5)'; };
   gear.onclick = () => { Audio.uiClick(); openSettings({ onReset: renderNodes }); };
 
+  // Small tasteful About · Support links (bottom-left, clear of the gear).
+  const links = document.createElement('div');
+  links.style.cssText = [
+    'position:fixed', 'left:calc(16px + env(safe-area-inset-left))', 'bottom:calc(16px + env(safe-area-inset-bottom))',
+    'z-index:22', 'pointer-events:auto', 'display:flex', 'gap:14px',
+    'font:500 13px "Segoe UI",system-ui,sans-serif',
+  ].join(';');
+  [['About', 'about'], ['Support', 'support']].forEach(([label, key]) => {
+    const a = document.createElement('button');
+    a.type = 'button';
+    a.textContent = label;
+    a.style.cssText = [
+      'background:none', 'border:none', 'cursor:pointer', 'color:#fdf6e3', 'opacity:0.72',
+      'text-shadow:0 1px 5px rgba(15,12,26,0.7)', 'transition:opacity 150ms ease', 'padding:4px 2px',
+    ].join(';');
+    a.onmouseenter = () => { a.style.opacity = '1'; };
+    a.onmouseleave = () => { a.style.opacity = '0.72'; };
+    a.onclick = () => { Audio.uiClick(); app.navigate(key); };
+    links.append(a);
+  });
+
   root.append(title, subtitle, spacer, card, path);
-  document.body.append(root, gear);
+  document.body.append(root, gear, links);
   requestAnimationFrame(() => { root.style.opacity = '1'; });
 
   // Default selection: the first built story (so Start is actionable), else the
@@ -200,6 +221,7 @@ export function buildHome({ scene, camera, app }) {
   function dispose() {
     root.remove();
     gear.remove();
+    links.remove();
   }
 
   return { update, dispose };

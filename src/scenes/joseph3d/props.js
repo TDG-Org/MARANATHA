@@ -37,8 +37,10 @@ export function makeTents(spots) {
   const geo = new THREE.ConeGeometry(1.7, 2.2, 6);
   const mesh = inst(geo, C.tent, spots.map((s) => [s.x, s.z, s.scale ?? 1, 1.1, s.rot]));
   const colliders = spots.map((s) => ({ type: 'circle', x: s.x, z: s.z, r: 1.55 * (s.scale ?? 1), group: 'tents' }));
-  // Tents are BIG — they join the camera-blocker list (level-layout law 4).
-  return { mesh, colliders, blockers: [mesh] };
+  // NB: tents are ONE InstancedMesh, so they can't be a camera occluder — the
+  // fade mutates the shared material and would ghost ALL tents at once. The
+  // raised authored camera behind the hero makes tent occlusion rare anyway.
+  return { mesh, colliders };
 }
 
 export function makeFires(spots) {
@@ -235,7 +237,10 @@ export function makeTreeline(runs, colliderWorld = null) {
   const canopyLo = inst(lower, C.foliage, spots, { seedRot: 51 });
   const canopyHi = inst(upper, C.foliageDark, spots, { seedRot: 51 });
   group.add(canopyLo, canopyHi);
-  return { mesh: group, colliders, blockers: [canopyLo] };
+  // NOT a camera occluder — one InstancedMesh for the whole tree line; fading
+  // it would ghost every border tree. Trees sit at the edges, behind the play
+  // space, so they rarely come between the follow camera and the hero.
+  return { mesh: group, colliders };
 }
 
 export function makeBoulders(spots, colliderWorld = null) {

@@ -291,12 +291,19 @@ export function createBeats(ctx) {
       });
     });
 
-    // the campfire beat's ONE action: the player chooses to sit down too.
+    // the campfire beat's ONE action: the player chooses to sit down too. The
+    // prompt is gated to THIS beat (when: !sat) — Interactables has no removal,
+    // and an ungated sit-fire prompt re-fired in beat 6 when the player walked
+    // back through the fire (a softlock).
+    let sat = false;
     await new Promise((resolve) => {
       ctx.interactables.addPrompt({
         id: 'sit-fire', label: 'Sit by the fire',
         getPos: () => ({ x: 0.6, z: -4.4 }), r: 2.6, lift: 0.7,
+        when: () => !sat,
         onInteract: async () => {
+          if (sat) return;
+          sat = true;
           ctx.setInput(false);
           ctx.guide.setTarget(null);
           ctx.joseph.turnToward(0.2 - ctx.joseph.position.x, -6 - ctx.joseph.position.z);
