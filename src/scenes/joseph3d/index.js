@@ -528,8 +528,33 @@ function buildDreamField() {
   const FIELD = { x: 62, z: 0 };
   const rnd = mulberry32(808);
 
-  // dark cool ground disc
-  const disc = new THREE.Mesh(new THREE.CircleGeometry(16, 32), new THREE.MeshBasicMaterial({ color: 0x27304f, fog: true }));
+  // the ground is a REAL crop field (D6): tilled rows — dark furrows and
+  // moon-caught ridge lines — generated as a canvas texture. Warm earth under
+  // cool light; never a gray disc.
+  const tilledTex = (() => {
+    const c = document.createElement('canvas'); c.width = c.height = 256;
+    const tctx = c.getContext('2d');
+    tctx.fillStyle = '#4a3826'; tctx.fillRect(0, 0, 256, 256); // turned earth
+    const rows = 14;
+    for (let i = 0; i < rows; i++) {
+      const y = (i / rows) * 256;
+      tctx.fillStyle = '#5d4930'; tctx.fillRect(0, y, 256, 9);          // ridge
+      tctx.fillStyle = '#6b563a'; tctx.fillRect(0, y + 2.5, 256, 3);    // moon-lit crest
+      tctx.fillStyle = '#3a2b1c'; tctx.fillRect(0, y + 11, 256, 5);     // furrow shadow
+    }
+    // grain noise so the rows don't read as vector stripes
+    for (let i = 0; i < 900; i++) {
+      const x = rnd() * 256, y = rnd() * 256;
+      tctx.fillStyle = rnd() > 0.5 ? 'rgba(120,98,66,0.18)' : 'rgba(30,22,14,0.2)';
+      tctx.fillRect(x, y, 1.6, 1.2);
+    }
+    const t = new THREE.CanvasTexture(c);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.repeat.set(4, 4);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  })();
+  const disc = new THREE.Mesh(new THREE.CircleGeometry(16, 32), new THREE.MeshBasicMaterial({ color: 0x9a8a72, map: tilledTex, fog: true }));
   disc.rotation.x = -Math.PI / 2;
   disc.position.set(FIELD.x, 0.01, FIELD.z);
   group.add(disc);
@@ -554,16 +579,21 @@ function buildDreamField() {
       wheatSpots.push([x, z, 0.7 + rnd() * 0.7, rnd() * Math.PI * 2]);
     }
   }
+  // D6 ROOTED: instances live in FIELD-LOCAL coords and the mesh itself sits
+  // at the field center. (They used to be world-coord instances on a mesh at
+  // the origin — the sway rotation then swung the whole field around a pivot
+  // 62 units away, translating stalks ~1u vertically: the "bouncing wheat".)
   const wheat = new THREE.InstancedMesh(stalkGeo, new THREE.MeshBasicMaterial({ color: 0xb39a5e, fog: true }), wheatSpots.length);
   const wd = new THREE.Object3D();
   wheatSpots.forEach((s, i) => {
-    wd.position.set(FIELD.x + s[0], 0, FIELD.z + s[1]);
+    wd.position.set(s[0], 0, s[1]); // local to the field center
     wd.scale.set(1, s[2], 1);
     wd.rotation.set(0, s[3], 0);
     wd.updateMatrix();
     wheat.setMatrixAt(i, wd.matrix);
   });
   wheat.instanceMatrix.needsUpdate = true;
+  wheat.position.set(FIELD.x, 0, FIELD.z);
   group.add(wheat);
 
   // a sheaf = a bundle of leaning stalks with a tie-band (the 7 that bow). The
@@ -667,6 +697,24 @@ function buildDreamField() {
   const motes = new THREE.Points(moteGeo, new THREE.PointsMaterial({ map: fogTex, color: 0xdfe7ff, size: 0.5, transparent: true, opacity: 0.6, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true, fog: false }));
   group.add(motes);
 
+  // D6: dream FIREFLIES — low warm-green sparks weaving through the wheat,
+  // blinking softly (the motes drift high and cool; these live at stalk height)
+  const FIREFLY_N = Math.max(14, Math.round(44 * Graphics.particleScale));
+  const fireflyGeo = new THREE.BufferGeometry();
+  {
+    const pts = new Float32Array(FIREFLY_N * 3);
+    for (let i = 0; i < FIREFLY_N; i++) {
+      pts[i * 3] = FIELD.x + (rnd() - 0.5) * 24;
+      pts[i * 3 + 1] = 0.3 + rnd() * 1.8;
+      pts[i * 3 + 2] = FIELD.z + (rnd() - 0.5) * 24;
+    }
+    fireflyGeo.setAttribute('position', new THREE.BufferAttribute(pts, 3));
+  }
+  const fireflySeed = new Float32Array(FIREFLY_N);
+  for (let i = 0; i < FIREFLY_N; i++) fireflySeed[i] = rnd() * Math.PI * 2;
+  const fireflyPts = new THREE.Points(fireflyGeo, new THREE.PointsMaterial({ map: fogTex, color: 0xd8f0b8, size: 0.32, transparent: true, opacity: 0.7, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true, fog: false }));
+  group.add(fireflyPts);
+
   // --- the celestial bodies: sun, moon, 11 stars (layered glow) ---
   const glowTex = softTex('255,255,255');
   const mkBody = (size, color, coreBoost = 1, layered = true) => {
@@ -765,7 +813,7 @@ function buildDreamField() {
   group.add(summitGroup);
 
   // field elements that HIDE when we cut to the summit (they were dream 1)
-  const fieldEls = [disc, wheat, center, ...outer, ...fogBanks, ...groundMist, beam, moonDisc, mountainGroup, cairns];
+  const fieldEls = [disc, wheat, center, ...outer, ...fogBanks, ...groundMist, beam, moonDisc, mountainGroup, cairns, fireflyPts, motes];
   const setSummit = (on) => { summitGroup.visible = on; fieldEls.forEach((e) => { e.visible = !on; }); };
 
   let skyState = 0; // 0 idle · 1 descending (→mid) · 2 bowing (→low)
@@ -806,11 +854,20 @@ function buildDreamField() {
         });
         return;
       }
-      // field-wide wheat sway (cheap night wind)
-      wheat.rotation.z = Math.sin(t * 0.7) * 0.015;
-      wheat.rotation.x = Math.cos(t * 0.5) * 0.01;
+      // field-wide wheat sway — CALM: a whisper of lean around the field's own
+      // center (rooted; ≤9cm at the rim — never the old 1u bounce)
+      wheat.rotation.z = Math.sin(t * 0.55) * 0.006;
+      wheat.rotation.x = Math.cos(t * 0.4) * 0.004;
       // low ground mist breathes
       groundMist.forEach((m) => { m.material.opacity = 0.24 + Math.sin(t * 0.25 + m.userData.phase) * 0.08; });
+      // dream fireflies: slow drift + soft per-point blink
+      const fp = fireflyGeo.attributes.position;
+      for (let i = 0; i < FIREFLY_N; i++) {
+        fp.setY(i, fp.getY(i) + Math.sin(t * 0.6 + fireflySeed[i]) * dt * 0.00018);
+        fp.setX(i, fp.getX(i) + Math.cos(t * 0.35 + fireflySeed[i] * 2) * dt * 0.00012);
+      }
+      fp.needsUpdate = true;
+      fireflyPts.material.opacity = 0.55 + Math.sin(t * 1.6) * 0.25;
       // fog banks drift + breathe
       fogBanks.forEach((m) => {
         m.position.x = m.userData.baseX + Math.sin(t * 0.15 + m.userData.phase) * 1.2;
@@ -847,6 +904,7 @@ function buildDreamField() {
     dispose() {
       glowTex.dispose(); fogTex.dispose(); beamTex.dispose();
       mistTex.dispose(); moonDiscTex.dispose(); cloudTex.dispose();
+      tilledTex.dispose();
       group.traverse((o) => {
         if (o.isInstancedMesh) o.dispose(); // frees the wheat instance buffers
         if (o.isMesh || o.isSprite || o.isPoints) { o.geometry?.dispose?.(); o.material?.dispose?.(); }
