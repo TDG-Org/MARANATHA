@@ -4,9 +4,12 @@
 // Drop a file at audio/<key>.<ext>, flip `available: true`, and it takes over —
 // zero 404s before then (the loader only fetches keys marked available).
 //
-//   bus:      'sfx' | 'music'   (which channel it plays on)
+//   bus:      'sfx' | 'music' | 'voice'   (which channel it plays on)
 //   loop:     true for beds/score (currently procedural via ambience()/musicPad())
 //   fallback: AudioSystem method used until a real file is provided
+//   file:     path under /audio (folder/name, no ext) when a REAL file exists.
+//             Files are sorted into /audio/{music,sfx,ambient,vo}/. The KEY the
+//             game calls stays stable; the loader fetches `file` (or the key).
 export const AUDIO_MANIFEST = [
   // --- global UI ---
   { key: 'ui.click', bus: 'sfx', loop: false, seconds: 0.1, fallback: 'uiClick', available: false, purpose: 'button / confirm tick', scene: 'global' },
@@ -29,17 +32,17 @@ export const AUDIO_MANIFEST = [
   // --- Scene 1 (3D rebuild) — ambient beds (loop) -------------------------
   // Fallback policy: graceful SILENCE over junk placeholders — keys with
   // fallback:null are silent until Nate drops the real file in /audio.
-  { key: 'amb.camp_wind', bus: 'sfx', loop: true, seconds: 40, fallback: 'ambientCampBed', available: false, purpose: 'wind + distant birds bed (procedural until file)', scene: 'joseph3d-1' },
-  { key: 'amb.fire_crackle', bus: 'sfx', loop: true, seconds: 25, fallback: null, available: false, purpose: 'cook-fire crackle loop (played louder near fires)', scene: 'joseph3d-1' },
-  { key: 'amb.sheep_pen', bus: 'sfx', loop: true, seconds: 30, fallback: null, available: false, purpose: 'distant flock: occasional bleats, bells', scene: 'joseph3d-1' },
+  { key: 'amb.camp_wind', bus: 'sfx', loop: true, seconds: 40, file: 'ambient/camp_wind', fallback: 'ambientCampBed', available: true, purpose: 'wind + distant birds bed', scene: 'joseph3d-1' },
+  { key: 'amb.fire_crackle', bus: 'sfx', loop: true, seconds: 25, file: 'ambient/fire_crackle', fallback: null, available: true, purpose: 'cook-fire crackle loop (played louder near fires)', scene: 'joseph3d-1' },
+  { key: 'amb.sheep_pen', bus: 'sfx', loop: true, seconds: 30, file: 'ambient/sheep_pen', fallback: null, available: true, purpose: 'distant flock: occasional bleats, bells', scene: 'joseph3d-1' },
   { key: 'amb.camp_chatter', bus: 'sfx', loop: true, seconds: 35, fallback: null, available: false, purpose: 'far-off camp murmur / activity', scene: 'joseph3d-1' },
   { key: 'amb.night_crickets', bus: 'sfx', loop: true, seconds: 40, fallback: 'ambientNightBed', available: false, purpose: 'dusk/night crickets bed', scene: 'joseph3d-1' },
 
   // --- Scene 1 (3D) — music (loop, crossfaded by mood) ---------------------
-  { key: 'music.camp_warm', bus: 'music', loop: true, seconds: 90, fallback: 'musicWarmBed', available: false, purpose: 'golden-hour belonging theme', scene: 'joseph3d-1' },
-  { key: 'music.dusk_calm', bus: 'music', loop: true, seconds: 70, fallback: 'musicWonderBed', available: false, purpose: 'dusk quieting-down theme', scene: 'joseph3d-1' },
-  { key: 'music.dream_wonder', bus: 'music', loop: true, seconds: 70, fallback: 'musicWonderBed', available: false, purpose: 'dream sequence — hushed awe', scene: 'joseph3d-1' },
-  { key: 'music.ominous_turn', bus: 'music', loop: true, seconds: 60, fallback: null, available: false, purpose: 'the brothers’ hatred — warm → ominous shift', scene: 'joseph3d-1' },
+  { key: 'music.camp_warm', bus: 'music', loop: true, seconds: 90, file: 'music/camp_warm', fallback: 'musicWarmBed', available: true, purpose: 'golden-hour belonging theme', scene: 'joseph3d-1' },
+  { key: 'music.dusk_calm', bus: 'music', loop: true, seconds: 70, file: 'music/dusk_calm', fallback: 'musicWonderBed', available: true, purpose: 'dusk quieting-down theme', scene: 'joseph3d-1' },
+  { key: 'music.dream_wonder', bus: 'music', loop: true, seconds: 70, file: 'music/dream_wonder', fallback: 'musicWonderBed', available: true, purpose: 'dream sequence — hushed awe', scene: 'joseph3d-1' },
+  { key: 'music.ominous_turn', bus: 'music', loop: true, seconds: 60, file: 'music/ominous_turn', fallback: null, available: true, purpose: 'the brothers’ hatred — warm → ominous shift', scene: 'joseph3d-1' },
 
   // --- Scene 1 (3D) — reactive SFX -----------------------------------------
   { key: 'sfx.footstep_grass', bus: 'sfx', loop: false, seconds: 0.15, fallback: 'footstep', available: false, purpose: 'footfall on grass', scene: 'joseph3d-1' },
@@ -51,6 +54,7 @@ export const AUDIO_MANIFEST = [
   { key: 'stinger.dream_enter', bus: 'sfx', loop: false, seconds: 3.0, fallback: 'swellBright', available: false, purpose: 'the dream begins', scene: 'joseph3d-1' },
   { key: 'stinger.hatred', bus: 'sfx', loop: false, seconds: 2.4, fallback: 'swellSoft', available: false, purpose: 'the brothers’ jealousy hardens', scene: 'joseph3d-1' },
   { key: 'sfx.sheaf_bow', bus: 'sfx', loop: false, seconds: 0.6, fallback: 'thump', available: false, purpose: 'a sheaf bows in the dream', scene: 'joseph3d-1' },
+  { key: 'sfx.men_laughing', bus: 'sfx', loop: false, seconds: 2.5, file: 'sfx/men_laughing', fallback: null, available: true, purpose: 'the brothers mock/laugh at Joseph (envy beats)', scene: 'joseph3d-1' },
 
   // --- Narrator VO (file-first; naming: vo/<story>/<scene>/<line-id>) ---
   // The manifest key is the path under /audio. The Narrator is called with the

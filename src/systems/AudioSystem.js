@@ -200,7 +200,8 @@ class AudioSystem {
     await Promise.all(
       [...this._manifest.values()]
         .filter((e) => e.bus !== 'voice')
-        .map(async (e) => { this.samples[e.key] = (await this._fetchDecode(e.key)) || null; }),
+        // fetch the real file path (folder/name) when set, else the key
+        .map(async (e) => { this.samples[e.key] = (await this._fetchDecode(e.file || e.key)) || null; }),
     );
   }
 
