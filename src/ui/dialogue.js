@@ -2,13 +2,15 @@ import { Audio } from '../systems/AudioSystem.js';
 
 // Dialogue popups. Every line shows WHO is speaking (storyteller skill: the
 // player must always know who each person is). Text types on; the first
-// advance completes the reveal, the next resolves. Optional choice buttons.
+// advance completes the reveal, the next resolves.
+//
+// QoL (D4): a ◀ button (and Backspace / ←) re-reads earlier lines of the
+// CURRENT conversation. This is text history ONLY — the game never rewinds;
+// advancing steps forward through the history back to the live line, then a
+// further advance resolves it. History clears when the box hides.
 //
 //   const dlg = createDialogue();
 //   await dlg.say('Jacob', 'You are my beloved son.', { color: '#d9a86a' });
-//   const pick = await dlg.choose('Joseph', 'What do you say?', [
-//     { label: 'Thank him', value: 'thanks' }, { label: 'Stay silent', value: 'silent' },
-//   ]);
 //
 // The scene freezes the player controller while dialogue is open.
 export function createDialogue() {
@@ -31,15 +33,34 @@ export function createDialogue() {
   const choicesEl = document.createElement('div');
   choicesEl.style.cssText = 'display:none; flex-wrap:wrap; gap:8px; margin-top:12px;';
 
+  // footer row: the ◀ back button (left) + the advance hint (right)
+  const footer = document.createElement('div');
+  footer.style.cssText = 'display:flex; align-items:center; justify-content:space-between; margin-top:8px; min-height:22px;';
+
+  const backBtn = document.createElement('button');
+  backBtn.type = 'button';
+  backBtn.textContent = '◀ Back';
+  backBtn.setAttribute('aria-label', 'Re-read the previous line');
+  backBtn.style.cssText = [
+    'font:600 12px "Segoe UI",system-ui,sans-serif', 'padding:5px 11px', 'border-radius:9px',
+    'cursor:pointer', 'color:#f5e6c4', 'background:rgba(242,184,128,0.12)',
+    'border:1px solid rgba(242,184,128,0.32)', 'visibility:hidden', 'pointer-events:auto',
+    'transition:filter 140ms ease',
+  ].join(';');
+  backBtn.onmouseenter = () => { backBtn.style.filter = 'brightness(1.15)'; };
+  backBtn.onmouseleave = () => { backBtn.style.filter = 'none'; };
+
   const hint = document.createElement('div');
   hint.textContent = '▸';
-  hint.style.cssText = 'text-align:right; font-size:13px; opacity:0.5; margin-top:6px; animation:none;';
+  hint.style.cssText = 'font-size:13px; opacity:0.5;';
 
-  box.append(nameEl, textEl, choicesEl, hint);
+  footer.append(backBtn, hint);
+  box.append(nameEl, textEl, choicesEl, footer);
   document.body.append(box);
 
   let open = false;
   let onKey = null;
+  const history = []; // {speaker, text, color} for the current conversation
 
   const show = () => {
     open = true;
@@ -52,10 +73,22 @@ export function createDialogue() {
     box.style.pointerEvents = 'none';
     box.style.opacity = '0';
     box.style.transform = 'translateX(-50%) translateY(12px)';
+    history.length = 0; // conversation over — clear the re-read history
+    backBtn.style.visibility = 'hidden';
     if (onKey) { window.removeEventListener('keydown', onKey); onKey = null; }
   };
 
-  function typewrite(text) {
+  // Paint a history entry. `live` = the newest line (types on); older re-reads
+  // appear instantly and dim the speaker a touch to read as "earlier".
+  function paint(entry, { typewrite = false } = {}) {
+    nameEl.textContent = entry.speaker || '';
+    nameEl.style.color = entry.color || '#f2b880';
+    if (typewrite) return typeOn(entry.text);
+    textEl.textContent = entry.text;
+    return Promise.resolve();
+  }
+
+  function typeOn(text) {
     return new Promise((resolveType) => {
       let i = 0;
       textEl.textContent = '';
@@ -67,8 +100,7 @@ export function createDialogue() {
         textEl.textContent = text.slice(0, i);
         if (i >= text.length) { clearInterval(timer); done = true; resolveType(); }
       }, 18);
-      // expose a completer so an advance can skip the typing
-      typewrite._skip = () => { clearInterval(timer); if (!done) finish(); };
+      typeOn._skip = () => { clearInterval(timer); if (!done) finish(); };
     });
   }
 
@@ -76,31 +108,54 @@ export function createDialogue() {
     choicesEl.style.display = 'none';
     choicesEl.textContent = '';
     hint.style.display = 'block';
-    nameEl.textContent = speaker || '';
-    nameEl.style.color = color;
+    history.push({ speaker, text, color });
+    const liveIdx = history.length - 1;
+    let viewIdx = liveIdx;
     show();
     Audio.uiClick?.();
 
     let revealed = false;
-    const typing = typewrite(text).then(() => { revealed = true; });
+    paint(history[liveIdx], { typewrite: true }).then(() => { revealed = true; });
+
+    const updateBack = () => { backBtn.style.visibility = viewIdx > 0 ? 'visible' : 'hidden'; };
+    updateBack();
 
     return new Promise((resolve) => {
+      const back = () => {
+        if (viewIdx > 0) {
+          viewIdx -= 1;
+          paint(history[viewIdx]);      // instant re-read, no typewriter
+          hint.textContent = '▸ ▸';     // subtle cue: you're reading back
+          updateBack();
+        }
+      };
       const advance = () => {
-        if (!revealed && typewrite._skip) { typewrite._skip(); revealed = true; return; }
+        if (viewIdx < liveIdx) {         // stepping forward through re-reads
+          viewIdx += 1;
+          paint(history[viewIdx]);
+          if (viewIdx === liveIdx) hint.textContent = '▸';
+          updateBack();
+          return;
+        }
+        if (!revealed && typeOn._skip) { typeOn._skip(); revealed = true; return; }
         cleanup();
         resolve();
       };
       const cleanup = () => {
-        box.removeEventListener('click', advance);
+        box.removeEventListener('click', onBoxClick);
+        backBtn.removeEventListener('click', onBackClick);
         window.removeEventListener('keydown', onKey);
         onKey = null;
       };
+      const onBoxClick = (e) => { if (e.target === backBtn) return; advance(); };
+      const onBackClick = (e) => { e.stopPropagation(); Audio.uiClick?.(); back(); };
       onKey = (e) => {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); advance(); }
+        else if (e.key === 'Backspace' || e.key === 'ArrowLeft') { e.preventDefault(); back(); }
       };
-      box.addEventListener('click', advance);
+      box.addEventListener('click', onBoxClick);
+      backBtn.addEventListener('click', onBackClick);
       window.addEventListener('keydown', onKey);
-      typing; // ensure the promise runs
     });
   }
 
@@ -109,6 +164,7 @@ export function createDialogue() {
     nameEl.style.color = color;
     textEl.textContent = text;
     hint.style.display = 'none';
+    backBtn.style.visibility = 'hidden';
     show();
     choicesEl.style.display = 'flex';
     choicesEl.textContent = '';

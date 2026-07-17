@@ -57,8 +57,8 @@ export function createCinema({ isPaused = null } = {}) {
     // titleCard({ heading:'HEBRON, CANAAN', sub:'c. 1898 BC · GENESIS 37', holdMs })
     async titleCard({ heading = '', sub = '', holdMs = 3400 } = {}) {
       title.innerHTML =
-        `<div style="font-size:clamp(17px,2.6vw,26px);letter-spacing:0.24em;text-transform:uppercase;">${heading}</div>` +
-        (sub ? `<div style="font-size:clamp(11px,1.5vw,14px);letter-spacing:0.3em;opacity:0.72;margin-top:6px;text-transform:uppercase;">${sub}</div>` : '');
+        `<div style="font-size:clamp(23px,3.6vw,36px);letter-spacing:0.22em;text-transform:uppercase;">${heading}</div>` +
+        (sub ? `<div style="font-size:clamp(13px,1.9vw,18px);letter-spacing:0.3em;opacity:0.75;margin-top:8px;text-transform:uppercase;">${sub}</div>` : '');
       title.style.opacity = '1';
       title.style.transform = 'translateY(0)';
       await hold(holdMs);

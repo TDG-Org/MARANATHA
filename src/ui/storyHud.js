@@ -21,24 +21,32 @@ export function createStoryHud({ onHome } = {}) {
   home.onmouseleave = () => { home.style.background = 'rgba(16,14,26,0.55)'; };
   home.onclick = () => { Audio.uiClick?.(); onHome?.(); };
 
-  // The objective line — BIG, warm-white, glowing, kid-readable from across
-  // the room (ui-clarity law 3). A soft hint line can ride under it.
+  // The objective banner — TOP-CENTER, just under the letterbox safe zone so
+  // it sits near the player's eye-line. Big, warm-white, glowing, with a small
+  // marker icon and a brief pulse on change (ui-clarity). A hint rides under it.
   const obj = document.createElement('div');
   obj.style.cssText = [
-    'position:fixed', 'top:calc(15px + env(safe-area-inset-top))', 'left:calc(72px + env(safe-area-inset-left))', 'z-index:40',
-    'max-width:min(62vw,480px)', 'padding:10px 16px', 'border-radius:12px',
-    'font-family:"Segoe UI",system-ui,sans-serif', 'font-size:clamp(15px,2.2vw,19px)', 'font-weight:600',
+    'position:fixed',
+    'top:calc(11vh + 12px + env(safe-area-inset-top))', 'left:50%', 'transform:translateX(-50%)', 'z-index:40',
+    'max-width:min(90vw,560px)', 'padding:11px 20px', 'border-radius:14px', 'text-align:center',
+    'font-family:"Segoe UI",system-ui,sans-serif', 'font-size:clamp(16px,2.4vw,21px)', 'font-weight:600',
     'letter-spacing:0.012em', 'color:#fff3d8', 'line-height:1.3',
-    'background:rgba(12,10,20,0.66)', 'border:1px solid rgba(242,184,128,0.34)',
+    'background:rgba(12,10,20,0.7)', 'border:1px solid rgba(242,184,128,0.42)',
     'backdrop-filter:blur(3px)', 'pointer-events:none',
-    'text-shadow:0 0 14px rgba(242,184,128,0.4), 0 1px 2px rgba(0,0,0,0.75)',
-    'box-shadow:0 3px 16px rgba(0,0,0,0.32), 0 0 18px rgba(242,184,128,0.12)',
+    'text-shadow:0 0 14px rgba(242,184,128,0.45), 0 1px 3px rgba(0,0,0,0.8)',
+    'box-shadow:0 3px 18px rgba(0,0,0,0.35), 0 0 22px rgba(242,184,128,0.14)',
     'opacity:0', 'transition:opacity 350ms ease',
   ].join(';');
+  const objRow = document.createElement('div');
+  objRow.style.cssText = 'display:flex; align-items:center; justify-content:center; gap:9px;';
+  const objIcon = document.createElement('span');
+  objIcon.textContent = '✦';
+  objIcon.style.cssText = 'font-size:0.9em; color:#ffcf8a; flex:0 0 auto; filter:drop-shadow(0 0 6px rgba(242,184,128,0.6));';
   const objText = document.createElement('div');
+  objRow.append(objIcon, objText);
   const objHint = document.createElement('div');
-  objHint.style.cssText = 'font-size:0.72em; font-weight:400; opacity:0.78; margin-top:3px; display:none; text-shadow:0 1px 2px rgba(0,0,0,0.7);';
-  obj.append(objText, objHint);
+  objHint.style.cssText = 'font-size:0.68em; font-weight:400; opacity:0.8; margin-top:4px; display:none; text-shadow:0 1px 2px rgba(0,0,0,0.7);';
+  obj.append(objRow, objHint);
 
   // Center-screen counter for number quests (🐑 2 / 3) — pops, then fades.
   const counter = document.createElement('div');
@@ -70,11 +78,12 @@ export function createStoryHud({ onHome } = {}) {
 
   function pulse() {
     try {
+      // keep translateX(-50%) in every keyframe or the centered banner jumps
       obj.animate(
         [
-          { transform: 'scale(1)', boxShadow: '0 3px 16px rgba(0,0,0,0.32), 0 0 18px rgba(242,184,128,0.12)' },
-          { transform: 'scale(1.06)', boxShadow: '0 3px 16px rgba(0,0,0,0.32), 0 0 30px rgba(242,184,128,0.4)' },
-          { transform: 'scale(1)', boxShadow: '0 3px 16px rgba(0,0,0,0.32), 0 0 18px rgba(242,184,128,0.12)' },
+          { transform: 'translateX(-50%) scale(1)', boxShadow: '0 3px 18px rgba(0,0,0,0.35), 0 0 22px rgba(242,184,128,0.14)' },
+          { transform: 'translateX(-50%) scale(1.06)', boxShadow: '0 3px 18px rgba(0,0,0,0.35), 0 0 34px rgba(242,184,128,0.42)' },
+          { transform: 'translateX(-50%) scale(1)', boxShadow: '0 3px 18px rgba(0,0,0,0.35), 0 0 22px rgba(242,184,128,0.14)' },
         ],
         { duration: 640, easing: 'ease-in-out' },
       );
