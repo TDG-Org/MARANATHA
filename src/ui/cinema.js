@@ -5,7 +5,7 @@ import { pausableWait } from '../engine/Sequencer.js';
 // whisper-alpha mood tint the grading system drives. Pure DOM; one instance
 // per scene; dispose removes everything. All holds honour the pause menu
 // (isPaused) — a paused player never loses a title card or a fade.
-export function createCinema({ isPaused = null } = {}) {
+export function createCinema({ isPaused = null, onFade = null } = {}) {
   const hold = (ms) => pausableWait(ms, isPaused);
   const mk = (css) => {
     const el = document.createElement('div');
@@ -48,9 +48,12 @@ export function createCinema({ isPaused = null } = {}) {
     },
 
     // fade(true, ms) dips to black; fade(false, ms) lifts. ms 0 = instant.
+    // D6: an optional onFade hook lets PostFX ride a soft blur swell under the
+    // dip — the smooth cross-transition between beats.
     fade(toBlack, ms = 600) {
       fadeEl.style.transition = ms > 0 ? `opacity ${ms}ms ease` : 'none';
       fadeEl.style.opacity = toBlack ? '1' : '0';
+      if (ms > 250) onFade?.(toBlack, ms);
       return hold(ms);
     },
 

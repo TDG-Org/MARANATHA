@@ -3,8 +3,10 @@ import { createRenderer, startLoop } from './renderer.js';
 import { detectTier, AdaptiveQuality, DebugHud } from './quality.js';
 import { disposeDeep } from './dispose.js';
 import { createVeil } from '../ui/veil.js';
+import { createLoader } from '../ui/loader.js';
 import { Settings } from '../systems/Settings.js';
 import { Graphics } from '../systems/Graphics.js';
+import { PostFX } from '../engine/PostFX.js';
 
 // The app shell: owns the renderer, camera, loop, adaptive quality, and the
 // always-on perf HUD, and manages screens (home, joseph, …). Each screen is a
@@ -27,6 +29,9 @@ export function createApp(container) {
   Settings.bindHud(hud); // apply the player's saved HUD-visibility choice
 
   const veil = createVeil();
+  const loader = createLoader();
+  // D6: ONE PostFX owns the canvas grade + named filters for every scene.
+  const postFX = new PostFX(renderer.domElement);
   const screens = new Map(); // key -> builder
   let current = null;        // { key, scene, instance }
   let busy = false;
@@ -70,9 +75,20 @@ export function createApp(container) {
     if (current) {
       try { current.instance.dispose?.(); } catch (e) { console.error('[app] dispose error', e); }
       disposeDeep(current.scene);
+      postFX.reset(); // a scene's filter never leaks into the next
     }
     updateErrors = 0;
     build(key, params);
+    // LOADING SCREEN (D6): if the scene streams assets (rigs, textures), it
+    // returns `whenReady` — hold the animated loader over the veil until it
+    // resolves, so the player NEVER sees a half-built world. 12s hang-guard:
+    // a stuck download degrades to the old reveal, never a black screen.
+    const ready = current.instance.whenReady;
+    if (ready?.then) {
+      loader.show();
+      await Promise.race([ready, new Promise((r) => setTimeout(r, 12000))]);
+      await loader.hide();
+    }
     renderer.render(current.scene, camera); // paint one frame before revealing
     await veil.reveal(first ? 900 : 620);
     busy = false;
@@ -84,6 +100,7 @@ export function createApp(container) {
     camera,
     renderer,
     tier,
+    postFX,
     register(key, builder) { screens.set(key, builder); },
     hasScreen(key) { return screens.has(key); },
     navigate,

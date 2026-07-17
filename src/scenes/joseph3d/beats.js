@@ -508,7 +508,7 @@ export function createBeats(ctx) {
     ctx.camera.snap();
     await seq([
       { t: 'grade', mood: 'dream', ms: 30 },
-      { t: 'fn', fn: () => D.showMoon(1) }, // the moon shaft pours over the field
+      { t: 'fn', fn: () => { D.showMoon(1); ctx.postFX.setFilter('dream', 1800); } },
       { t: 'fade', on: false, ms: 1500 },
       { t: 'verse', verse: WEB.gen_37_5 },
       { t: 'verseHide' },
@@ -589,6 +589,7 @@ export function createBeats(ctx) {
       { t: 'fade', on: true, ms: 1500 },
     ]);
     // 5) WAKE → inside the tent at MORNING; Joseph rises, then steps out to tell
+    ctx.postFX.setFilter('none', 1400);        // the dream look lifts with him
     ctx.joseph.root.position.y = 0;            // back down to the ground
     D.group.visible = false;
     D.resetSky();

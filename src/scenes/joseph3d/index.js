@@ -116,29 +116,17 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
 
   // --- presentation ---
   let disposed = false; // set on dispose(); async init + the story loop check it
-  const cinema = createCinema({ isPaused: () => app.paused });
+  const cinema = createCinema({
+    isPaused: () => app.paused,
+    // beat fades ride a soft blur swell (smooth cross-transitions — D6)
+    onFade: (toBlack, ms) => app.postFX.blurPulse(Math.min(ms * 1.3, 1400)),
+  });
 
-  // FUTURE-VIGNETTE (cold open): a gloomy dark border + heavier BLUR + drained
-  // color that says "this is the future," fully lifted the moment golden
-  // morning fades in — so no one confuses the flash-forward for now.
-  const vignette = document.createElement('div');
-  vignette.style.cssText = [
-    'position:fixed', 'inset:0', 'z-index:25', 'pointer-events:none', 'opacity:0',
-    'transition:opacity 1200ms ease',
-    'box-shadow:inset 0 0 26vw 11vw rgba(5,4,9,0.95)',
-    'background:radial-gradient(ellipse at center, rgba(20,22,30,0) 38%, rgba(8,8,14,0.62) 100%)',
-  ].join(';');
-  document.body.append(vignette);
-  const canvasEl = renderer.domElement;
-  // D5: a gentle always-on VIBRANCE boost so colours pop (Nate: "look GOOD, not
-  // washed out"). The cold-open drained look overrides it, then restores to it.
-  const VIBRANT = 'saturate(1.2) contrast(1.06) brightness(1.02)';
-  canvasEl.style.filter = VIBRANT;
-  const futureVignette = (on) => {
-    vignette.style.opacity = on ? '1' : '0';
-    canvasEl.style.transition = 'filter 1200ms ease';
-    canvasEl.style.filter = on ? 'saturate(0.28) contrast(1.1) brightness(0.8) blur(2.2px)' : VIBRANT;
-  };
+  // FILTER LOOKS (D6): the app-wide PostFX owns the canvas grade now — the
+  // cold open asks for the named 'future' look (gloomy vignette + blur +
+  // drain), the dream asks for 'dream'. The always-on vibrance base grade
+  // lives in PostFX and scales with the Graphics preset.
+  const futureVignette = (on) => app.postFX.setFilter(on ? 'future' : 'none');
 
   const verseCard = createVerseCard();
   const dialogue = createDialogue();
@@ -259,6 +247,7 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
     isPaused: () => app.paused,
     sound: (key) => { if (!disposed) Audio.play(key); },
     setMusic, camp, dream, pit, tentInterior, bounds, futureVignette,
+    postFX: app.postFX, // named filter looks (dream/future) + blur transitions
     get joseph() { return joseph; },
     get cast() { return cast; },
     npcs,
@@ -287,7 +276,7 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
     onPenned: (n) => { Audio.play('sfx.pen_gate'); ctx.onStrayPenned?.(n); },
   });
 
-  (async () => {
+  const castReady = (async () => {
     await factory.loadBase();
     if (disposed) return; // scene was exited during the GLB load — stand down
     joseph = buildNamed(factory, 'joseph').addTo(scene);
@@ -373,12 +362,12 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
     dream.update(dt, t);
     pit.update(dt, t);
 
-    // fire glow: brighter at night (dark moods), flickering; the pool reads on
-    // the lit ground + nearby characters.
+    // fire glow: brighter at night (dark moods), flickering; the pool must
+    // VISIBLY light the ground + nearby characters after dark (D6 boost).
     const dark = ['dusk', 'night', 'dream', 'ominous', 'tentWarm', 'pit'].includes(grading.current);
-    fireLevel += ((dark ? 1 : 0.28) - fireLevel) * Math.min(dt * 0.0015, 1);
+    fireLevel += ((dark ? 1 : 0.22) - fireLevel) * Math.min(dt * 0.0015, 1);
     for (const f of fireLights) {
-      const flick = 1.35 + Math.sin(t * 11 + f.phase) * 0.22 + Math.sin(t * 5.3 + f.phase) * 0.14;
+      const flick = 2.15 + Math.sin(t * 11 + f.phase) * 0.34 + Math.sin(t * 5.3 + f.phase) * 0.2;
       f.light.intensity = fireLevel * Math.max(0, flick);
     }
 
@@ -403,8 +392,7 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
 
   function dispose() {
     disposed = true; // stops the story loop, zombie async init, sound/finish
-    canvasEl.style.filter = 'none'; // never leave the desaturate on the home screen
-    vignette.remove();
+    // (canvas filter/vignette live in app.postFX now — app resets on navigate)
     renderer.domElement.removeEventListener('contextmenu', onCanvasContextMenu);
     Object.values(beds).forEach((b) => b.stop(0.6));
     music.stop(0.6);
@@ -451,6 +439,7 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
 
   return {
     update, dispose,
+    whenReady: castReady, // the app's loading screen holds until the rigs are in
     debug: {
       get joseph() { return joseph; }, get controller() { return controller; },
       get ready() { return ready; }, get storyDone() { return storyDone; },

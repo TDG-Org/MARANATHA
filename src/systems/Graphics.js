@@ -13,9 +13,11 @@ export const GRAPHICS_PRESETS = {
   high: { label: 'High', dprCap: 2, particleScale: 1.6, contactShadow: true, fogFar: 300 },
 };
 
+// D6: the DEFAULT is MEDIUM (Nate's rule) — auto-detect only ever downgrades
+// a weak device to Low. High is a deliberate player choice in Settings.
 function autoDefault() {
   const { tier } = detectTier();
-  return tier === 'high' ? 'high' : tier === 'mid' ? 'medium' : 'low';
+  return tier === 'low' ? 'low' : 'medium';
 }
 
 function read() {
