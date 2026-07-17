@@ -113,30 +113,55 @@ export class SheepFlock {
       const pd2 = dxp * dxp + dzp * dzp;
 
       if (!s.counted && pd2 < 3.3 * 3.3) {
-        // HERD: trot ahead of the player, biased toward the pen gate/center.
-        // D3 tuning: wider herd radius + stronger pen bias — lambs are EASY.
-        // Two-stage waypoint: a sheep still EAST of the gate line swings to a
-        // point OUTSIDE the gate first (aiming straight at "inside" drove it
-        // into the south/east fence, where it ground against the rails).
-        const gm = (this.pen.gate.z0 + this.pen.gate.z1) / 2;
+        // HERD: trot ahead of the player, biased toward the pen. D7 ROUTING —
+        // STATELESS CORNER NAVIGATION: the old logic aimed at the gate mouth
+        // in a straight line, which from north/east of the pen ran THROUGH the
+        // fences (sheep ground along "the other side angle" forever). Now the
+        // sheep always aims at the next point AROUND an inflated pen rect:
+        //   inside the pen        → the pen centre
+        //   west of the pen       → the gate mouth, then straight in
+        //   north/south strip     → the NW/SW outer corner (then west → mouth)
+        //   east strip            → the nearer NE/SE outer corner (→ N/S → …)
+        // Each region hands off to the next as the sheep moves — self-healing,
+        // no straight line ever crosses a fence.
+        const p = this.pen;
+        const gm = (p.gate.z0 + p.gate.z1) / 2;
+        const M = 1.4; // routing margin around the fences
         let gateInX, gateInZ;
         if (this._inPen(s.x, s.z)) {
-          gateInX = (this.pen.minX + this.pen.maxX) / 2;
-          gateInZ = (this.pen.minZ + this.pen.maxZ) / 2;
-        } else if (s.x > this.pen.minX - 0.2 && (s.z < this.pen.gate.z0 || s.z > this.pen.gate.z1)) {
-          gateInX = this.pen.minX - 1.5; // round the corner to the gate mouth
-          gateInZ = gm;
+          gateInX = (p.minX + p.maxX) / 2;
+          gateInZ = (p.minZ + p.maxZ) / 2;
+        } else if (s.x < p.minX - 0.2) {
+          // WEST of the fence line: the straight shot is legal
+          if (s.z > p.gate.z0 - 0.6 && s.z < p.gate.z1 + 0.6 && s.x > p.minX - 2.6) {
+            gateInX = p.minX + 1.7; gateInZ = gm;   // through the opening
+          } else {
+            gateInX = p.minX - 1.3; gateInZ = gm;   // to the gate mouth first
+          }
+        } else if (s.z > p.maxZ + 0.2) {
+          gateInX = p.minX - M; gateInZ = p.maxZ + M;   // NW outer corner
+        } else if (s.z < p.minZ - 0.2) {
+          gateInX = p.minX - M; gateInZ = p.minZ - M;   // SW outer corner
         } else {
-          gateInX = this.pen.minX + 1.6; // straight through the opening
-          gateInZ = gm;
+          // EAST of the pen: that strip is SEALED terrain now (D7 — it was a
+          // dead-end trap between fence and treeline). If a sheep somehow
+          // starts here, send it south out of the old mouth, then the south
+          // region takes over.
+          gateInX = p.maxX + 0.6; gateInZ = p.minZ - M;
         }
+        // routing targets must live INSIDE the world bounds — the east strip is
+        // only ~1.3u wide, and an out-of-bounds corner point is unreachable
+        // (the sheep grinds on the clamp forever — Nate's stuck report)
+        gateInX = Math.max(this.bounds.minX + 0.6, Math.min(this.bounds.maxX - 0.6, gateInX));
+        gateInZ = Math.max(this.bounds.minZ + 0.6, Math.min(this.bounds.maxZ - 0.6, gateInZ));
         let ax = dxp, az = dzp; // away from player
         const al = Math.hypot(ax, az) || 1;
         ax /= al; az /= al;
-        let bx = gateInX - s.x, bz = gateInZ - s.z; // toward pen
+        let bx = gateInX - s.x, bz = gateInZ - s.z; // toward the route point
         const bl = Math.hypot(bx, bz) || 1;
         bx /= bl; bz /= bl;
-        const mix = 0.58; // away + pen bias (was 0.45 — strays now lead you in)
+        // the route leads MORE than the player pushes — the lamb shows the way
+        const mix = 0.66;
         let dx = ax * (1 - mix) + bx * mix;
         let dz = az * (1 - mix) + bz * mix;
         const dl = Math.hypot(dx, dz) || 1;
@@ -181,7 +206,7 @@ export class SheepFlock {
         const moved = Math.hypot(s.x - px0, s.z - pz0);
         if (s.state === 'flee' && intended > 0.001 && moved < intended * 0.3) {
           s.stuckT += dt;
-          if (s.stuckT > 2000) {
+          if (s.stuckT > 1300) {
             const sp = Math.hypot(s.vx, s.vz) || 1;
             const side = s.phase > Math.PI ? 1 : -1;    // consistent per sheep
             const nx = (-s.vz / sp) * side;             // unit perpendicular

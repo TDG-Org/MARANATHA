@@ -280,7 +280,9 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
   ctx.sheep = new SheepFlock({
     scene, colliderWorld: colliders, pen: camp.pen, bounds,
     count: 9,
-    strays: [{ x: 3.5, z: 6.5 }, { x: 6.5, z: 4.5 }, { x: 8, z: 8 }],
+    // D7: strays SPREAD across the camp (west, south-centre, north-east) — a
+    // real little herding journey, not three lambs already at the pen fence
+    strays: [{ x: -11, z: 1.5 }, { x: -4, z: 10.5 }, { x: 6, z: -8.5 }],
     onPenned: (n) => { Audio.play('sfx.pen_gate'); ctx.onStrayPenned?.(n); },
   });
 
@@ -440,7 +442,11 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
     stages: [
       { x: 0, z: 0, r: 24, label: 'camp' },
       { x: 62, z: 0, r: 16, label: 'dream-field' },
-      { x: -62, z: 6, r: 7, label: 'pit' },
+      // pit ring sampled at r10.5 — just past the r10 rock ring the actors
+      // stand on. Inside it the terrain intentionally dips: the D7 shaft
+      // crater + its vertex-interpolation skirt (coarse 4.3u z-rows carry the
+      // sink one row out, ~r10.1 worst case), all hidden under the flat ring.
+      { x: -62, z: 6, r: 10.5, label: 'pit' },
       { x: -62, z: -34, r: 6, label: 'tent-interior' },
     ],
   });

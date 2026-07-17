@@ -517,9 +517,10 @@ export function buildCamp(colliderWorld, tex = {}) {
     // laundry corner
     { kind: 'basket', x: 0.7, z: 8.3, scale: 1.1 },
   ]));
-  // pen: main WEST gate (widened D3 — lambs must be EASY to pen) + a second
-  // open gate on the EAST side (D6 — no dead-end approach)
-  const pen = { minX: 10, maxX: 17, minZ: 8.5, maxZ: 14, gate: { z0: 9.9, z1: 12.9 }, gateEast: { z0: 10.2, z1: 12.6 } };
+  // pen: ONE wide WEST gate (D7: the D6 east gate opened into the 1.3u strip
+  // against the world bound — dead space; sheep navigate AROUND to the west
+  // gate now via corner routing, so a second hole isn't needed)
+  const pen = { minX: 10, maxX: 17, minZ: 8.5, maxZ: 14, gate: { z0: 9.9, z1: 12.9 } };
   addAll(makePen(pen));
 
   // NATURAL WALLS (D4 Task 5, reworked D6): tree lines EAST/WEST only + rock
@@ -563,6 +564,10 @@ export function buildCamp(colliderWorld, tex = {}) {
     // corner clusters — the camp feels held (comfy, enclosed); clear of the pen
     { x: -18.6, z: 14.8, scale: 1.7 }, { x: -17.4, z: 12.6, scale: 1.15 }, { x: -18.8, z: 10.0, scale: 1.35 },
     { x: 18.6, z: 6.4, scale: 1.5 }, { x: 17.7, z: 4.4, scale: 1.15 }, { x: 18.8, z: 2.0, scale: 1.35 },
+    // D7: SEAL the strip east of the pen — the treeline's second row plugs it
+    // every few units, so it's a dead-end TRAP (sheep pushed in could never
+    // come out). Two visible rocks close both mouths; nothing enters again.
+    { x: 17.7, z: 7.5, scale: 1.3 }, { x: 17.7, z: 15.0, scale: 1.3 },
   ], colliderWorld, tex.rock));
   addAll(makeGrass(180, 42, colliderWorld));
 
