@@ -442,9 +442,12 @@ export function createBeats(ctx) {
       { t: 'fn', fn: () => { ctx.joseph.play('idle'); } },
       { t: 'sound', key: 'stinger.hatred' },
       { t: 'grade', mood: 'ominous', ms: 1600 },
+      // the brothers' scorn — a DISTINCT venom line (the narrator/verse 37:8
+      // carries their canonical "will you reign over us"; the character never
+      // repeats the verse — script-routing rule).
       shot('judah', 'joseph', { side: -0.42, dist: 2.6 }),
       { t: 'anim', get char() { return ctx.cast.judah.char; }, state: 'talk' },
-      { t: 'say', who: 'Judah', text: 'Will you indeed reign over us, dreamer of dreams?', color: J.Judah },
+      { t: 'say', who: 'Judah', text: 'A dreamer of dreams — and a lord of nothing.', color: J.Judah },
       { t: 'anim', get char() { return ctx.cast.judah.char; }, state: 'idle' },
       { t: 'dialogueHide' },
       { t: 'verse', verse: WEB.gen_37_8 },
@@ -453,8 +456,10 @@ export function createBeats(ctx) {
       { t: 'fn', fn: () => { ctx.joseph.play('talk'); } },
       { t: 'say', who: 'Joseph', text: 'And again — the sun, the moon, eleven stars… all of them bowed to me.', color: J.Joseph },
       { t: 'fn', fn: () => { ctx.joseph.play('idle'); jac.char.play('talk'); } },
+      // Jacob's brief, worried caution — the verse 37:10 (narrator) carries his
+      // full canonical rebuke; his spoken line does NOT quote it.
       shot('jacob', 'joseph', { side: -0.4, dist: 2.8 }),
-      { t: 'say', who: 'Jacob', text: 'Joseph! Shall I, your mother, and your brothers bow to the earth before you?', color: J.Jacob },
+      { t: 'say', who: 'Jacob', text: 'Joseph… you must not speak so, even of a dream.', color: J.Jacob },
       { t: 'dialogueHide' },
       { t: 'fn', fn: () => { jac.char.play('idle'); } },
       { t: 'verse', verse: WEB.gen_37_10_short },
