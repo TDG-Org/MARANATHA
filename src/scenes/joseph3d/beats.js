@@ -242,15 +242,17 @@ export function createBeats(ctx) {
       shot('jacob', 'joseph', { side: 0.38, dist: 2.3 }),
       { t: 'say', who: 'Jacob', text: 'I had this made for you. Let all of Hebron see it.', color: J.Jacob },
       { t: 'dialogueHide' },
-      // the gift — slow push-in on Joseph as the coat settles in the lamplight
-      { t: 'cam', angle: -Math.PI * 0.55, target: () => ({ x: ctx.joseph.position.x, z: ctx.joseph.position.z }), distance: 2.2, height: 1.3, lookHeight: 1.2, duration: 1500 },
+      // the gift — a CLOSE, clear push-in on Joseph's shoulders so the player
+      // plainly SEES the tunic go on (D5: tighter framing + a longer hold).
+      { t: 'cam', angle: -Math.PI * 0.5, target: () => ({ x: ctx.joseph.position.x, z: ctx.joseph.position.z }), distance: 1.75, height: 1.35, lookHeight: 1.4, duration: 1500 },
       { t: 'fn', fn: async () => {
-        ctx.joseph.setCoat(true);
+        await wait(300);
+        ctx.joseph.setCoat(true);       // the tunic settles ON — held in close-up
         ctx.sound('sfx.cloth_equip');
         ctx.sound('stinger.coat_gift');
         ctx.sparkle(4);
         jac.char.play('idle');
-        await wait(1400);
+        await wait(1800);
       } },
       { t: 'verse', verse: WEB.gen_37_3 },
       { t: 'verseHide' },

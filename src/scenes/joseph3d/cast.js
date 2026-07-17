@@ -15,21 +15,25 @@ export const NAME_COLOR = {
 // brothers get distinct builds — Reuben broad (firstborn), Judah solid gold-
 // brown, Simeon lean olive, Levi plum.
 const CAST = {
-  joseph: { name: 'Joseph', base: 'robed', scale: 0.97, colors: { robe: 0xd9cba6, robeShade: 0xb5a67f, skin: 0xcf9a63, coat: [0xa8321f, 0xcf8a2c, 0x2c3f78, 0x6b7038, 0xe8dcc0] } },
+  // Joseph: bright cream robe + a warm terracotta SASH (his small detail — he
+  // reads a touch special even before the coat; clearly the finest once gifted).
+  joseph: { name: 'Joseph', base: 'robed', scale: 0.97, colors: { robe: 0xe2d3a9, robeShade: 0xbfb083, skin: 0xcf9a63, sash: 0xc2703a, coat: [0xa8321f, 0xcf8a2c, 0x2c3f78, 0x6b7038, 0xe8dcc0] } },
   jacob: { name: 'Jacob', base: 'robed', staff: true, elder: true, scale: 0.9, colors: { robe: 0x8b8177, robeShade: 0x6d645a, skin: 0xb98a55 } },
-  reuben: { name: 'Reuben', base: 'hooded', scale: 1.06, colors: { robe: 0x5a6b86, robeShade: 0x47566e, skin: 0xc98d5a } },
-  judah: { name: 'Judah', base: 'robed', scale: 1.03, colors: { robe: 0xa9773f, robeShade: 0x8a5f31, skin: 0xc07d45 } },
-  simeon: { name: 'Simeon', base: 'hooded', scale: 0.98, colors: { robe: 0x77804f, robeShade: 0x5f6640, skin: 0xc98d5a } },
-  levi: { name: 'Levi', base: 'robed', scale: 1.01, colors: { robe: 0x8a6a7d, robeShade: 0x705364, skin: 0xb98a55 } },
+  reuben: { name: 'Reuben', base: 'hooded', scale: 1.06, colors: { robe: 0x4f627e, robeShade: 0x3c4d64, skin: 0xc98d5a } },
+  judah: { name: 'Judah', base: 'robed', scale: 1.03, colors: { robe: 0x9c6a34, robeShade: 0x7d5228, skin: 0xc07d45 } },
+  simeon: { name: 'Simeon', base: 'hooded', scale: 0.98, colors: { robe: 0x5f6d3c, robeShade: 0x49552d, skin: 0xc98d5a } },
+  levi: { name: 'Levi', base: 'robed', scale: 1.01, colors: { robe: 0x7a5568, robeShade: 0x604253, skin: 0xb98a55 } },
 };
 
+// Robe VARIETY (D5): no more same-y green — a clear spread of dark green,
+// brown, dark gray, olive, red-brown and slate across the camp NPCs.
 const GENERIC = [
-  { base: 'hooded', colors: { robe: 0x7a6a56, robeShade: 0x5f5344 } },
-  { base: 'robed', colors: { robe: 0x6b5d6e, robeShade: 0x544857 } },
-  { base: 'hooded', colors: { robe: 0x8a7a5a, robeShade: 0x6d6046 } },
-  { base: 'robed', colors: { robe: 0x5d6e63, robeShade: 0x49584f } },
-  { base: 'hooded', colors: { robe: 0x86675a, robeShade: 0x6a5147 } },
-  { base: 'robed', colors: { robe: 0x707a86, robeShade: 0x59616b } },
+  { base: 'hooded', colors: { robe: 0x47562f, robeShade: 0x36421f } }, // dark green
+  { base: 'robed', colors: { robe: 0x6a4a32, robeShade: 0x513724 } },  // brown
+  { base: 'hooded', colors: { robe: 0x474950, robeShade: 0x36383f } }, // dark gray
+  { base: 'robed', colors: { robe: 0x5d6a4a, robeShade: 0x485338 } },  // olive
+  { base: 'hooded', colors: { robe: 0x6e4c3e, robeShade: 0x54382d } }, // red-brown
+  { base: 'robed', colors: { robe: 0x54545f, robeShade: 0x41414b } },  // slate gray
 ];
 
 export function buildNamed(factory, key) {
