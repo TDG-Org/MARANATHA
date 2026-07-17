@@ -1,6 +1,24 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { blobShadow } from './world.js';
+import { blobShadow, canvasTexture } from './world.js';
+
+// Shared mouth flipbook (D4): 4 dark mouth shapes that cycle fast on whoever is
+// speaking (state === 'talk'), giving cheap, charming lip-flap over the painted
+// face. Built once, shared by every character.
+let _mouthTex = null;
+function mouthTextures() {
+  if (_mouthTex) return _mouthTex;
+  const shape = (rx, ry) => canvasTexture(32, 32, (ctx, w, h) => {
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = 'rgba(48,22,20,0.9)';
+    ctx.beginPath();
+    ctx.ellipse(w / 2, h / 2, rx, ry, 0, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  // closed → small → wide → mid (a natural flap loop)
+  _mouthTex = [shape(6, 1.4), shape(5.5, 4), shape(6.5, 6.5), shape(5.5, 3.4)];
+  return _mouthTex;
+}
 
 // A 3D toon character. Two modes, ONE API:
 //   • 'glb'     — a real rigged character (KayKit-style: one skin, named part
@@ -151,6 +169,20 @@ export class Character3D {
         this._ownedGeo.push(beardGeo);
         this.beardMesh = beard;
       }
+      // MOUTH FLIPBOOK — a tiny plane on the head bone, in front of the face,
+      // hidden until this character speaks (see play/update). Bone-local so it
+      // rides every head movement for free.
+      const mGeo = new THREE.PlaneGeometry(0.11, 0.095);
+      const mMat = new THREE.MeshBasicMaterial({ map: mouthTextures()[0], transparent: true, depthWrite: false, fog: false });
+      const mouth = new THREE.Mesh(mGeo, mMat);
+      mouth.position.set(0, this.elder ? -0.11 : -0.06, this.elder ? 0.34 : 0.33);
+      mouth.visible = false;
+      headBone.add(mouth);
+      this._ownedGeo.push(mGeo);
+      this._mats.push(mMat);
+      this.mouthMesh = mouth;
+      this._mouthT = 0;
+      this._mouthFrame = 0;
     } else {
       let top = 1.8;
       const g = this.bodyMesh?.geometry;
@@ -203,16 +235,47 @@ export class Character3D {
     }
   }
 
-  // Joseph's ornate coat: horizontal bands painted into a small canvas texture.
-  _coatMaterial(bandColors) {
+  // Joseph's coat of many colors: a rich ARGYLE — dye bands overlaid with a
+  // diamond lattice and cream cross-hatch, in period-plausible dyes (deep red,
+  // indigo, ochre, olive, cream). Clearly the finest garment in camp.
+  _coatMaterial(dyeColors) {
+    const hex = (h) => `#${(h >>> 0).toString(16).padStart(6, '0')}`;
+    const dyes = (dyeColors && dyeColors.length ? dyeColors : [0xa8321f, 0xcf8a2c, 0x2c3f78, 0x6b7038, 0xe8dcc0]).map(hex);
+    const cream = '#e9dcbf';
+    const W = 96, H = 128;
     const c = document.createElement('canvas');
-    c.width = 4; c.height = 64;
+    c.width = W; c.height = H;
     const ctx = c.getContext('2d');
-    const bandH = c.height / bandColors.length;
-    bandColors.forEach((hex, i) => {
-      ctx.fillStyle = `#${hex.toString(16).padStart(6, '0')}`;
-      ctx.fillRect(0, Math.floor(i * bandH), c.width, Math.ceil(bandH));
-    });
+
+    // 1) horizontal dye bands (the base "many colors")
+    const bands = 7;
+    for (let i = 0; i < bands; i++) {
+      ctx.fillStyle = dyes[i % dyes.length];
+      ctx.fillRect(0, Math.floor(i * H / bands), W, Math.ceil(H / bands) + 1);
+    }
+    // 2) argyle diamonds — rotated squares in alternating dyes, semi-opaque
+    const d = 26;
+    ctx.globalAlpha = 0.6;
+    for (let gy = -1; gy <= H / d + 1; gy++) {
+      for (let gx = -1; gx <= W / d + 1; gx++) {
+        ctx.save();
+        ctx.translate(gx * d + (gy % 2 ? d / 2 : 0), gy * d);
+        ctx.rotate(Math.PI / 4);
+        ctx.fillStyle = dyes[(gx + gy + 2) % dyes.length];
+        ctx.fillRect(-d * 0.32, -d * 0.32, d * 0.64, d * 0.64);
+        ctx.restore();
+      }
+    }
+    // 3) cream cross-hatch diagonals tying it together
+    ctx.globalAlpha = 0.85;
+    ctx.strokeStyle = cream;
+    ctx.lineWidth = 1.6;
+    for (let x = -H; x < W + H; x += d) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x + H, H); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x - H, H); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+
     const tex = new THREE.CanvasTexture(c);
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.wrapS = THREE.RepeatWrapping;
@@ -319,7 +382,24 @@ export class Character3D {
     this._yaw += d * Math.min(dt * 0.012, 1);
     this.facing.rotation.y = this._yaw;
 
-    if (this.mode === 'glb' && this.mixer) { this.mixer.update(dt / 1000); return; }
+    if (this.mode === 'glb' && this.mixer) {
+      this.mixer.update(dt / 1000);
+      // mouth flipbook: flap fast while speaking, hidden otherwise
+      if (this.mouthMesh) {
+        if (this.state === 'talk') {
+          this.mouthMesh.visible = true;
+          this._mouthT += dt;
+          if (this._mouthT > 85) {
+            this._mouthT = 0;
+            this._mouthFrame = (this._mouthFrame + 1) % 4;
+            this.mouthMesh.material.map = mouthTextures()[this._mouthFrame];
+          }
+        } else if (this.mouthMesh.visible) {
+          this.mouthMesh.visible = false;
+        }
+      }
+      return;
+    }
     this._animateCapsule(dt);
   }
 

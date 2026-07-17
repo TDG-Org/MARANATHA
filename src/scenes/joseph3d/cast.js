@@ -15,7 +15,7 @@ export const NAME_COLOR = {
 // brothers get distinct builds — Reuben broad (firstborn), Judah solid gold-
 // brown, Simeon lean olive, Levi plum.
 const CAST = {
-  joseph: { name: 'Joseph', base: 'robed', scale: 0.97, colors: { robe: 0xd9cba6, robeShade: 0xb5a67f, skin: 0xcf9a63, coat: [0xb5643c, 0xcf9a4e, 0x6f8256, 0x8a5a72, 0x3f7a86] } },
+  joseph: { name: 'Joseph', base: 'robed', scale: 0.97, colors: { robe: 0xd9cba6, robeShade: 0xb5a67f, skin: 0xcf9a63, coat: [0xa8321f, 0xcf8a2c, 0x2c3f78, 0x6b7038, 0xe8dcc0] } },
   jacob: { name: 'Jacob', base: 'robed', staff: true, elder: true, scale: 0.9, colors: { robe: 0x8b8177, robeShade: 0x6d645a, skin: 0xb98a55 } },
   reuben: { name: 'Reuben', base: 'hooded', scale: 1.06, colors: { robe: 0x5a6b86, robeShade: 0x47566e, skin: 0xc98d5a } },
   judah: { name: 'Judah', base: 'robed', scale: 1.03, colors: { robe: 0xa9773f, robeShade: 0x8a5f31, skin: 0xc07d45 } },
