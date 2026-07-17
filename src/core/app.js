@@ -51,6 +51,7 @@ export function createApp(container) {
     camera.updateProjectionMatrix();
     renderer.setPixelRatio(Math.min(2, quality.ratio));
     renderer.setSize(w, h);
+    pausedPainted = false; // a paused game repaints once after a resize
   };
   window.addEventListener('resize', onResize);
   window.addEventListener('orientationchange', onResize);
@@ -98,7 +99,8 @@ export function createApp(container) {
     busy = false;
   }
 
-  let paused = false; // true pause: update frozen, last frame keeps rendering
+  let paused = false;      // true pause: update frozen
+  let pausedPainted = false; // D6 energy rule: paint the frozen frame ONCE, then stop rendering
 
   const app = {
     camera,
@@ -109,7 +111,7 @@ export function createApp(container) {
     hasScreen(key) { return screens.has(key); },
     navigate,
     get currentKey() { return current?.key; },
-    setPaused(on) { paused = !!on; },
+    setPaused(on) { paused = !!on; pausedPainted = false; },
     get paused() { return paused; },
     // Test hooks (harmless in production; used by automated pixel-readback since
     // the preview tab runs hidden and rAF/screenshots are paused there).
@@ -125,10 +127,15 @@ export function createApp(container) {
         } catch (e) {
           if (updateErrors++ < 3) console.error('[app] update error', e);
         }
+        renderer.render(current.scene, camera);
+      } else if (!pausedPainted) {
+        // energy rule (D6): a paused game paints its frozen frame ONCE — the
+        // GPU sleeps until resume or resize (DOM pause menu needs no canvas).
+        renderer.render(current.scene, camera);
+        pausedPainted = true;
       }
-      renderer.render(current.scene, camera);
     }
-    quality.frame(dt);
+    if (!paused) quality.frame(dt);
     hud.frame(dt);
   });
 
