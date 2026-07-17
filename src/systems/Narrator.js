@@ -1,63 +1,33 @@
 import { Audio } from './AudioSystem.js';
 
-// Verse / line narrator. FILE-FIRST: if a real VO file exists at
-// audio/vo/<line-id>.mp3|.ogg it plays through the voice bus (so Master and
-// Narrator sliders are LIVE mid-line, and a volume change never interrupts it);
-// otherwise it falls back to browser speech synthesis. speak() resolves when the
-// line finishes so story beats can await it.
+// Verse / line narrator. FILE-FIRST (D6: this is now THE voice): every
+// narrator line ships as a baked mp3 in audio/vo/ — one identical neural
+// storyteller voice (en-US-AndrewNeural, regenerate with `npm run vo`) on
+// every device, played through the voice bus (Master + Narrator sliders live
+// mid-line). speechSynthesis is an EMERGENCY fallback only, for a missing
+// file — pinned to one explicit voice, never auto-picked. speak() resolves
+// when the line finishes so story beats can await it.
 //
 // Only two things stop a line: skip() (the Skip button) or a full mute.
 // Changing any volume must NEVER cancel narration.
+
+// The pinned emergency-fallback TTS voice: Edge's local name for the SAME
+// Andrew the baked files use. If it isn't installed, the utterance keeps
+// lang 'en-US' and the platform's own en-US default reads it — deterministic
+// per device, zero picking logic.
+const FALLBACK_VOICE = 'Microsoft Andrew Online (Natural) - English (United States)';
+
 class NarratorSystem {
   constructor() {
-    this.voice = null;
-    // The story must speak in ONE voice start to finish. We lock the first
-    // good voice we pick (persisted), and never switch mid-story even when the
-    // browser fires onvoiceschanged again (that late reload was making the
-    // narrator change voice partway through the dream).
-    this._lockedName = null;
-    try { this._lockedName = localStorage.getItem('maranatha-voice') || null; } catch { /* ignore */ }
     this.supported = typeof window !== 'undefined' && 'speechSynthesis' in window;
-    if (this.supported) {
-      const pick = () => this.pickVoice();
-      pick();
-      window.speechSynthesis.onvoiceschanged = pick;
-    }
+    // D6 cleanup: the old voice-picker persisted its choice here. Gone.
+    try { localStorage.removeItem('maranatha-voice'); } catch { /* ignore */ }
     this.speaking = false;
     this.onSpeaking = null;   // hook: the Skip button watches this
     this._stopCurrent = null; // stops the in-flight line (file source or TTS)
     // A FULL mute silences immediately (mute is one of the two things that stop
     // a line). A non-mute volume change does NOT fire this, so it won't cancel.
     Audio.onMuted = () => this.stop();
-  }
-
-  pickVoice() {
-    const voices = window.speechSynthesis.getVoices();
-    if (!voices.length) return;
-    // Already locked to a live voice → keep it. Never switch mid-story.
-    if (this.voice && voices.some((v) => v.name === this.voice.name)) return;
-    // Prefer the voice we locked earlier (this session or a prior one).
-    if (this._lockedName) {
-      const prev = voices.find((v) => v.name === this._lockedName);
-      if (prev) { this.voice = prev; return; }
-    }
-    const en = voices.filter((v) => /^en/i.test(v.lang));
-    const score = (v) => {
-      const n = v.name;
-      let s = 0;
-      if (/Natural|Neural/i.test(n)) s += 6;
-      if (/Andrew|Guy|Christopher|Eric|Roger|Brian|Davis|George|Daniel|Alex\b/i.test(n)) s += 4;
-      if (/Google UK English Male/i.test(n)) s += 4;
-      if (/David|Mark|Google US English/i.test(n)) s += 2;
-      if (/Aria|Jenny|Samantha|Zira|Sonia|Libby/i.test(n)) s += 1;
-      if (/UK/i.test(v.lang) || /GB/i.test(v.lang)) s += 1;
-      if (v.localService) s += 1;
-      return s;
-    };
-    this.voice = en.sort((a, b) => score(b) - score(a))[0] ?? voices[0];
-    // Lock it for the rest of the story (and remember it next time).
-    this._lockedName = this.voice?.name || null;
-    try { if (this._lockedName) localStorage.setItem('maranatha-voice', this._lockedName); } catch { /* ignore */ }
   }
 
   estimateMs(text) {
@@ -123,7 +93,11 @@ class NarratorSystem {
       try {
         this.nudge();
         const u = new SpeechSynthesisUtterance(clean);
-        if (this.voice) u.voice = this.voice;
+        // Pinned fallback voice — exact-name match ONLY (no scoring, no
+        // auto-pick). Absent → lang-default en-US.
+        u.lang = 'en-US';
+        const pinned = window.speechSynthesis.getVoices().find((v) => v.name === FALLBACK_VOICE);
+        if (pinned) u.voice = pinned;
         u.rate = 1.0;   // a touch quicker than the old 0.88 — still calm
         u.pitch = 0.82; // deeper, calm
         // Baked at start (speechSynthesis can't change volume mid-line — that's

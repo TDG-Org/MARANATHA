@@ -64,8 +64,9 @@ export function openSettings({ onReset } = {}) {
     sliderRow(
       'Narrator', () => Settings.get('voice'),
       (v) => Settings.set('voice', v),
-      // On release, speak a short sample so the level is verifiable.
-      () => Narrator.speak('The Lord was with Joseph.'),
+      // On release, speak a short sample so the level is verifiable — the real
+      // baked narrator voice (audio/vo/ui/voice-test.mp3), not TTS.
+      () => Narrator.speak('The Lord was with Joseph.', 'ui/voice-test'),
     ),
   );
 

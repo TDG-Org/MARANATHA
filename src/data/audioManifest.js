@@ -57,15 +57,23 @@ export const AUDIO_MANIFEST = [
   { key: 'sfx.men_laughing', bus: 'sfx', loop: false, seconds: 2.5, file: 'sfx/men_laughing', fallback: null, available: true, purpose: 'the brothers mock/laugh at Joseph (envy beats)', scene: 'joseph3d-1' },
 
   // --- Narrator VO (file-first; naming: vo/<story>/<scene>/<line-id>) ---
-  // The manifest key is the path under /audio. The Narrator is called with the
+  // GENERATED, not recorded: `npm run vo` bakes every line below as an mp3
+  // (en-US-AndrewNeural, 24kHz 48kbps mono) straight from versesWEB.js — one
+  // identical narrator voice on every device. The Narrator is called with the
   // line-id (the key minus the leading "vo/") and fetches audio/vo/<line-id>.mp3
-  // |.ogg; missing → speechSynthesis fallback. VO plays on the 'voice' bus, so
-  // Master + Narrator sliders are live mid-line and a volume change never stops it.
-  { key: 'vo/joseph/1/verse-37-3', bus: 'voice', loop: false, available: false, purpose: 'narrate Gen 37:3', scene: 'joseph-1' },
-  { key: 'vo/joseph/1/verse-37-4', bus: 'voice', loop: false, available: false, purpose: 'narrate Gen 37:4', scene: 'joseph-1' },
-  { key: 'vo/joseph/1/verse-37-7', bus: 'voice', loop: false, available: false, purpose: 'narrate Gen 37:7', scene: 'joseph-1' },
-  { key: 'vo/joseph/1/verse-37-8', bus: 'voice', loop: false, available: false, purpose: 'narrate Gen 37:8', scene: 'joseph-1' },
-  { key: 'vo/joseph/1/verse-37-9', bus: 'voice', loop: false, available: false, purpose: 'narrate Gen 37:9', scene: 'joseph-1' },
-  { key: 'vo/joseph/1/verse-37-11', bus: 'voice', loop: false, available: false, purpose: 'narrate Gen 37:11', scene: 'joseph-1' },
-  { key: 'vo/playground/demo/line-1', bus: 'voice', loop: false, available: false, purpose: 'playground narrator test line', scene: 'playground' },
+  // |.ogg; missing → a PINNED en-US speechSynthesis fallback (emergency only).
+  // VO plays on the 'voice' bus, so Master + Narrator sliders are live mid-line.
+  { key: 'vo/joseph/1/verse-37-1', bus: 'voice', loop: false, available: true, purpose: 'narrate Gen 37:1', scene: 'joseph3d-1' },
+  { key: 'vo/joseph/1/verse-37-2', bus: 'voice', loop: false, available: true, purpose: 'narrate Gen 37:2 (short)', scene: 'joseph3d-1' },
+  { key: 'vo/joseph/1/verse-37-3', bus: 'voice', loop: false, available: true, purpose: 'narrate Gen 37:3', scene: 'joseph3d-1' },
+  { key: 'vo/joseph/1/verse-37-4', bus: 'voice', loop: false, available: true, purpose: 'narrate Gen 37:4', scene: 'joseph3d-1' },
+  { key: 'vo/joseph/1/verse-37-5', bus: 'voice', loop: false, available: true, purpose: 'narrate Gen 37:5', scene: 'joseph3d-1' },
+  { key: 'vo/joseph/1/verse-37-7', bus: 'voice', loop: false, available: true, purpose: 'narrate Gen 37:7', scene: 'joseph3d-1' },
+  { key: 'vo/joseph/1/verse-37-8', bus: 'voice', loop: false, available: true, purpose: 'narrate Gen 37:8', scene: 'joseph3d-1' },
+  { key: 'vo/joseph/1/verse-37-9', bus: 'voice', loop: false, available: true, purpose: 'narrate Gen 37:9', scene: 'joseph3d-1' },
+  { key: 'vo/joseph/1/verse-37-10', bus: 'voice', loop: false, available: true, purpose: 'narrate Gen 37:10 (short)', scene: 'joseph3d-1' },
+  { key: 'vo/joseph/1/verse-37-11', bus: 'voice', loop: false, available: true, purpose: 'narrate Gen 37:11', scene: 'joseph3d-1' },
+  { key: 'vo/joseph/1/verse-37-24', bus: 'voice', loop: false, available: true, purpose: 'narrate Gen 37:24 (cold open)', scene: 'joseph3d-1' },
+  { key: 'vo/ui/voice-test', bus: 'voice', loop: false, available: true, purpose: 'settings Narrator-slider sample line', scene: 'ui' },
+  { key: 'vo/playground/demo/line-1', bus: 'voice', loop: false, available: true, purpose: 'playground narrator test line (Gen 1:1)', scene: 'playground' },
 ];
