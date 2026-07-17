@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { mulberry32, canvasTexture, toonMat } from '../../engine/world.js';
+import { mulberry32, canvasTexture, toonMat, mergeGeometries } from '../../engine/world.js';
 
 // The camp PROP KIT (world-density skill): small makers + a layout assembler.
 // Everything repeated is instanced; every prop registers its colliders and
@@ -15,10 +15,11 @@ const C = {
   foliage: 0x5c6b3c, foliageDark: 0x49572f, boulder: 0x84796f,
 };
 
-function inst(geo, color, spots, { yBase = 0, seedRot = 5 } = {}) {
-  const mesh = new THREE.InstancedMesh(geo, toonMat(color), spots.length);
+function inst(geo, color, spots, { yBase = 0, seedRot = 5, map = null, tints = null } = {}) {
+  const mesh = new THREE.InstancedMesh(geo, toonMat(tints ? 0xffffff : color, map ? { map } : {}), spots.length);
   const d = new THREE.Object3D();
   const rnd = mulberry32(seedRot);
+  const tc = tints ? tints.map((c) => new THREE.Color(c)) : null;
   spots.forEach((s, i) => {
     d.position.set(s[0], yBase + (s[3] ?? 0), s[1]);
     const sc = s[2] ?? 1;
@@ -26,8 +27,10 @@ function inst(geo, color, spots, { yBase = 0, seedRot = 5 } = {}) {
     d.rotation.y = s[4] ?? rnd() * Math.PI * 2;
     d.updateMatrix();
     mesh.setMatrixAt(i, d.matrix);
+    if (tc) mesh.setColorAt(i, tc[(rnd() * tc.length) | 0]); // per-tree species tint
   });
   mesh.instanceMatrix.needsUpdate = true;
+  if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
   return mesh;
 }
 
@@ -147,10 +150,10 @@ export function makeRugs(spots) {
   return { mesh: group, colliders: [] };
 }
 
-export function makePaths(spots) {
+export function makePaths(spots, dirtTex = null) {
   const group = new THREE.Group();
   spots.forEach((s) => {
-    const p = new THREE.Mesh(new THREE.CircleGeometry(s.r ?? 2.2, 10), toonMat(C.path));
+    const p = new THREE.Mesh(new THREE.CircleGeometry(s.r ?? 2.2, 10), toonMat(dirtTex ? 0xcbb99b : C.path, dirtTex ? { map: dirtTex } : {}));
     p.rotation.x = -Math.PI / 2;
     p.position.set(s.x, 0.015, s.z);
     p.scale.set(s.sx ?? 1, s.sz ?? 1, 1);
@@ -199,13 +202,15 @@ export function makeGrass(count = 90, span = 42, colliderWorld = null) {
 // The north horizon stays open low (the ridge vista) — boulders there are
 // knee-high and gappy on purpose; the fog and distance do the rest.
 export function makeTreeline(runs, colliderWorld = null) {
-  // one merged tree (trunk + two canopy cones) instanced along border runs
-  const trunk = new THREE.CylinderGeometry(0.09, 0.13, 1.1, 5);
-  trunk.translate(0, 0.55, 0);
-  const lower = new THREE.ConeGeometry(0.85, 1.5, 6);
-  lower.translate(0, 1.55, 0);
-  const upper = new THREE.ConeGeometry(0.55, 1.1, 6);
-  upper.translate(0, 2.45, 0);
+  // Hebron hill country = the land of the Oaks of Mamre. Broad, round-canopied
+  // OAK / terebinth (+ olive & fig via per-tree green tints) — NOT pointy pines.
+  const trunk = new THREE.CylinderGeometry(0.13, 0.19, 1.4, 6);
+  trunk.translate(0, 0.7, 0);
+  // a spreading round canopy: two rounded blobs merged (broad + low = oak).
+  const c1 = new THREE.IcosahedronGeometry(1.15, 0); c1.scale(1.3, 0.78, 1.3); c1.translate(0, 1.95, 0);
+  const c2 = new THREE.IcosahedronGeometry(0.78, 0); c2.scale(1.15, 0.95, 1.15); c2.translate(0.35, 2.5, -0.2);
+  const canopyGeo = mergeGeometries([c1, c2]);
+  canopyGeo.computeVertexNormals(); // merged geo lost normals; toon lighting needs them
   const rnd = mulberry32(2027);
   const spots = [];
   const colliders = [];
@@ -234,22 +239,22 @@ export function makeTreeline(runs, colliderWorld = null) {
   }
   const group = new THREE.Group();
   group.add(inst(trunk, C.wood, spots, { seedRot: 51 }));
-  const canopyLo = inst(lower, C.foliage, spots, { seedRot: 51 });
-  const canopyHi = inst(upper, C.foliageDark, spots, { seedRot: 51 });
-  group.add(canopyLo, canopyHi);
+  // per-tree species tint: oak / terebinth / grey-green olive / deeper fig
+  const foliage = [0x5c6b38, 0x6a7742, 0x7d8862, 0x4f6b3a];
+  group.add(inst(canopyGeo, 0xffffff, spots, { seedRot: 51, tints: foliage }));
   // NOT a camera occluder — one InstancedMesh for the whole tree line; fading
   // it would ghost every border tree. Trees sit at the edges, behind the play
   // space, so they rarely come between the follow camera and the hero.
   return { mesh: group, colliders };
 }
 
-export function makeBoulders(spots, colliderWorld = null) {
+export function makeBoulders(spots, colliderWorld = null, rockTex = null) {
   const geo = new THREE.DodecahedronGeometry(0.62, 0);
   geo.translate(0, 0.28, 0);
   // never drop a rock into a tent/pen/prop (a camp collider already there fills
   // that lane); overlaps with other BORDER props are fine (rocks cluster).
   const keep = spots.filter((s) => !(colliderWorld && colliderWorld.overlaps(s.x, s.z, 0.62 * (s.scale ?? 1), 'border')));
-  const mesh = inst(geo, C.boulder, keep.map((s) => [s.x, s.z, s.scale ?? 1, 0]), { seedRot: 52 });
+  const mesh = inst(geo, rockTex ? 0xcdc0ab : C.boulder, keep.map((s) => [s.x, s.z, s.scale ?? 1, 0]), { seedRot: 52, map: rockTex });
   const colliders = keep.map((s) => ({ type: 'circle', x: s.x, z: s.z, r: 0.62 * (s.scale ?? 1), group: 'border' }));
   return { mesh, colliders };
 }
@@ -352,7 +357,7 @@ export function makePen(rect) {
 
 // --- the Scene 1 camp layout (data) -----------------------------------------
 
-export function buildCamp(colliderWorld) {
+export function buildCamp(colliderWorld, tex = {}) {
   const group = new THREE.Group();
   const fireEmitters = [];
   const sway = [];
@@ -387,7 +392,7 @@ export function buildCamp(colliderWorld) {
   addAll(makePaths([
     { x: 0, z: -2.5, r: 2.6, sx: 1.4 }, { x: -5, z: -5, r: 2.2, sx: 1.5, rot: 0.7 },
     { x: 5.5, z: 3, r: 2.0, sx: 1.6, rot: -0.9 }, { x: 10, z: 8, r: 2.2, sx: 1.4, rot: -0.4 },
-  ]));
+  ], tex.dirt));
   addAll(makeCrates([{ x: 10.5, z: 7.3, scale: 0.8 }])); // clear of the tent (audit-verified)
   // gate widened (D3: lambs must be EASY to pen)
   const pen = { minX: 10, maxX: 17, minZ: 8.5, maxZ: 14, gate: { z0: 9.9, z1: 12.9 } };
@@ -424,7 +429,7 @@ export function buildCamp(colliderWorld) {
     // corner clusters — the camp feels held (comfy, enclosed); clear of the pen
     { x: -18.6, z: 14.8, scale: 1.7 }, { x: -17.4, z: 12.6, scale: 1.15 }, { x: -18.8, z: 10.0, scale: 1.35 },
     { x: 18.6, z: 6.4, scale: 1.5 }, { x: 17.7, z: 4.4, scale: 1.15 }, { x: 18.8, z: 2.0, scale: 1.35 },
-  ], colliderWorld));
+  ], colliderWorld, tex.rock));
   addAll(makeGrass(180, 42, colliderWorld));
 
   return { group, fireEmitters, sway, pen, cameraBlockers };

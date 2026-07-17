@@ -38,12 +38,30 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
   scene.fog = new THREE.Fog(gh.fog, gh.fogNear, Graphics.fogFar);
   const sky = makeSky({ top: gh.skyTop, bottom: gh.skyBottom });
   scene.add(sky.mesh);
+
+  // --- real textures (D5): grass ground, limestone rock, dirt paths (CC0) ---
+  // TextureLoader.load() returns immediately; the image streams in and updates
+  // the GPU when ready, so no await is needed.
+  const texLoader = new THREE.TextureLoader();
+  const loadTiled = (url, rx, ry) => {
+    const t = texLoader.load(url);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.repeat.set(rx, ry);
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = 4;
+    return t;
+  };
+  const grassTex = loadTiled('textures/grass.jpg', 26, 11);
+  const rockTex = loadTiled('textures/rock.jpg', 1, 1);
+  const dirtTex = loadTiled('textures/dirt.jpg', 2, 2);
+  const worldTextures = { grass: grassTex, rock: rockTex, dirt: dirtTex };
   // Every story STAGE carves its own flat pad (level-layout law 1): the camp,
   // the dream field, the pit, and Jacob's tent interior. D4: the ground is a
   // sun-lit GRASS field — green base with brighter grass + dry-dirt patches.
   const ground = makeGround({
-    color: 0x63763c, // sunlit grass green
-    mottle: [0x76893f, 0x8a6a3d], // brighter grass tufts + dry dirt patches
+    color: 0x63763c, // sunlit grass green (tints the grass texture)
+    mottle: [0x8aa055, 0x9c7a44], // brighter grass tufts + dry dirt patches
+    map: grassTex,
     segX: 96, segZ: 30,
     pads: [
       { x: 0, z: 0, flatCore: 27, falloff: 42 },    // the camp
@@ -68,7 +86,7 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
 
   // --- camp set + collision ---
   const colliders = new ColliderWorld();
-  const camp = buildCamp(colliders);
+  const camp = buildCamp(colliders, worldTextures);
   scene.add(camp.group);
 
   // --- particles ---
@@ -79,6 +97,17 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
   const fireflies = makeFireflies({ count: Graphics.particles(26), span: 34 });
   fireflies.init();
   scene.add(smoke.points, embers.points, fireflies.points);
+
+  // NIGHT FIRE GLOW (D5): a warm point light at each fire pools + flickers on the
+  // ground and nearby characters/props. Subtle by day (the sun dominates),
+  // strong at night — grading scales it via fireLevel.
+  const fireLights = camp.fireEmitters.map((e) => {
+    const L = new THREE.PointLight(0xff8a3c, 0, 8.5, 1.6);
+    L.position.set(e.x, 1.0, e.z);
+    scene.add(L);
+    return { light: L, phase: e.x * 1.7 };
+  });
+  let fireLevel = 0.35; // 0..1 base intensity scale (grading raises it at night)
 
   // --- presentation ---
   let disposed = false; // set on dispose(); async init + the story loop check it
@@ -96,10 +125,14 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
   ].join(';');
   document.body.append(vignette);
   const canvasEl = renderer.domElement;
+  // D5: a gentle always-on VIBRANCE boost so colours pop (Nate: "look GOOD, not
+  // washed out"). The cold-open drained look overrides it, then restores to it.
+  const VIBRANT = 'saturate(1.2) contrast(1.06) brightness(1.02)';
+  canvasEl.style.filter = VIBRANT;
   const futureVignette = (on) => {
     vignette.style.opacity = on ? '1' : '0';
     canvasEl.style.transition = 'filter 1200ms ease';
-    canvasEl.style.filter = on ? 'saturate(0.32) contrast(1.06) brightness(0.86)' : 'none';
+    canvasEl.style.filter = on ? 'saturate(0.32) contrast(1.06) brightness(0.86)' : VIBRANT;
   };
 
   const verseCard = createVerseCard();
@@ -334,6 +367,15 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
     camp.sway.forEach((c, i) => { c.rotation.x = Math.sin(t * 1.1 + c.userData.sway.phase) * 0.13; });
     dream.update(dt, t);
     pit.update(dt, t);
+
+    // fire glow: brighter at night (dark moods), flickering; the pool reads on
+    // the lit ground + nearby characters.
+    const dark = ['dusk', 'night', 'dream', 'ominous', 'tentWarm', 'pit'].includes(grading.current);
+    fireLevel += ((dark ? 1 : 0.28) - fireLevel) * Math.min(dt * 0.0015, 1);
+    for (const f of fireLights) {
+      const flick = 1.35 + Math.sin(t * 11 + f.phase) * 0.22 + Math.sin(t * 5.3 + f.phase) * 0.14;
+      f.light.intensity = fireLevel * Math.max(0, flick);
+    }
 
     if (!ready) return;
     controller.update(dt);

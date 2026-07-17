@@ -218,7 +218,7 @@ export function makeRidges(pal = {}) {
 export function makeGround({
   color = 0x4c4066, seed = 77, width = 320, depth = 130,
   flatCore = 17, falloff = 46, z = -25, flattenWorldZ = 0,
-  pads = null, segX = 64, segZ = 20, mottle = null,
+  pads = null, segX = 64, segZ = 20, mottle = null, map = null,
 } = {}) {
   const padList = pads ?? [{ x: 0, z: flattenWorldZ, flatCore, falloff }];
   const geo = new THREE.PlaneGeometry(width, depth, segX, segZ);
@@ -265,11 +265,14 @@ export function makeGround({
     }
   }
   geo.computeVertexNormals();
-  // D4: the ground is now LIT by the sun (Lambert) — swells catch light, dirt
-  // and grass patches read with real form instead of a flat sheet.
-  const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial(
-    colAttr ? { vertexColors: true, fog: true } : { color, fog: true },
-  ));
+  // D4: the ground is LIT by the sun (Lambert). D5: a real GRASS texture map
+  // (tiled) × the vertex mottle gives a living, toon-shaded field. The map
+  // multiplies the base white, so the mottle colors still tint the grass.
+  const matOpts = colAttr
+    ? { vertexColors: true, fog: true, color: map ? 0xffffff : color }
+    : { color, fog: true };
+  if (map) matOpts.map = map;
+  const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial(matOpts));
   mesh.position.z = z;
   return mesh;
 }
