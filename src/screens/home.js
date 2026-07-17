@@ -85,7 +85,7 @@ export function buildHome({ scene, camera, app }) {
   // Preview card for the selected story.
   const card = document.createElement('div');
   card.style.cssText = [
-    'pointer-events:auto', 'width:min(90vw,440px)', 'margin:0 20px',
+    'pointer-events:auto', 'width:min(90vw,440px)', 'margin:0 20px 3.5vh', 'box-sizing:border-box',
     'padding:18px 22px', 'text-align:center',
     'background:rgba(16,14,26,0.42)', 'border:1px solid rgba(242,184,128,0.16)',
     'border-radius:16px', 'backdrop-filter:blur(4px)',
@@ -111,14 +111,54 @@ export function buildHome({ scene, camera, app }) {
 
   card.append(cardTitle, cardPassage, cardBlurb, startBtn);
 
-  // Story path row.
-  const path = document.createElement('div');
-  path.style.cssText = [
-    'pointer-events:auto', 'display:flex', 'gap:8px', 'flex-wrap:wrap',
-    'justify-content:center', 'margin:20px 16px 4vh',
+  // THE STORY MAP (D6 v2): a real map, not a button row. Joseph — the playable
+  // story — sits big at the CENTER with a pulsing gold ring; the future
+  // stories float around him as smaller LOCKED nodes (🔒 + name), joined by a
+  // slowly-shimmering dotted path. Everything drifts gently — the storefront
+  // breathes. Pure DOM/CSS + one SVG; no per-frame JS.
+  const mapStyle = document.createElement('style');
+  mapStyle.textContent = `
+    @keyframes mr-node-float { 0%,100% { transform: translate(-50%,-50%) translateY(0); } 50% { transform: translate(-50%,-50%) translateY(-5px); } }
+    @keyframes mr-node-pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(242,184,128,0.4), 0 6px 24px rgba(0,0,0,0.4); } 50% { box-shadow: 0 0 0 12px rgba(242,184,128,0), 0 6px 24px rgba(0,0,0,0.4); } }
+    @keyframes mr-path-shimmer { to { stroke-dashoffset: -64; } }
+  `;
+  document.head.append(mapStyle);
+
+  const map = document.createElement('div');
+  map.style.cssText = [
+    'pointer-events:auto', 'position:relative',
+    'width:min(92vw,620px)', 'height:clamp(190px, 30vh, 290px)', 'margin:8px 0 2px',
   ].join(';');
 
-  const GLYPH = { done: '✔', current: '◆', locked: '🔒' };
+  // node layout: Joseph centred and BIG; the locked stories arranged around him
+  const NODE_POS = { joseph: [50, 46], creation: [15, 26], fall: [30, 76], noah: [76, 72] };
+  const PATH_ORDER = ['creation', 'fall', 'noah', 'joseph']; // the dotted thread of the Book
+
+  // the dotted path (SVG underlay, animated dash shimmer)
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 100 100');
+  svg.setAttribute('preserveAspectRatio', 'none');
+  svg.style.cssText = 'position:absolute; inset:0; width:100%; height:100%; pointer-events:none; opacity:0.5;';
+  {
+    let d = '';
+    PATH_ORDER.forEach((id, i) => {
+      const [x, y] = NODE_POS[id];
+      if (i === 0) { d += `M ${x} ${y}`; return; }
+      const [px, py] = NODE_POS[PATH_ORDER[i - 1]];
+      d += ` Q ${(px + x) / 2 + (i % 2 ? 9 : -9)} ${(py + y) / 2}, ${x} ${y}`;
+    });
+    const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    p.setAttribute('d', d);
+    p.setAttribute('fill', 'none');
+    p.setAttribute('stroke', '#f2b880');
+    p.setAttribute('stroke-width', '0.7');
+    p.setAttribute('stroke-dasharray', '0.2 3.2');
+    p.setAttribute('stroke-linecap', 'round');
+    p.style.animation = 'mr-path-shimmer 9s linear infinite';
+    svg.append(p);
+  }
+  map.append(svg);
+
   let selectedId = null;
 
   function selectStory(id) {
@@ -135,39 +175,58 @@ export function buildHome({ scene, camera, app }) {
       startBtn.style.cursor = 'pointer';
       startBtn.style.background = '#f2b880';
     } else {
-      startBtn.textContent = 'Coming soon';
+      startBtn.textContent = '🔒 Coming soon';
       startBtn.disabled = true;
       startBtn.style.opacity = '0.5';
       startBtn.style.cursor = 'default';
       startBtn.style.background = 'rgba(255,255,255,0.12)';
     }
-    // Re-highlight nodes.
-    [...path.children].forEach((n) => {
-      n.style.background = n.dataset.id === id ? 'rgba(242,184,128,0.22)' : 'rgba(16,14,26,0.4)';
-      n.style.borderColor = n.dataset.id === id ? 'rgba(242,184,128,0.6)' : 'rgba(255,255,255,0.12)';
+    // Re-ring the selected node.
+    [...map.querySelectorAll('button')].forEach((n) => {
+      const sel = n.dataset.id === id;
+      n.style.borderColor = sel ? 'rgba(242,184,128,0.9)' : (n.dataset.locked === '1' ? 'rgba(255,255,255,0.18)' : 'rgba(242,184,128,0.55)');
     });
   }
 
   function renderNodes() {
-    path.textContent = '';
+    [...map.querySelectorAll('button, .mr-node-label')].forEach((n) => n.remove());
     for (const story of STORIES) {
-      const status = statusOf(story.id);
       const built = !!(story.sceneKey && app.hasScreen(story.sceneKey));
+      const status = statusOf(story.id);
+      const [x, y] = NODE_POS[story.id] ?? [50, 50];
+      const big = built; // the playable story is the hero of the map
       const node = document.createElement('button');
       node.type = 'button';
       node.dataset.id = story.id;
+      node.dataset.locked = built ? '0' : '1';
+      node.setAttribute('aria-label', `${story.title}${built ? '' : ' (locked)'}`);
       node.style.cssText = [
-        'pointer-events:auto', 'font-family:"Segoe UI",system-ui,sans-serif',
-        'font-size:13px', 'padding:8px 14px', 'border-radius:10px', 'cursor:pointer',
-        'color:#fdf6e3', 'border:1px solid rgba(255,255,255,0.12)',
-        'background:rgba(16,14,26,0.4)', 'backdrop-filter:blur(3px)',
-        'transition:background 150ms ease, border-color 150ms ease',
-        'display:flex', 'align-items:center', 'gap:7px', 'white-space:nowrap',
+        `position:absolute`, `left:${x}%`, `top:${y}%`, 'transform:translate(-50%,-50%)',
+        `width:${big ? 84 : 54}px`, `height:${big ? 84 : 54}px`, 'border-radius:50%',
+        'cursor:pointer', 'pointer-events:auto',
+        `font-size:${big ? 30 : 19}px`, 'display:flex', 'align-items:center', 'justify-content:center',
+        `color:${big ? '#241f38' : 'rgba(253,246,227,0.75)'}`,
+        `background:${big ? 'radial-gradient(circle at 34% 30%, #ffe9c9, #f2b880 62%, #d99a5e)' : 'rgba(16,14,26,0.55)'}`,
+        `border:2px solid ${big ? 'rgba(242,184,128,0.55)' : 'rgba(255,255,255,0.18)'}`,
+        'backdrop-filter:blur(3px)',
+        `animation: mr-node-float ${5 + (x % 3)}s ease-in-out ${y % 4}s infinite${big ? ', mr-node-pulse 2.6s ease-in-out infinite' : ''}`,
+        'transition:border-color 200ms ease, filter 160ms ease',
       ].join(';');
-      const glyph = built && status !== 'done' ? '▶' : (GLYPH[status] || '');
-      node.innerHTML = `<span style="opacity:0.8">${glyph}</span> ${story.title}`;
+      node.textContent = built ? (status === 'done' ? '✔' : '▶') : '🔒';
+      node.onmouseenter = () => { node.style.filter = 'brightness(1.12)'; };
+      node.onmouseleave = () => { node.style.filter = 'none'; };
       node.onclick = () => { Audio.uiClick(); selectStory(story.id); };
-      path.append(node);
+      // the name floats under every node — the map reads without clicking
+      const label = document.createElement('div');
+      label.className = 'mr-node-label';
+      label.textContent = story.title;
+      label.style.cssText = [
+        'position:absolute', `left:${x}%`, `top:calc(${y}% + ${big ? 52 : 36}px)`, 'transform:translateX(-50%)',
+        `font:600 ${big ? 15 : 12.5}px "Segoe UI",system-ui,sans-serif`,
+        `color:${big ? '#ffe9c9' : 'rgba(253,246,227,0.7)'}`, 'letter-spacing:0.06em', 'white-space:nowrap',
+        'text-shadow:0 1px 6px rgba(15,12,26,0.8)', 'pointer-events:none',
+      ].join(';');
+      map.append(node, label);
     }
     if (selectedId) selectStory(selectedId);
   }
@@ -216,7 +275,7 @@ export function buildHome({ scene, camera, app }) {
     links.append(a);
   });
 
-  root.append(title, subtitle, spacer, card, path);
+  root.append(title, subtitle, spacer, map, card);
   document.body.append(root, gear, links);
   requestAnimationFrame(() => { root.style.opacity = '1'; });
 
@@ -246,6 +305,7 @@ export function buildHome({ scene, camera, app }) {
     root.remove();
     gear.remove();
     links.remove();
+    mapStyle.remove();
   }
 
   return { update, dispose };
