@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { makeSky, makeRidges, makeGround, makeSun, makeMotes } from '../../engine/world.js';
+import { makeSky, makeRidges, makeGround, makeSun, makeMotes, mulberry32 } from '../../engine/world.js';
 import { Audio } from '../../systems/AudioSystem.js';
 import { getCheckpoint, setCheckpoint, clearCheckpoint, setSceneProgress } from '../../systems/SaveSystem.js';
 import { ColliderWorld } from '../../engine/collision.js';
@@ -461,91 +461,194 @@ function buildPitStage() {
   };
 }
 
-// --- the dream field: wheat sheaves that BOW, and a sky that answers --------
+// --- the DREAM: a moonlit farm field where the sky bows (Gen 37:7,9) ---------
+// A proper wheat field under a cool night, heavy fog banks behind, a visible
+// moonbeam, floating dream motes — you know instantly it's a dream. The 7
+// sheaves still bow (dream 1); then sun + moon + 11 stars descend and bow
+// (dream 2) in one authored cinematic.
 function buildDreamField() {
   const group = new THREE.Group();
   const FIELD = { x: 62, z: 0 };
+  const rnd = mulberry32(808);
 
-  // ground disc for the dream stage (silver-blue)
-  const disc = new THREE.Mesh(new THREE.CircleGeometry(16, 28), new THREE.MeshBasicMaterial({ color: 0x3a3f66, fog: true }));
+  // dark cool ground disc
+  const disc = new THREE.Mesh(new THREE.CircleGeometry(16, 32), new THREE.MeshBasicMaterial({ color: 0x27304f, fog: true }));
   disc.rotation.x = -Math.PI / 2;
   disc.position.set(FIELD.x, 0.01, FIELD.z);
   group.add(disc);
 
-  // a sheaf = a few leaning cones bundled; player's sheaf center, 7 around
+  // ROWS of tall wheat (instanced) — the clearing (r 6.4) around the sheaves
+  // stays open. One draw; a gentle field-wide sway reads as night wind.
+  const stalkGeo = new THREE.ConeGeometry(0.045, 1.7, 4);
+  stalkGeo.translate(0, 0.85, 0);
+  const wheatSpots = [];
+  for (let row = -13; row <= 13; row += 1.5) {
+    for (let col = -13; col <= 13; col += 0.75) {
+      const jx = (rnd() - 0.5) * 0.5, jz = (rnd() - 0.5) * 0.5;
+      const x = col + jx, z = row + jz;
+      const r = Math.hypot(x, z);
+      if (r > 14.5 || r < 6.4) continue; // inside the field, outside the clearing
+      wheatSpots.push([x, z, 0.7 + rnd() * 0.7, rnd() * Math.PI * 2]);
+    }
+  }
+  const wheat = new THREE.InstancedMesh(stalkGeo, new THREE.MeshBasicMaterial({ color: 0x9c8a5a, fog: true }), wheatSpots.length);
+  const wd = new THREE.Object3D();
+  wheatSpots.forEach((s, i) => {
+    wd.position.set(FIELD.x + s[0], 0, FIELD.z + s[1]);
+    wd.scale.set(1, s[2], 1);
+    wd.rotation.set(0, s[3], 0);
+    wd.updateMatrix();
+    wheat.setMatrixAt(i, wd.matrix);
+  });
+  wheat.instanceMatrix.needsUpdate = true;
+  group.add(wheat);
+
+  // a sheaf = a bundle of leaning stalks with a tie-band (the 7 that bow)
   const mkSheaf = (x, z, scale = 1) => {
     const g = new THREE.Group();
     const mat = new THREE.MeshBasicMaterial({ color: 0xd9b96a, fog: true });
-    for (let i = 0; i < 5; i++) {
-      const a = (i / 5) * Math.PI * 2;
-      const stalk = new THREE.Mesh(new THREE.ConeGeometry(0.07, 1.5, 4), mat);
-      stalk.position.set(Math.cos(a) * 0.16, 0.75, Math.sin(a) * 0.16);
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      const stalk = new THREE.Mesh(new THREE.ConeGeometry(0.07, 1.6, 4), mat);
+      stalk.position.set(Math.cos(a) * 0.17, 0.8, Math.sin(a) * 0.17);
       stalk.rotation.z = Math.cos(a) * 0.22;
       stalk.rotation.x = -Math.sin(a) * 0.22;
       g.add(stalk);
     }
-    const band = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.05, 6, 10), new THREE.MeshBasicMaterial({ color: 0x8a5a2c, fog: true }));
-    band.position.y = 0.55;
+    const band = new THREE.Mesh(new THREE.TorusGeometry(0.23, 0.05, 6, 10), new THREE.MeshBasicMaterial({ color: 0x8a5a2c, fog: true }));
+    band.position.y = 0.58;
     band.rotation.x = Math.PI / 2;
     g.add(band);
     g.position.set(x, 0, z);
     g.scale.setScalar(scale);
     return g;
   };
-
   const center = mkSheaf(FIELD.x, FIELD.z, 1.25);
   group.add(center);
   const outer = [];
   for (let i = 0; i < 7; i++) {
     const a = (i / 7) * Math.PI * 2;
-    const s = mkSheaf(FIELD.x + Math.cos(a) * 5.2, FIELD.z + Math.sin(a) * 5.2);
+    const s = mkSheaf(FIELD.x + Math.cos(a) * 5.0, FIELD.z + Math.sin(a) * 5.0);
     s.userData = { bowK: 0, bowed: false, toCenter: a + Math.PI };
     outer.push(s);
     group.add(s);
   }
 
-  // sky lights for the second dream: sun, moon, eleven stars (sprites)
-  const tex = (() => {
-    const c = document.createElement('canvas');
-    c.width = c.height = 64;
-    const g = c.getContext('2d').createRadialGradient(32, 32, 0, 32, 32, 32);
-    g.addColorStop(0, 'rgba(255,255,255,1)');
-    g.addColorStop(1, 'rgba(255,255,255,0)');
-    const ctx2 = c.getContext('2d');
-    ctx2.fillStyle = g;
-    ctx2.fillRect(0, 0, 64, 64);
-    const t = new THREE.CanvasTexture(c);
-    return t;
-  })();
-  const mkGlow = (size, color) => {
-    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
-    s.scale.setScalar(size);
-    return s;
+  // fog banks — big soft planes standing behind the field (dream haze)
+  const softTex = (rgb) => {
+    const c = document.createElement('canvas'); c.width = c.height = 128;
+    const ctx = c.getContext('2d');
+    const g = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+    g.addColorStop(0, `rgba(${rgb},0.5)`); g.addColorStop(1, `rgba(${rgb},0)`);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, 128, 128);
+    const t = new THREE.CanvasTexture(c); return t;
   };
-  const sunG = mkGlow(3.4, 0xfff0c8);
-  const moonG = mkGlow(2.4, 0xcfd8ff);
-  const stars = [];
-  for (let i = 0; i < 11; i++) stars.push(mkGlow(0.7, 0xfff8e7));
-  [sunG, moonG, ...stars].forEach((s) => group.add(s));
-  sunG.position.set(FIELD.x - 6, 13, FIELD.z - 16);
-  moonG.position.set(FIELD.x + 7, 14, FIELD.z - 16);
-  stars.forEach((s, i) => {
-    const a = (i / 11) * Math.PI;
-    s.position.set(FIELD.x + Math.cos(a) * 10, 11 + Math.sin(a) * 3, FIELD.z - 14);
-  });
-  [sunG, moonG, ...stars].forEach((s) => { s.userData = { base: s.position.clone() }; });
+  const fogTex = softTex('150,160,205');
+  const fogBanks = [];
+  for (let i = 0; i < 5; i++) {
+    const a = -0.9 + i * 0.45;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(14, 7), new THREE.MeshBasicMaterial({ map: fogTex, transparent: true, opacity: 0.4, depthWrite: false, fog: false }));
+    m.position.set(FIELD.x + Math.sin(a) * 15, 3.2, FIELD.z + Math.cos(a) * 15 - 3);
+    m.userData = { phase: i * 1.3, baseX: m.position.x };
+    fogBanks.push(m); group.add(m);
+  }
 
-  let bowingSky = 0; // 0 none, 1 descending
+  // the MOONBEAM — a visible cool shaft of light down onto the field
+  const beam = new THREE.Mesh(
+    new THREE.CylinderGeometry(1.2, 4.2, 15, 18, 1, true),
+    new THREE.MeshBasicMaterial({ map: softTex('200,215,255'), color: 0xcfe0ff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }),
+  );
+  beam.position.set(FIELD.x + 3, 7.5, FIELD.z - 3);
+  beam.rotation.z = -0.12;
+  group.add(beam);
+
+  // floating dream motes (cool, drift upward)
+  const moteCount = 60;
+  const mp = new Float32Array(moteCount * 3);
+  const mseed = new Float32Array(moteCount);
+  for (let i = 0; i < moteCount; i++) {
+    mp[i * 3] = FIELD.x + (rnd() - 0.5) * 26;
+    mp[i * 3 + 1] = rnd() * 9;
+    mp[i * 3 + 2] = FIELD.z + (rnd() - 0.5) * 26;
+    mseed[i] = rnd() * Math.PI * 2;
+  }
+  const moteGeo = new THREE.BufferGeometry();
+  moteGeo.setAttribute('position', new THREE.BufferAttribute(mp, 3));
+  const motes = new THREE.Points(moteGeo, new THREE.PointsMaterial({ map: fogTex, color: 0xdfe7ff, size: 0.5, transparent: true, opacity: 0.6, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true, fog: false }));
+  group.add(motes);
+
+  // --- the celestial bodies: sun, moon, 11 stars (layered glow) ---
+  const glowTex = softTex('255,255,255');
+  const mkBody = (size, color, coreBoost = 1) => {
+    const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+    halo.scale.setScalar(size);
+    const core = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0xffffff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+    core.scale.setScalar(size * 0.42 * coreBoost);
+    const b = new THREE.Group();
+    b.add(halo, core);
+    b.userData = { halo, core, twinkle: rnd() * Math.PI * 2 };
+    return b;
+  };
+  const sun = mkBody(4.6, 0xffe6a8);
+  const moon = mkBody(3.4, 0xd2e0ff);
+  const stars = [];
+  for (let i = 0; i < 11; i++) stars.push(mkBody(1.0, 0xfff6df, 1.2));
+  const bodies = [sun, moon, ...stars];
+  bodies.forEach((b) => group.add(b));
+
+  // three key positions per body: HIGH (start), MID (descended), LOW (bowed).
+  const setPath = (b, hx, hy, hz, mx, my, mz, lx, ly, lz) => {
+    b.userData.high = new THREE.Vector3(FIELD.x + hx, hy, FIELD.z + hz);
+    b.userData.mid = new THREE.Vector3(FIELD.x + mx, my, FIELD.z + mz);
+    b.userData.low = new THREE.Vector3(FIELD.x + lx, ly, FIELD.z + lz);
+    b.position.copy(b.userData.high);
+  };
+  setPath(sun, -7, 22, -19, -5.5, 12, -10, -2.6, 4.6, -3.5);
+  setPath(moon, 7, 23, -19, 5.5, 13, -10, 2.6, 5.0, -3.5);
+  stars.forEach((s, i) => {
+    const a = (i / 10) * Math.PI;
+    setPath(s,
+      Math.cos(a) * 11, 15 + Math.sin(a) * 4, -17,
+      Math.cos(a) * 8, 9 + Math.sin(a) * 2.5, -9,
+      Math.cos(a) * 3.4, 3.6 + Math.sin(a) * 1.2, -3.2);
+  });
+
+  let skyState = 0; // 0 idle · 1 descending (→mid) · 2 bowing (→low)
+  const setOpacity = (k) => bodies.forEach((b) => {
+    b.userData.halo.material.opacity = k * (b === sun ? 0.9 : b === moon ? 0.8 : 0.95);
+    b.userData.core.material.opacity = k * 0.9;
+  });
+
   return {
-    group, FIELD, center, outer, sunG, moonG, stars,
-    showSky(k) { [sunG, moonG, ...stars].forEach((s) => { s.material.opacity = k * (s === sunG ? 0.85 : s === moonG ? 0.7 : 0.9); }); },
-    bowSky() { bowingSky = 1; },
+    group, FIELD, center, outer, sun, moon, stars, beam,
+    showSky(k) { setOpacity(k); if (k > 0) beam.material.opacity = 0.14; },
+    descendSky() { skyState = 1; },
+    bowSky() { skyState = 2; },
     resetSky() {
-      bowingSky = 0;
-      [sunG, moonG, ...stars].forEach((s) => { s.position.copy(s.userData.base); s.material.opacity = 0; });
+      skyState = 0;
+      setOpacity(0);
+      beam.material.opacity = 0;
+      bodies.forEach((b) => b.position.copy(b.userData.high));
     },
     update(dt, t) {
       if (!this.group.visible) return;
+      // field-wide wheat sway (cheap night wind)
+      wheat.rotation.z = Math.sin(t * 0.7) * 0.015;
+      wheat.rotation.x = Math.cos(t * 0.5) * 0.01;
+      // fog banks drift + breathe
+      fogBanks.forEach((m) => {
+        m.position.x = m.userData.baseX + Math.sin(t * 0.15 + m.userData.phase) * 1.2;
+        m.material.opacity = 0.32 + Math.sin(t * 0.4 + m.userData.phase) * 0.1;
+      });
+      // dream motes drift upward, wrap
+      const pos = moteGeo.attributes.position;
+      for (let i = 0; i < moteCount; i++) {
+        let y = pos.getY(i) + dt * 0.0004 * (1 + Math.sin(mseed[i]));
+        if (y > 10) y -= 10;
+        pos.setY(i, y);
+        pos.setX(i, pos.getX(i) + Math.sin(t * 0.3 + mseed[i]) * dt * 0.00015);
+      }
+      pos.needsUpdate = true;
       // outer sheaves ease into their bow
       for (const s of outer) {
         const target = s.userData.bowed ? 1 : 0;
@@ -554,22 +657,20 @@ function buildDreamField() {
         s.rotation.x = Math.sin(s.userData.toCenter) * k * 0.85;
         s.rotation.z = -Math.cos(s.userData.toCenter) * k * 0.85;
       }
-      // center sheaf stands taller as others bow
-      const bowedCount = outer.filter((s) => s.userData.bowed).length;
-      const rise = bowedCount / outer.length;
+      const rise = outer.filter((s) => s.userData.bowed).length / outer.length;
       center.scale.setScalar(1.25 + rise * 0.35);
-      // the sky bows: lights sink toward the player's sheaf
-      if (bowingSky) {
-        [sunG, moonG, ...stars].forEach((s) => {
-          s.position.y += ((4.2) - s.position.y) * Math.min(dt * 0.0011, 1);
-          s.position.x += ((FIELD.x + (s.userData.base.x - FIELD.x) * 0.35) - s.position.x) * Math.min(dt * 0.0009, 1);
-          s.position.z += ((FIELD.z - 4 + (s.userData.base.z - FIELD.z) * 0.3) - s.position.z) * Math.min(dt * 0.0009, 1);
-        });
-      }
+      // celestial bodies: twinkle + descend/bow toward their target
+      bodies.forEach((b) => {
+        const tw = 1 + Math.sin(t * 2 + b.userData.twinkle) * 0.08;
+        b.userData.core.material.rotation = t * 0.3 + b.userData.twinkle;
+        b.scale.setScalar(tw);
+        if (skyState === 1) b.position.lerp(b.userData.mid, Math.min(dt * 0.0006, 1));
+        else if (skyState === 2) b.position.lerp(b.userData.low, Math.min(dt * 0.0012, 1));
+      });
     },
     dispose() {
-      tex.dispose();
-      group.traverse((o) => { if (o.isMesh || o.isSprite) { o.geometry?.dispose?.(); o.material?.dispose?.(); } });
+      glowTex.dispose(); fogTex.dispose();
+      group.traverse((o) => { if (o.isMesh || o.isSprite || o.isPoints) { o.geometry?.dispose?.(); o.material?.dispose?.(); } });
       group.parent?.remove(group);
     },
   };

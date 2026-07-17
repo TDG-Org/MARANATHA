@@ -365,48 +365,69 @@ export function createBeats(ctx) {
     await allBowed;
     ctx.guide.setTarget(null);
 
-    // the field answers, then the sky
+    // dream 1 answered (the field). Now DREAM 2 — the sky — one continuous move.
     ctx.setInput(false);
+    ctx.joseph.turnToward(0, -1); // face the sky (north)
+    ctx.joseph.play('idle');
     await seq([
       { t: 'objective', text: '' },
-      { t: 'cam', angle: Math.PI * 0.02, target: { x: D.FIELD.x, z: D.FIELD.z }, distance: 7.5, height: 2.2, lookHeight: 1.6, duration: 1800 },
+      { t: 'cam', angle: 0, target: { x: D.FIELD.x, z: D.FIELD.z }, distance: 7.5, height: 2.2, lookHeight: 1.6, duration: 1600 },
       { t: 'verse', verse: WEB.gen_37_7 },
       { t: 'verseHide' },
-      // look up: the sun, the moon, eleven stars
-      { t: 'fn', fn: async () => { D.showSky(1); await wait(800); } },
-      { t: 'cam', angle: Math.PI * 0.02, target: { x: D.FIELD.x, z: D.FIELD.z - 6 }, distance: 9, height: 1.2, lookHeight: 7.5, duration: 2200 },
+      // 1) the camera TILTS and RISES toward the sky; the bodies appear high
+      { t: 'fn', fn: async () => { D.showSky(1); ctx.sound('stinger.dream_enter'); await wait(400); } },
+      { t: 'cam', angle: 0, target: { x: D.FIELD.x, z: D.FIELD.z - 8 }, distance: 5.5, height: 3.6, lookHeight: 13, duration: 2600 },
+      // 2) the sun + moon descend slowly; the 11 stars follow
+      { t: 'fn', fn: async () => { D.descendSky(); await wait(2400); } },
+      // 3) the camera glides DOWN, following their descent…
+      { t: 'cam', angle: 0, target: { x: D.FIELD.x, z: D.FIELD.z - 3 }, distance: 7, height: 2.6, lookHeight: 6, duration: 2400 },
+      // 4) …and settles BEHIND Joseph, who stands watching them bow to him
+      { t: 'fn', fn: () => { ctx.joseph.setPosition(D.FIELD.x, D.FIELD.z + 1.8); ctx.joseph.turnToward(0, -1); } },
+      { t: 'cam', angle: Math.PI, target: () => ({ x: D.FIELD.x, z: D.FIELD.z + 1.8 }), distance: 4.6, height: 2.3, lookHeight: 2.6, duration: 2400 },
       { t: 'fn', fn: async () => { D.bowSky(); ctx.sound('sfx.sheaf_bow'); await wait(2600); } },
       { t: 'verse', verse: WEB.gen_37_9 },
       { t: 'verseHide' },
       { t: 'letterbox', on: true },
-      { t: 'fade', on: true, ms: 1300 },
+      { t: 'fade', on: true, ms: 1400 },
     ]);
-    // wake back at camp (behind the black — morning has come; the brothers
-    // rise from the fire and drift back to their work)
+    // 5) WAKE → cut to EVENING in camp; the player walks to tell the brothers
     D.group.visible = false;
-    ctx.joseph.setPosition(0.6, -3.8);
+    D.resetSky();
     ctx.controller.bounds = ctx.bounds;
+    ctx.joseph.setPosition(-8.2, -4.0); // waking by his father's tent
+    ctx.joseph.turnToward(1, 0.3);
+    ctx.camera.release(1);
     ctx.camera.snap();
-    ctx.onDawn?.(); // fireflies fade out (wired by the scene)
-    ['judah', 'reuben', 'simeon', 'levi'].forEach((k) => {
-      const n = ctx.cast[k];
-      ctx.npcs.freeze(n, false);
-      n.char.play('idle');
-      ctx.npcs.sendTo(n, n.home.x, n.home.z, { speed: 1.2 }); // fire-and-forget
-    });
+    ctx.onDusk?.(); // it's evening, not morning — fireflies stay
+    ['judah', 'reuben', 'simeon', 'levi'].forEach((k) => { ctx.npcs.freeze(ctx.cast[k], false); ctx.cast[k].char.play('idle'); });
     await seq([
-      { t: 'grade', mood: 'goldenHour', ms: 30 },
-      { t: 'fn', fn: () => ctx.setMusic('music.camp_warm') },
+      { t: 'grade', mood: 'dusk', ms: 30 },
+      { t: 'fn', fn: () => ctx.setMusic('music.dusk_calm') },
       { t: 'fade', on: false, ms: 1600 },
       { t: 'letterbox', on: false },
     ]);
+    // hand off to the telling — the player walks over (tell() gates on arrival)
+    ctx.hud.setObjective('Go and tell your brothers your dream.', 'Walk to your brothers by the fire.');
+    ctx.guide.setTargetXZ(0.8, -6.6);
+    ctx.setInput(true);
   }
 
   // ---------- beat 6 · 😠 tell the brothers ----------
   async function tell() {
-    ctx.setInput(false);
-    ctx.grading.grade('goldenHour', 400);
     const jac = ctx.cast.jacob;
+    // the player WALKS over to the brothers first (evening) — the dream beat set
+    // the objective + guide; on a fresh checkpoint resume, set them here too.
+    ctx.setInput(true);
+    if (!/tell/i.test(ctx.hud.objectiveEl.textContent)) {
+      ctx.hud.setObjective('Go and tell your brothers your dream.', 'Walk to your brothers by the fire.');
+      ctx.guide.setTargetXZ(0.8, -6.6);
+    }
+    await new Promise((resolve) => {
+      ctx.interactables.addTrigger({ id: 'reach-brothers', x: 0.8, z: -6.4, r: 3.2, once: true, onEnter: resolve });
+    });
+    ctx.guide.setTarget(null);
+    ctx.setInput(false);
+    ctx.grading.grade('dusk', 500); // stay in the evening
     const freezeAll = (on) => ['judah', 'reuben', 'simeon', 'levi'].forEach((k) => ctx.npcs.freeze(ctx.cast[k], on));
     // group scene: establish WIDE, then cut to whoever speaks
     await seq([
@@ -464,13 +485,13 @@ export function createBeats(ctx) {
     // world/story state that earlier beats would have produced
     if (n >= 2) c.sheep.sheep.forEach((s) => { if (!s.counted) { s.counted = true; s.penned = true; s.x = c.camp.pen.minX + 2 + Math.random() * 3; s.z = c.camp.pen.minZ + 1.5 + Math.random() * 3; } });
     if (n >= 4) c.joseph.setCoat(true);
-    const spawns = { 1: [2, 12.5], 2: [1, 1.5], 3: [-8.2, -4.6], 4: [-7.5, -4], 5: [1.4, -4.6], 6: [0.6, -3.8], 7: [0.6, -3.8] };
+    const spawns = { 1: [2, 12.5], 2: [1, 1.5], 3: [-8.2, -4.6], 4: [-7.5, -4], 5: [1.4, -4.6], 6: [-6, -3], 7: [0.6, -6.6] };
     const s = spawns[n] || [0, 12];
     c.joseph.setPosition(s[0], s[1]);
     c.camera.snap();
-    c.grading.set(n === 5 ? 'dusk' : 'goldenHour');
-    if (n === 5) c.onDusk?.(); // fireflies belong to the dusk entry ONLY —
-    // beats 6-7 resume into golden-hour morning (nothing there fades them out)
+    // beats 5 (dream/dusk) and 6-7 (telling, evening) all sit in dusk light
+    c.grading.set(n >= 5 ? 'dusk' : 'goldenHour');
+    if (n >= 5) c.onDusk?.(); // fireflies stay lit through the evening telling
   }
 
   return { list: [intro, herd, report, coat, dusk, dream, tell, close], applyState };
