@@ -13,11 +13,13 @@ export function createBeats(ctx) {
   const seq = (steps) => ctx.sequencer.run(steps);
   const wait = (ms) => pausableWait(ms, ctx.isPaused); // honours the pause menu
 
-  // the morning fire the brothers CIRCLE around for the telling (Task 9). One
-  // source of truth so beat 6 (gather), beat 7 (close) and checkpoint-resume
-  // all agree on the ring.
+  // the morning fire the brothers CIRCLE around for the telling. One source of
+  // truth so beat 6 (gather), beat 7 (close) and checkpoint-resume agree.
+  // D7: ALL ring slots live on the FAR (north) arc — the south side belongs to
+  // Joseph and the camera. The brothers face him ACROSS the flames; nobody
+  // ever stands in his sitting/talking space or between him and the lens.
   const FIRE = { x: 0, z: -6 };
-  const TELL_RING = [['judah', -0.5], ['reuben', 0.6], ['simeon', 2.0], ['levi', 3.1]];
+  const TELL_RING = [['judah', 3.4], ['reuben', 4.15], ['simeon', 5.0], ['levi', 5.75]];
   const ringXZ = (a) => ({ x: FIRE.x + Math.cos(a) * 2.2, z: FIRE.z + Math.sin(a) * 2.2 });
 
   // Dialogue cinematography: an over-the-shoulder SHOT computed from LIVE
@@ -434,8 +436,10 @@ export function createBeats(ctx) {
     ctx.onDusk?.(); // fireflies fade in (wired by the scene)
 
     // the brothers drift over and sit around the fire WHILE you walk up — the
-    // camp settles for the night (they're alive, not waiting on a trigger)
-    const ring = [['judah', -0.4], ['reuben', 0.7], ['simeon', 1.9], ['levi', 2.9]];
+    // camp settles for the night (they're alive, not waiting on a trigger).
+    // D7: they take the FAR (north) arc only — the south side, where the sit
+    // prompt lives, stays Joseph's; they face him across the flames.
+    const ring = [['judah', 3.5], ['reuben', 4.2], ['simeon', 5.15], ['levi', 5.9]];
     ring.forEach(([k, a]) => {
       const n = ctx.cast[k];
       ctx.npcs.sendTo(n, Math.cos(a) * 1.8, -6 + Math.sin(a) * 1.8, { speed: 1.4 }).then(() => {
