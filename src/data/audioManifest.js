@@ -57,6 +57,7 @@ export const AUDIO_MANIFEST = [
   { key: 'sfx.sheaf_bow', bus: 'sfx', loop: false, seconds: 0.6, fallback: 'thump', available: false, purpose: 'a sheaf bows in the dream', scene: 'joseph3d-1' },
   { key: 'sfx.men_laughing', bus: 'sfx', loop: false, seconds: 2.5, file: 'sfx/men_laughing', fallback: null, available: true, purpose: 'the brothers mock/laugh at Joseph (group envy beats)', scene: 'joseph3d-1' },
   { key: 'sfx.man_laugh', bus: 'sfx', loop: false, seconds: 3.8, file: 'sfx/man_laugh', fallback: null, available: true, purpose: 'ONE brother laughs alone (the herd sneer — Nate 2026-07-17)', scene: 'joseph3d-1' },
+  { key: 'sfx.boy_crying', bus: 'sfx', loop: false, seconds: 6, file: 'sfx/boy_crying', fallback: null, available: false, purpose: 'soft crying/sniffles — Joseph alone at the bottom of the pit (cold open shot 6; SILENT until the file lands — 🔴 NATE.md)', scene: 'joseph3d-1' },
 
   // --- Narrator VO (file-first; naming: vo/<story>/<scene>/<line-id>) ---
   // GENERATED, not recorded: `npm run vo` bakes every line below as an mp3

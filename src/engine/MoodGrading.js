@@ -20,8 +20,10 @@ export const MOODS = {
   // SEE in the ridge saddle (D6 sunrise) — shading and sky agree on where the
   // light is. The warm hemi keeps camera-facing sides painterly, not backlit.
   goldenHour: { skyTop: 0xefa45e, skyBottom: 0xffe4b6, fog: 0xffd6a2, fogNear: 44, key: 0xffe1ad, keyI: 1.05, hemi: 0.62, hemiSky: 0xffe4b6, sun: [2, 9, -12], ridge: [0xc9a184, 0xb08a8a, 0x74597a], tint: '#000000', tintA: 0 },
-  // The pit (cold open): trapped, airless — fog crushes in to ~18 (environment-vibes).
-  pit: { skyTop: 0x3a3550, skyBottom: 0x6b5a63, fog: 0x5a5464, fogNear: 18, key: 0x9a8fb0, keyI: 0.5, hemi: 0.4, hemiSky: 0x6b5a63, sun: [0, 12, 5], ridge: [0x8b8496, 0x776f84, 0x565064], tint: '#1c1830', tintA: 0.12 },
+  // The pit (cold open): trapped and airless in COLOR, not in visibility —
+  // D8: fog pushed back (18→36) + a stronger key so every figure reads
+  // clearly; the drained "future" PostFX carries the gloom instead.
+  pit: { skyTop: 0x3a3550, skyBottom: 0x6b5a63, fog: 0x6b6274, fogNear: 36, key: 0xa89dbc, keyI: 0.72, hemi: 0.46, hemiSky: 0x6b5a63, sun: [0, 12, 5], ridge: [0x8b8496, 0x776f84, 0x565064], tint: '#1c1830', tintA: 0.12 },
   // Jacob's tent interior: warm lamplight raking from one side.
   tentWarm: { skyTop: 0x4a4e8f, skyBottom: 0xe88d67, fog: 0x2e2118, fogNear: 11, key: 0xffc888, keyI: 1.0, hemi: 0.45, hemiSky: 0xe8a86a, sun: [-3.5, 5, 2.5], ridge: [0x8a6a7e, 0x74566e, 0x4e3a54], tint: '#2a1c10', tintA: 0.08 },
   dusk: { skyTop: 0x434b9e, skyBottom: 0xf28a58, fog: 0xc08a70, fogNear: 38, key: 0xffb877, keyI: 0.82, hemi: 0.46, hemiSky: 0xf28a58, sun: [-15, 4.5, 3], ridge: [0xc08578, 0xa66a72, 0x6f4560], tint: '#3a2f55', tintA: 0.08 },

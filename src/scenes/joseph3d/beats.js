@@ -46,7 +46,10 @@ export function createBeats(ctx) {
     },
   });
 
-  // ---------- beat 0 · 🕳️ COLD OPEN v3: carried, thrown, left → 🌅 morning ----
+  // ---------- beat 0 · 🕳️ COLD OPEN v4 (D8): the 7 exact shots ---------------
+  // 1 march · 2 the edge (clickable betrayal) · 3 the throw · 4 slow-mo fall,
+  // camera falling WITH him · 5 the brothers walk home toward a far warm light
+  // · 6 the boy crying alone in the dark · 7 slow black, 2.5s HOLD, morning.
   // REAL rigged cast only (level-layout law 8) — the story runner starts after
   // the GLBs load, so the four named brothers and Joseph play this themselves.
   async function intro() {
@@ -55,145 +58,201 @@ export function createBeats(ctx) {
     const jRoot = ctx.joseph.root;
     const B = ['reuben', 'judah', 'simeon', 'levi'].map((k) => ctx.cast[k]);
     const homes = B.map((n) => ({ x: n.pos.x, z: n.pos.z }));
-    const put = (n, x, z) => { n.pos.x = x; n.pos.z = z; n.char.setPosition(x, z); };
+    // NOBODY may ever stand over the hole (D8: Reuben's old "ahead" slot put
+    // him ON AIR over the shaft) — every brother placement is clamped radially
+    // out past the rim. Joseph is moved via jRoot directly and is exempt.
+    const RIM = 2.5;
+    const put = (n, x, z) => {
+      const dx = x - P.PIT.x, dz = z - P.PIT.z;
+      const d = Math.hypot(dx, dz);
+      if (d < RIM) { const s = RIM / (d || 1); x = P.PIT.x + dx * s; z = P.PIT.z + dz * s; }
+      n.pos.x = x; n.pos.z = z; n.char.setPosition(x, z);
+    };
+    // interior shots dive below ground — lift the camera's ground-clip for the
+    // duration of the open, restore it with the morning (shot 7 reset).
+    const baseMinGroundY = ctx.camera.minGroundY;
+    ctx.camera.minGroundY = -4.4;
 
     // Stage the procession behind black, worn in the drained FUTURE filter
-    // (gloomy vignette + blur + drained color) so no one mistakes it for now.
+    // (vignette + drain — D8: barely any blur; it must never hide the action).
     ctx.futureVignette(true);
     ctx.grading.set('pit');
     P.group.visible = true;
     P.setSkyLight(1); P.shrinkSkyLight(0);
     ctx.joseph.setCoat(true); // in the flash he STILL wears the coat — they strip it (37:23)
-    if (ctx.joseph.shadowMesh) ctx.joseph.shadowMesh.visible = false; // carried/lying — no foot blob
     ctx.controller.bounds = { minX: P.PIT.x - 6, maxX: P.PIT.x + 10, minZ: P.PIT.z - 6, maxZ: P.PIT.z + 6 };
     B.forEach((n) => ctx.npcs.freeze(n, true));
 
-    // (1) the CARRY — the brothers bear Joseph to the pit mouth. Two bearers
-    // flank the limp boy (held off the ground, tipped back); one ahead, one
-    // behind. Real walk cycles; Joseph hangs in the seated pose.
-    const from = { x: P.PIT.x + 8.2, z: P.PIT.z + 1.6 };
-    const to = { x: P.PIT.x + 2.35, z: P.PIT.z + 0.2 };
+    // SHOT 1 — the MARCH: the brothers grouped AROUND Joseph, walking him in.
+    // One ahead (rim-side, never over the hole), one at each shoulder, one
+    // close behind — no way out of the ring. Everyone on real walk cycles.
+    const from = { x: P.PIT.x + 9.2, z: P.PIT.z + 1.7 };
+    const to = { x: P.PIT.x + 2.6, z: P.PIT.z + 0.2 };
     const dir = { x: to.x - from.x, z: to.z - from.z };
-    const OFF = [
-      { n: B[0], dx: -1.7, dz: -0.4 }, // reuben ahead
-      { n: B[1], dx: 0.55, dz: 0.8 },  // judah — left bearer
-      { n: B[2], dx: 0.55, dz: -0.8 }, // simeon — right bearer
-      { n: B[3], dx: 1.8, dz: 0.5 },   // levi behind
+    const ESCORT = [
+      { n: B[0], dx: -1.35, dz: -1.95 }, // reuben ahead, swung to the rim side
+      { n: B[1], dx: 0.35, dz: 1.25 },   // judah at his left shoulder
+      { n: B[2], dx: 0.45, dz: -1.25 },  // simeon at his right
+      { n: B[3], dx: 1.6, dz: 0.55 },    // levi close behind — no turning back
     ];
     const AWAY = [[2.6, 1.2], [3.4, 0.2], [3.0, -1.0], [4.2, 0.8]]; // walk-off spread
     const place = (k) => {
       const px = from.x + dir.x * k, pz = from.z + dir.z * k;
-      OFF.forEach(({ n, dx, dz }) => { put(n, px + dx, pz + dz); n.char.turnToward(dir.x, dir.z); });
+      ESCORT.forEach(({ n, dx, dz }) => { put(n, px + dx, pz + dz); n.char.turnToward(dir.x, dir.z); });
       ctx.joseph.setPosition(px, pz);
-      jRoot.position.y = 0.42;   // held clear of the ground
-      jRoot.rotation.x = -0.5;   // tipped back — limp between the bearers
       ctx.joseph.turnToward(dir.x, dir.z);
     };
     place(0);
-    ctx.joseph.play('kneel'); // slumped carried pose
+    ctx.joseph.play('walk');
     B.forEach((n) => n.char.play('walk'));
+    let march = null; // the march drives CONCURRENTLY — the group is already
+    // moving when the black lifts (walk cycles must never tread in place)
     await seq([
       { t: 'fade', on: true, ms: 0 },
       { t: 'letterbox', on: true },
-      // the HOOK opens TIGHT on the carried boy, then the march pulls the
-      // camera wide (D7: the first frame is the story, not scenery)
-      { t: 'cam', angle: Math.PI * 0.42, target: { x: from.x + dir.x * 0.5, z: from.z + dir.z * 0.5 }, distance: 3.4, height: 1.25, lookHeight: 1.0, duration: 1, awaitMs: false },
-      { t: 'wait', ms: 350 },
-      { t: 'fade', on: false, ms: 1100 }, // reveal: harsh daylight, the march
-      { t: 'cam', angle: Math.PI * 0.52, target: { x: to.x + 0.6, z: to.z }, distance: 4.4, height: 1.5, lookHeight: 0.9, duration: 4600, awaitMs: false },
-      { t: 'fn', fn: async () => {
-        const D = 4400; let e = 0;
-        while (e < D) { await wait(50); e += 50; place(e / D); }
-        B.forEach((n) => n.char.play('idle'));
+      // open TIGHT on the procession — a clean, slow ease-in from black (D8:
+      // the old open popped); the group trudges through the near frame
+      { t: 'cam', angle: Math.PI * 0.42, target: { x: from.x + dir.x * 0.12, z: from.z + dir.z * 0.12 }, distance: 3.2, height: 1.3, lookHeight: 1.05, duration: 1, awaitMs: false },
+      { t: 'fn', fn: () => {
+        march = (async () => {
+          const D = 8600; let e = 0; // a slow, heavy dead-march
+          while (e < D) { await wait(50); e += 50; place(Math.min(1, e / D)); }
+          B.forEach((n) => n.char.play('idle'));
+          ctx.joseph.play('idle');
+        })();
       } },
-      { t: 'wait', ms: 500 },
-      // (2) at the rim they STRIP the tunic (37:23) — it hangs from Judah's hand
-      { t: 'cam', angle: Math.PI * 0.22, target: () => ({ x: ctx.joseph.position.x, z: ctx.joseph.position.z }), distance: 3.1, height: 1.6, lookHeight: 1.0, duration: 1300 },
+      { t: 'wait', ms: 450 },
+      { t: 'fade', on: false, ms: 1500 },
+      { t: 'wait', ms: 650 },
+      // …the frame widens as the march closes on the pit
+      { t: 'cam', angle: Math.PI * 0.52, target: { x: to.x + 0.6, z: to.z }, distance: 5.0, height: 1.7, lookHeight: 0.95, duration: 5400, awaitMs: false },
+      { t: 'fn', fn: () => march }, // hold until the march lands at the rim
+      { t: 'wait', ms: 450 },
+      // SHOT 2 — AT THE EDGE: the betrayal, face to face. The player clicks
+      // through every line (paraphrase inside Gen 37:19-22 — the taunt about
+      // the dreams, and Reuben's "no blood" that chose the pit).
+      shot('simeon', 'joseph', { side: 0.42, dist: 2.7 }),
+      { t: 'say', who: 'Simeon', text: 'Far enough. This is the place.', color: J.Simeon },
+      shot('joseph', 'judah', { side: -0.4, dist: 2.5 }),
+      { t: 'say', who: 'Joseph', text: 'Brothers — please. What have I done to you?', color: J.Joseph },
+      shot('judah', 'joseph', { side: 0.4, dist: 2.6 }),
+      { t: 'say', who: 'Judah', text: 'What have you done? “The sun and the moon bowed down to me.” To a boy in a fine coat.', color: J.Judah },
+      { t: 'say', who: 'Judah', text: 'Here is your throne, dreamer. Now we shall see what becomes of your dreams.', color: J.Judah },
+      shot('reuben', 'judah', { side: -0.42, dist: 2.9 }),
+      { t: 'say', who: 'Reuben', text: 'No blood, Judah. Do you hear me? No blood — the pit is enough.', color: J.Reuben },
+      { t: 'dialogueHide' },
+      // they STRIP the tunic (37:23) — it hangs from Judah's hand
+      { t: 'cam', angle: Math.PI * 0.22, target: () => ({ x: ctx.joseph.position.x, z: ctx.joseph.position.z }), distance: 2.9, height: 1.6, lookHeight: 1.0, duration: 1100 },
       { t: 'fn', fn: async () => {
+        B.forEach((n) => n.char.play('idle'));
         ctx.sound('sfx.cloth_equip');
         ctx.joseph.setCoat(false);
         P.coatProp.visible = true;
         P.coatProp.position.set(B[1].pos.x + 0.35, 0.85, B[1].pos.z);
-        await wait(700);
+        await wait(800);
       } },
-      // (3) THE THROW — a small heave, then the SLOW-MOTION fall: Joseph turns
-      // FLAT ONTO HIS BACK as he drops, the camera close and angled, drifting
-      // down WITH him; the ring of daylight shrinks away above. Alone, and sad.
-      { t: 'cam', angle: Math.PI * 0.18, target: { x: P.PIT.x, z: P.PIT.z }, distance: 3.0, height: 2.3, lookHeight: 0.5, duration: 900 },
-      { t: 'fn', fn: () => { ctx.sound('stinger.hatred'); B[1].char.play('talk'); B[2].char.play('talk'); } },
-      { t: 'cam', angle: Math.PI * 0.13, target: { x: P.PIT.x, z: P.PIT.z }, distance: 2.6, height: 0.6, lookHeight: -2.9, duration: 3400, awaitMs: false },
+      // SHOT 3 — THE THROW, from the rim: the dark mouth below, the boy still
+      // fully lit as they seize and heave him over the edge.
+      { t: 'cam', angle: Math.PI * 0.15, target: { x: P.PIT.x, z: P.PIT.z }, distance: 3.1, height: 2.4, lookHeight: 0.4, duration: 1000 },
       { t: 'fn', fn: async () => {
-        // the heave up…
-        const H = 260; let e = 0;
-        while (e < H) { await wait(40); e += 40; jRoot.position.y = 0.42 + (e / H) * 0.5; }
+        ctx.sound('stinger.hatred');
+        B[1].char.play('talk'); B[2].char.play('talk'); // the two who seize him
+        if (ctx.joseph.shadowMesh) ctx.joseph.shadowMesh.visible = false;
+        const jx = jRoot.position.x, jz = jRoot.position.z;
+        const H = 340; let e = 0;
+        while (e < H) { await wait(40); e += 40; const k = Math.min(1, e / H);
+          jRoot.position.y = k * 0.6;
+          jRoot.position.x = jx + (P.PIT.x - jx) * k * 0.25;
+          jRoot.position.z = jz + (P.PIT.z - jz) * k * 0.25;
+        }
         B[1].char.play('idle'); B[2].char.play('idle');
-        // …and the long slow fall — rotating flat onto his BACK, face up to
-        // the closing daylight (D7: the old pitch sign left him face-down;
-        // pixel evidence — his up side read hemi-ground green, not lit robe)
-        const D = 3000; e = 0;
-        const x0 = jRoot.position.x, z0 = jRoot.position.z;
+      } },
+      // SHOT 4 — CUT: the slow-motion fall. Camera CLOSE ON JOSEPH — it falls
+      // and slowly circles WITH him (never the pit edge) as he turns flat onto
+      // his back and the ring of daylight shrinks away above. Alone. Sad.
+      { t: 'fn', fn: async () => {
+        const D = 4600; let e = 0; // D8: slower than the old 3s fall
+        const x0 = jRoot.position.x, z0 = jRoot.position.z, y0 = jRoot.position.y;
+        const a0 = Math.PI * 0.3;
         while (e < D) { await wait(40); e += 40; const k = Math.min(1, e / D);
-          jRoot.position.y = 0.92 - k * 4.72;                        // → -3.8 (pit floor)
+          jRoot.position.y = y0 - k * (y0 + 3.8);              // → -3.8 (pit floor)
           jRoot.position.x = x0 + (P.PIT.x - x0) * k;
           jRoot.position.z = z0 + (P.PIT.z - z0) * k;
-          jRoot.rotation.x = -0.5 + k * (Math.PI / 2 + 0.5);         // → flat, FACE UP
-          P.shrinkSkyLight(k);                                        // daylight closes over him
+          jRoot.rotation.x = k * (Math.PI / 2);                // flat, FACE UP
+          P.shrinkSkyLight(k);                                 // daylight closes over him
+          ctx.camera.cinematicMoveTo({
+            angle: a0 + k * 0.55,                              // a slow drift around the boy
+            target: { x: jRoot.position.x, y: jRoot.position.y, z: jRoot.position.z },
+            distance: 2.1, height: 0.55, lookHeight: 0.18, duration: 1,
+          });
         }
-        ctx.sound('sfx.sheaf_bow'); // the dull landing thump
+        ctx.sound('sfx.sheaf_bow'); // the dull landing
       } },
-      // the brothers pull WELL BACK from the rim — when the camera looks down
-      // the shaft, Joseph is utterly alone over the pit (D7). The nearest
-      // bearer starts ~0.7u from the hole; they walk off ~3.8u so no body can
-      // catch the edge of the top-down frame.
-      { t: 'fn', fn: async () => {
-        B.forEach((n) => { n.char.turnToward(1, 0.2); n.char.play('walk'); });
-        const D = 1150; let e = 0;
-        while (e < D) { await wait(45); e += 45; B.forEach((n) => put(n, n.pos.x + 0.152, n.pos.z + 0.024)); }
-        B.forEach((n) => n.char.play('idle'));
-      } },
-      // the lonely hold: straight down the shaft — the boy on his back, small,
-      // in the pool of daylight at the bottom (the hole is REAL now)
-      { t: 'cam', angle: 0, target: { x: P.PIT.x, z: P.PIT.z }, distance: 1.1, height: 5.0, lookHeight: -3.4, duration: 1800 },
-      { t: 'verse', verse: WEB.gen_37_24 },
-      { t: 'verseHide' },
-      // (4) cut: the brothers walk away, coat in hand. cold. no one looks back.
-      { t: 'fade', on: true, ms: 450 },
+      { t: 'wait', ms: 1000 },
+      // SHOT 5 — CUT: the brothers walk away SLOWLY toward their camp — a
+      // faint warm firelight far ahead where they live; behind them, nothing.
+      // Framed from behind so no one ever looks back.
+      { t: 'fade', on: true, ms: 500 },
       { t: 'fn', fn: () => {
         ctx.grading.set('ominous');
-        B.forEach((n, i) => { put(n, P.PIT.x + AWAY[i][0], P.PIT.z + AWAY[i][1]); n.char.turnToward(1, -0.25); n.char.play('walk'); });
+        P.setCampGlow(1);
+        B.forEach((n, i) => { put(n, P.PIT.x + AWAY[i][0], P.PIT.z + AWAY[i][1]); n.char.turnToward(0.95, -0.32); n.char.play('walk'); });
       } },
-      { t: 'cam', angle: Math.PI * 0.95, target: { x: P.PIT.x + 5.5, z: P.PIT.z - 0.5 }, distance: 6.8, height: 2.1, lookHeight: 1.1, duration: 1, awaitMs: false },
-      { t: 'fade', on: false, ms: 600 },
+      { t: 'cam', angle: 1.9, target: { x: P.PIT.x + 6, z: P.PIT.z - 1 }, distance: 7.2, height: 2.2, lookHeight: 1.1, duration: 1, awaitMs: false },
+      { t: 'fade', on: false, ms: 700 },
       { t: 'fn', fn: async () => {
-        const D = 2800; let e = 0;
+        const D = 5200; let e = 0; // slow — no one hurries, no one looks back
         while (e < D) { await wait(50); e += 50; const k = e / D;
-          B.forEach((n, i) => put(n, P.PIT.x + AWAY[i][0] + k * 7.5, P.PIT.z + AWAY[i][1] - k * 2));
+          B.forEach((n, i) => put(n, P.PIT.x + AWAY[i][0] + k * 6.5, P.PIT.z + AWAY[i][1] - k * 2.2));
           P.coatProp.position.set(B[1].pos.x + 0.35, 0.85, B[1].pos.z); // Judah carries it off
         }
       } },
-      { t: 'wait', ms: 400 },
-      // (5) slow fade to black → the drained "future" look LIFTS as morning comes
-      { t: 'fade', on: true, ms: 1600 },
+      { t: 'wait', ms: 500 },
+      // SHOT 6 — CUT: back down into the dark. The boy has pulled himself up
+      // to sitting — head bowed into his knees, shoulders shaking. The verse
+      // lands over the sound of a child crying at the bottom of a well.
+      { t: 'fade', on: true, ms: 600 },
       { t: 'fn', fn: () => {
+        jRoot.rotation.x = 0;
+        jRoot.position.set(P.PIT.x + 0.15, -4.0, P.PIT.z + 0.1);
+        ctx.joseph.play('kneel');        // seated on the pit floor
+        ctx.joseph.turnToward(0.35, -0.8);
+        ctx.joseph.setGrief(true);       // head bows deep; small sobbing hitches
+        ctx.sound('sfx.boy_crying');     // 🔴 silent until Nate's file lands (NATE.md)
+      } },
+      { t: 'cam', angle: -Math.PI * 0.2, target: { x: P.PIT.x, y: -4.0, z: P.PIT.z }, distance: 2.5, height: 1.05, lookHeight: 0.6, duration: 1, awaitMs: false },
+      { t: 'fade', on: false, ms: 900 },
+      { t: 'wait', ms: 1400 },
+      { t: 'verse', verse: WEB.gen_37_24 },
+      { t: 'verseHide' },
+      { t: 'wait', ms: 2600 }, // hold on the shaking shoulders — let it be sad
+      // SHOT 7 — slow fade to black → a PURE BLACK 2.5s hold → golden morning.
+      { t: 'fade', on: true, ms: 2200 },
+      { t: 'wait', ms: 2500 },
+      { t: 'fn', fn: () => {
+        ctx.joseph.setGrief(false);
         P.group.visible = false;
         P.coatProp.visible = false;
+        P.setCampGlow(0);
         jRoot.position.y = 0;
         jRoot.rotation.x = 0;             // back on his feet
+        ctx.joseph.play('idle');          // …and standing (he was seated, weeping)
         if (ctx.joseph.shadowMesh) ctx.joseph.shadowMesh.visible = true;
         ctx.joseph.setCoat(false);
+        ctx.camera.minGroundY = baseMinGroundY; // ground-clip back on
         // the brothers return to their camp-morning spots, alive again
-        B.forEach((n, i) => { put(n, homes[i].x, homes[i].z); n.char.play('idle'); ctx.npcs.freeze(n, false); });
+        B.forEach((n, i) => { n.pos.x = homes[i].x; n.pos.z = homes[i].z; n.char.setPosition(homes[i].x, homes[i].z); n.char.play('idle'); ctx.npcs.freeze(n, false); });
         ctx.controller.bounds = ctx.bounds;
         ctx.joseph.setPosition(-7, -2.5); // by his tent in the camp
         ctx.grading.set('goldenHour');
-        ctx.futureVignette(false);        // NOW — the gloom, blur and drain lift
+        ctx.futureVignette(false);        // NOW — the gloom and drain lift
         ctx.camera.cinematicMoveTo({ angle: Math.PI * 0.9, target: { x: -5, z: -3 }, distance: 14, height: 7, lookHeight: 1, duration: 1 });
       } },
       // D7 logic fix: the pit was a FLASH-FORWARD — this morning is EARLIER,
       // not "the next morning" (that title made the timeline read backwards).
       { t: 'title', heading: 'Hebron, Canaan', sub: 'Days earlier · c. 1898 BC · Genesis 37', holdMs: 3200 },
-      { t: 'fade', on: false, ms: 1800 },
-      // (5) a slow, beautiful pan across the golden camp; Joseph steps out
+      { t: 'fade', on: false, ms: 2000 },
+      // a slow, beautiful pan across the golden camp; Joseph steps out
       // (12s — long enough that both verses finish inside the glide)
       { t: 'cam', angle: Math.PI * 1.1, target: { x: 2, z: -2 }, distance: 12, height: 5.5, lookHeight: 1.3, duration: 12000, awaitMs: false },
       { t: 'verse', verse: WEB.gen_37_1 },

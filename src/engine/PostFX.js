@@ -22,8 +22,9 @@ const BASE = {
 // Named filter looks, composed ON TOP of the base grade.
 const FILTERS = {
   none: '',
-  // the cold-open flash-forward: gloomy, drained, heavy-lidded
-  future: 'saturate(0.28) contrast(1.1) brightness(0.8) blur(2.2px)',
+  // the cold-open flash-forward: gloomy and drained, but CLEAR — the vignette
+  // + desaturation carry the "future" read; blur may never hide the action (D8).
+  future: 'saturate(0.4) contrast(1.08) brightness(0.87) blur(1px)',
   // the dream: cool, soft, faintly glowing (brightness lifts the additive glows)
   dream: 'saturate(1.12) contrast(0.98) brightness(1.08) hue-rotate(-8deg)',
 };

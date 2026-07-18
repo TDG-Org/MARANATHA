@@ -152,6 +152,7 @@ export class Character3D {
     // 6) head height from the HEAD BONE (hidden accessories can't inflate it)
     this.rig.updateWorldMatrix(true, true);
     const headBone = this.rig.getObjectByName('head');
+    this._headBone = headBone || null; // grief pose bows it post-mixer (D8)
     if (headBone) {
       const hp = new THREE.Vector3();
       headBone.getWorldPosition(hp);
@@ -396,6 +397,11 @@ export class Character3D {
     if (dx * dx + dz * dz > 1e-4) this._targetYaw = Math.atan2(dx, dz);
   }
 
+  // GRIEF (D8 cold open): the boy at the bottom of the pit weeps — head bowed
+  // deep, shoulders hitching in small sobs. Applied AFTER the mixer each frame
+  // (the animation clip owns the bones; this rides on top), eased in and out.
+  setGrief(on) { this._grief = !!on; }
+
   update(dt) {
     this._t += dt;
     let d = this._targetYaw - this._yaw;
@@ -406,6 +412,21 @@ export class Character3D {
 
     if (this.mode === 'glb' && this.mixer) {
       this.mixer.update(dt / 1000);
+      // grief pose (post-mixer, additive): bow the head deep + sob hitches in
+      // the shoulders. Eased, so it settles in rather than snapping.
+      const gk = this._griefK ?? 0;
+      const gTarget = this._grief ? 1 : 0;
+      if (gk !== gTarget) this._griefK = gk + (gTarget - gk) * Math.min(dt * 0.0022, 1);
+      if ((this._griefK ?? 0) > 0.003) {
+        const k = this._griefK;
+        const s = this._t / 1000;
+        const sob = Math.sin(s * 7.6) * 0.5 + Math.sin(s * 13.1) * 0.22; // uneven hitches
+        if (this._headBone) this._headBone.rotation.x += k * (0.72 + sob * 0.06);
+        this.rig.rotation.x = k * (0.14 + sob * 0.05);
+      } else if (this._griefWas) {
+        this.rig.rotation.x = 0; // fully recovered — stand straight again
+      }
+      this._griefWas = (this._griefK ?? 0) > 0.003;
       // mouth flipbook: flap fast while speaking, hidden otherwise
       if (this.mouthMesh) {
         if (this.state === 'talk') {
