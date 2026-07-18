@@ -38,6 +38,8 @@ class AudioSystem {
     this.birdTimer = null;
     this.onMuted = null; // hook: the narrator stops mid-verse on mute
     this.onVolume = null; // hook: DOM UI stays in sync
+    this._liveLoops = new Map(); // key → live loop handle (double-start guard)
+    this._liveOneShots = 0;      // simultaneous one-shot cap (phones die past ~dozens)
     const unlock = () => this.unlock();
     window.addEventListener('pointerdown', unlock);
     window.addEventListener('keydown', unlock);
@@ -46,8 +48,14 @@ class AudioSystem {
     document.addEventListener('visibilitychange', () => {
       if (!this.ctx) return;
       if (document.hidden) this.ctx.suspend().catch(() => {});
-      else if (this.enabled && !this.holdSuspend) this.ctx.resume().catch(() => {});
+      else this._resumeIfAppropriate();
     });
+    // D8 phone hardening: a call / Siri / screen-lock leaves iOS Safari's
+    // context 'interrupted' (a state the old 'suspended'-only checks never
+    // matched — music and sfx just died). Focus/pageshow + any later tap now
+    // all route through one resume that accepts every non-running state.
+    window.addEventListener('focus', () => this._resumeIfAppropriate());
+    window.addEventListener('pageshow', () => this._resumeIfAppropriate());
     // While true (the pause menu), nothing auto-resumes the context — not the
     // unlock listeners above, not a visibility flip. The pauser releases it.
     this.holdSuspend = false;
@@ -55,6 +63,13 @@ class AudioSystem {
 
   get enabled() {
     return this.volume > 0.004;
+  }
+
+  // The one gate for waking the context back up. Never fights the pause menu
+  // (holdSuspend) or a hidden tab; accepts 'suspended' AND iOS 'interrupted'.
+  _resumeIfAppropriate() {
+    if (!this.ctx || !this.enabled || this.holdSuspend || document.hidden) return;
+    if (this.ctx.state !== 'running') this.ctx.resume().catch(() => {});
   }
 
   get on() {
@@ -103,8 +118,10 @@ class AudioSystem {
       for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
       this.buildAmbience();
       this.loadSamples(); // fetch any real files marked available (none → no-op)
+      // if the OS interrupts the context, recover as soon as policy allows
+      this.ctx.addEventListener?.('statechange', () => this._resumeIfAppropriate());
     }
-    if (this.ctx.state === 'suspended' && this.enabled && !this.holdSuspend) this.ctx.resume().catch(() => {});
+    this._resumeIfAppropriate();
   }
 
   setVolume(v) {
@@ -230,6 +247,11 @@ class AudioSystem {
       // a REAL music loop takes over from any procedural pad still humming
       // (a fallback bed's stub handle can't stop the pad itself — D7)
       if (e?.bus === 'music') this.stopMusic();
+      // D8 double-start guard: one live source per key, ever. A re-entered
+      // scene (or a racing navigate) must never STACK the same bed twice —
+      // the older copy fades out fast and the new one owns the key.
+      const prev = this._liveLoops.get(key);
+      if (prev) { this._liveLoops.delete(key); prev.stop(0.25); }
       const src = this.ctx.createBufferSource();
       src.buffer = buf;
       src.loop = true;
@@ -238,14 +260,17 @@ class AudioSystem {
       const bus = e?.bus === 'music' ? this.music : this.sfx;
       src.connect(g).connect(bus || this.master);
       src.start();
-      return {
+      const handle = {
         real: true,
         setGain: (v, s = 0.2) => g.gain.setTargetAtTime(v, this.ctx.currentTime, s),
         stop: (fade = 1.2) => {
+          if (this._liveLoops.get(key) === handle) this._liveLoops.delete(key);
           g.gain.setTargetAtTime(0, this.ctx.currentTime, fade / 3);
           setTimeout(() => { try { src.stop(); } catch { /* done */ } }, fade * 1000 + 200);
         },
       };
+      this._liveLoops.set(key, handle);
+      return handle;
     }
     const fb = e?.fallback;
     if (fb && typeof this[fb] === 'function') this[fb]();
@@ -270,8 +295,14 @@ class AudioSystem {
     const e = this._manifest?.get(key);
     const buf = this.samples[key];
     if (this.on && buf) {
+      // D8 phone care: cap simultaneous one-shot sources — a burst past a
+      // couple dozen crackles/kills mobile audio. Extra plays are dropped
+      // (a 15th overlapping footstep adds nothing anyway).
+      if (this._liveOneShots >= 14) return;
+      this._liveOneShots += 1;
       const src = this.ctx.createBufferSource();
       src.buffer = buf;
+      src.onended = () => { this._liveOneShots = Math.max(0, this._liveOneShots - 1); };
       const g = this.ctx.createGain();
       g.gain.value = gain;
       const bus = e?.bus === 'music' ? this.music : this.sfx;

@@ -12,6 +12,7 @@ import { Narrator } from '../systems/Narrator.js';
 // keeps the card off the bottom bar on short viewports.
 export function createVerseCard() {
   const panel = document.createElement('div');
+  panel.className = 'mr-versecard'; // D8: compact phone sizing lives in index.html
   panel.style.cssText = [
     'position:fixed', 'left:50%',
     'top:max(calc(10% + env(safe-area-inset-top)), calc(11vh + 14px))',
@@ -24,11 +25,13 @@ export function createVerseCard() {
   ].join(';');
 
   const textEl = document.createElement('div');
+  textEl.className = 'mr-verse-text';
   textEl.style.cssText = [
     'font-family:Georgia,"Times New Roman",serif', 'font-style:italic',
     'font-size:clamp(14.5px,2vw,18px)', 'line-height:1.55', 'color:#f5e6c4',
   ].join(';');
   const refEl = document.createElement('div');
+  refEl.className = 'mr-verse-ref';
   refEl.style.cssText = [
     'font-family:"Segoe UI",system-ui,sans-serif', 'font-size:clamp(10.5px,1.3vw,12px)',
     'letter-spacing:0.16em', 'opacity:0.64', 'margin-top:7px', 'color:#f5e6c4', 'text-transform:uppercase',

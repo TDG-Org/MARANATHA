@@ -30,6 +30,7 @@ const NEUTRAL_STYLE = { bg: 'rgba(16,14,26,0.9)', border: 'rgba(242,184,128,0.22
 
 export function createDialogue() {
   const box = document.createElement('div');
+  box.className = 'mr-dialogue'; // D8: compact phone sizing lives in index.html
   box.style.cssText = [
     'position:fixed', 'left:50%', 'bottom:calc(26px + env(safe-area-inset-bottom))', 'transform:translateX(-50%) translateY(12px)',
     // D6 mobile pass: wider on phones (96vw), same cap on desktop.
@@ -43,17 +44,19 @@ export function createDialogue() {
   ].join(';');
 
   const nameEl = document.createElement('div');
+  nameEl.className = 'mr-dlg-name';
   nameEl.style.cssText = 'font-family:Georgia,serif; font-size:16px; font-weight:600; margin-bottom:5px; letter-spacing:0.02em;';
 
   const textEl = document.createElement('div');
-  // D6 mobile pass: text scales up a touch on small screens (readable at arm's length)
-  textEl.style.cssText = 'font-size:clamp(15.5px, 2.2vw + 8px, 17px); line-height:1.55; min-height:2.6em;';
+  textEl.className = 'mr-dlg-text';
+  textEl.style.cssText = 'font-size:17px; line-height:1.55; min-height:2.6em;';
 
   const choicesEl = document.createElement('div');
   choicesEl.style.cssText = 'display:none; flex-wrap:wrap; gap:8px; margin-top:12px;';
 
   // footer row: the ◀ back button (left) + the advance hint (right)
   const footer = document.createElement('div');
+  footer.className = 'mr-dlg-footer';
   footer.style.cssText = 'display:flex; align-items:center; justify-content:space-between; margin-top:8px; min-height:22px;';
 
   const backBtn = document.createElement('button');
