@@ -581,35 +581,74 @@ function buildDreamField() {
   disc.position.set(FIELD.x, 0.01, FIELD.z);
   group.add(disc);
 
-  // ROWS of tall wheat (instanced) — the clearing (r 6.4) around the sheaves
-  // stays open. One draw; a gentle field-wide sway reads as night wind.
-  // DREAM V2: a proper wheat BLADE (slim stalk + a rounded grain head), not a
-  // pointy 4-sided cone — merged so the whole field is still a single draw.
-  const _wStalk = new THREE.CylinderGeometry(0.016, 0.032, 1.3, 5);
-  _wStalk.translate(0, 0.65, 0);
-  const _wHead = new THREE.SphereGeometry(0.1, 6, 5);
-  _wHead.scale(1, 1.8, 1);         // an ovoid grain head, not a spike
-  _wHead.translate(0, 1.42, 0);
-  const stalkGeo = mergeGeometries([_wStalk, _wHead]);
+  // THE WHEAT (D7 v2): PAINTED wheat cards, not bare geometry — a canvas
+  // plant (curved stalks, drooping grain heads with visible kernels, fine
+  // awns) on two crossed alpha-tested planes per clump, instanced. One draw
+  // for the whole field, and it finally looks like wheat.
+  const wheatCardTex = (() => {
+    const c = document.createElement('canvas'); c.width = 128; c.height = 256;
+    const g = c.getContext('2d');
+    const stalk = (x0, lean, h, tone) => {
+      // curved stalk
+      g.strokeStyle = tone; g.lineWidth = 3; g.lineCap = 'round';
+      g.beginPath();
+      g.moveTo(x0, 256);
+      g.quadraticCurveTo(x0 + lean * 0.4, 256 - h * 0.6, x0 + lean, 256 - h);
+      g.stroke();
+      // the drooping grain head: overlapping kernel strokes down both sides
+      const hx = x0 + lean, hy = 256 - h;
+      const droop = lean * 0.35;
+      g.lineWidth = 5.5;
+      for (let k = 0; k < 7; k++) {
+        const t = k / 6;
+        const kx = hx + droop * t, ky = hy + t * 34 - 30;
+        g.strokeStyle = k % 2 ? '#e8c56f' : '#d4a94f';
+        g.beginPath(); g.moveTo(kx - 5, ky); g.lineTo(kx + 1, ky - 8); g.stroke();
+        g.beginPath(); g.moveTo(kx + 5, ky); g.lineTo(kx - 1, ky - 8); g.stroke();
+      }
+      // fine awns fanning up from the head
+      g.lineWidth = 1;
+      g.strokeStyle = 'rgba(238,208,130,0.75)';
+      for (let a = -2; a <= 2; a++) {
+        g.beginPath(); g.moveTo(hx, hy - 26);
+        g.lineTo(hx + a * 7 + droop, hy - 62 - Math.abs(a) * -6);
+        g.stroke();
+      }
+    };
+    stalk(42, -10, 168, '#8a6b34');
+    stalk(64, 4, 208, '#a3813f');
+    stalk(86, 14, 178, '#8f7036');
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  })();
   const wheatSpots = [];
-  for (let row = -13; row <= 13; row += 1.5) {
-    for (let col = -13; col <= 13; col += 0.75) {
-      const jx = (rnd() - 0.5) * 0.5, jz = (rnd() - 0.5) * 0.5;
+  for (let row = -13; row <= 13; row += 1.6) {
+    for (let col = -13; col <= 13; col += 1.1) {
+      const jx = (rnd() - 0.5) * 0.7, jz = (rnd() - 0.5) * 0.8;
       const x = col + jx, z = row + jz;
       const r = Math.hypot(x, z);
       if (r > 14.5 || r < 6.4) continue; // inside the field, outside the clearing
-      wheatSpots.push([x, z, 0.7 + rnd() * 0.7, rnd() * Math.PI * 2]);
+      wheatSpots.push([x, z, 0.75 + rnd() * 0.55, rnd() * Math.PI * 2]);
     }
   }
-  // D6 ROOTED: instances live in FIELD-LOCAL coords and the mesh itself sits
-  // at the field center. (They used to be world-coord instances on a mesh at
-  // the origin — the sway rotation then swung the whole field around a pivot
-  // 62 units away, translating stalks ~1u vertically: the "bouncing wheat".)
-  const wheat = new THREE.InstancedMesh(stalkGeo, new THREE.MeshBasicMaterial({ color: 0xb39a5e, fog: true }), wheatSpots.length);
+  // crossed planes so the clump reads from every angle; merged = still 1 draw
+  const cardA = new THREE.PlaneGeometry(1.0, 1.85);
+  cardA.translate(0, 0.925, 0);
+  const cardB = cardA.clone();
+  cardB.rotateY(Math.PI / 2);
+  const stalkGeo = mergeGeometries([cardA, cardB]);
+  // ROOTED (D6): instances in FIELD-LOCAL coords, the mesh at the field center
+  // (world-coord instances once swayed around a 62u-distant pivot = bouncing).
+  const wheat = new THREE.InstancedMesh(
+    stalkGeo,
+    new THREE.MeshBasicMaterial({ map: wheatCardTex, alphaTest: 0.4, side: THREE.DoubleSide, fog: true }),
+    wheatSpots.length,
+  );
   const wd = new THREE.Object3D();
   wheatSpots.forEach((s, i) => {
     wd.position.set(s[0], 0, s[1]); // local to the field center
-    wd.scale.set(1, s[2], 1);
+    wd.scale.set(s[2], s[2], s[2]);
     wd.rotation.set(0, s[3], 0);
     wd.updateMatrix();
     wheat.setMatrixAt(i, wd.matrix);
@@ -618,28 +657,50 @@ function buildDreamField() {
   wheat.position.set(FIELD.x, 0, FIELD.z);
   group.add(wheat);
 
-  // a sheaf = a bundle of leaning stalks with a tie-band (the 7 that bow). The
-  // 6 stalks are MERGED into one mesh so a sheaf is 2 draws, not 7 (perf).
+  // a sheaf (D7 v2) = a PAINTED tied bundle — thick straw column, cream tie
+  // band, heads fanning wide — on crossed alpha-tested cards. One draw each
+  // (they were 2), and they read as real harvest bundles.
+  const sheafCardTex = (() => {
+    const c = document.createElement('canvas'); c.width = 128; c.height = 192;
+    const g = c.getContext('2d');
+    g.lineCap = 'round';
+    // the straw column: many leaning strokes gathered at the waist
+    for (let i = 0; i < 13; i++) {
+      const t = i / 12;
+      const baseX = 30 + t * 68 + (Math.sin(i * 7.3) * 5);
+      const topX = 64 + (baseX - 64) * 1.75;
+      g.strokeStyle = i % 3 === 0 ? '#c9a552' : i % 3 === 1 ? '#b8923f' : '#daba6c';
+      g.lineWidth = 4.2;
+      g.beginPath();
+      g.moveTo(baseX, 192);
+      g.quadraticCurveTo(64 + (baseX - 64) * 0.25, 118, topX, 42);
+      g.stroke();
+      // a kernel head at each stalk tip
+      g.fillStyle = i % 2 ? '#e8c56f' : '#d4a94f';
+      g.beginPath(); g.ellipse(topX, 36, 4.4, 10, (topX - 64) * 0.01, 0, Math.PI * 2); g.fill();
+    }
+    // fine awns above the heads
+    g.strokeStyle = 'rgba(238,208,130,0.7)'; g.lineWidth = 1;
+    for (let i = 0; i < 9; i++) {
+      const x = 20 + i * 11;
+      g.beginPath(); g.moveTo(x + 6, 34); g.lineTo(x + (x - 64) * 0.28, 4); g.stroke();
+    }
+    // the cream tie band at the waist
+    g.strokeStyle = '#e9dcbf'; g.lineWidth = 9;
+    g.beginPath(); g.moveTo(38, 122); g.quadraticCurveTo(64, 130, 90, 122); g.stroke();
+    g.strokeStyle = 'rgba(140,110,60,0.55)'; g.lineWidth = 2;
+    g.beginPath(); g.moveTo(38, 127); g.quadraticCurveTo(64, 135, 90, 127); g.stroke();
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  })();
+  const sheafGeoA = new THREE.PlaneGeometry(1.15, 1.75); sheafGeoA.translate(0, 0.875, 0);
+  const sheafGeoB = sheafGeoA.clone(); sheafGeoB.rotateY(Math.PI / 2);
+  const sheafCardGeo = mergeGeometries([sheafGeoA, sheafGeoB]);
   const mkSheaf = (x, z, scale = 1) => {
     const g = new THREE.Group();
-    const stalkGeos = [];
-    // 7 leaning blades, each a stalk + rounded grain head, all merged to 1 mesh
-    for (let i = 0; i < 7; i++) {
-      const a = (i / 7) * Math.PI * 2;
-      const st = new THREE.CylinderGeometry(0.028, 0.05, 1.5, 5); st.translate(0, 0.75, 0);
-      const hd = new THREE.SphereGeometry(0.095, 6, 5); hd.scale(1, 1.9, 1); hd.translate(0, 1.52, 0);
-      const blade = mergeGeometries([st, hd]);
-      blade.rotateZ(Math.cos(a) * 0.22);
-      blade.rotateX(-Math.sin(a) * 0.22);
-      blade.translate(Math.cos(a) * 0.17, 0, Math.sin(a) * 0.17);
-      stalkGeos.push(blade);
-    }
-    const stalks = new THREE.Mesh(mergeGeometries(stalkGeos), new THREE.MeshBasicMaterial({ color: 0xd9b96a, fog: true }));
-    g.add(stalks);
-    const band = new THREE.Mesh(new THREE.TorusGeometry(0.23, 0.05, 6, 10), new THREE.MeshBasicMaterial({ color: 0x8a5a2c, fog: true }));
-    band.position.y = 0.58;
-    band.rotation.x = Math.PI / 2;
-    g.add(band);
+    const card = new THREE.Mesh(sheafCardGeo, new THREE.MeshBasicMaterial({ map: sheafCardTex, alphaTest: 0.4, side: THREE.DoubleSide, fog: true }));
+    g.add(card);
     g.position.set(x, 0, z);
     g.scale.setScalar(scale);
     return g;
@@ -926,7 +987,7 @@ function buildDreamField() {
     dispose() {
       glowTex.dispose(); fogTex.dispose(); beamTex.dispose();
       mistTex.dispose(); moonDiscTex.dispose(); cloudTex.dispose();
-      tilledTex.dispose();
+      tilledTex.dispose(); wheatCardTex.dispose(); sheafCardTex.dispose();
       group.traverse((o) => {
         if (o.isInstancedMesh) o.dispose(); // frees the wheat instance buffers
         if (o.isMesh || o.isSprite || o.isPoints) { o.geometry?.dispose?.(); o.material?.dispose?.(); }
