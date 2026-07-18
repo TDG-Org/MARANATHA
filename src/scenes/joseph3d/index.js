@@ -892,6 +892,13 @@ function buildDreamField() {
       clouds.push(c); summitGroup.add(c);
     }
     summitGroup.userData.clouds = clouds;
+    // D7: a soft glow-wash hanging in the sky NORTH of the dreamer — from the
+    // up-tilted finale camera it sits behind his head and shoulders, rimming
+    // the silhouette against the night.
+    const rim = new THREE.Sprite(new THREE.SpriteMaterial({ map: cloudTex, color: 0x8f9cd8, transparent: true, opacity: 0.34, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+    rim.scale.set(10, 7, 1);
+    rim.position.set(FIELD.x, SUMMIT_Y + 2.4, FIELD.z - 7);
+    summitGroup.add(rim);
   }
   group.add(summitGroup);
 
@@ -929,11 +936,16 @@ function buildDreamField() {
           c.material.opacity = 0.42 + Math.sin(t * 0.3 + c.userData.phase) * 0.1;
         });
         bodies.forEach((b) => {
-          const tw = 1 + Math.sin(t * 2 + b.userData.twinkle) * 0.08;
-          if (b.userData.core) b.userData.core.material.rotation = t * 0.3 + b.userData.twinkle;
+          // D7: SLOW, ceremonial descent — and the bodies swell gently as they
+          // near the summit (presence), on top of the twinkle.
+          const u = b.userData;
+          const span = Math.max(0.001, u.high.y - u.low.y);
+          const nearness = Math.min(1, Math.max(0, (u.high.y - b.position.y) / span));
+          const tw = (1 + Math.sin(t * 2 + u.twinkle) * 0.08) * (1 + nearness * 0.4);
+          if (u.core) u.core.material.rotation = t * 0.3 + u.twinkle;
           b.scale.setScalar(tw);
-          if (skyState === 1) b.position.lerp(b.userData.mid, Math.min(dt * 0.0006, 1));
-          else if (skyState === 2) b.position.lerp(b.userData.low, Math.min(dt * 0.0012, 1));
+          if (skyState === 1) b.position.lerp(u.mid, Math.min(dt * 0.00026, 1));
+          else if (skyState === 2) b.position.lerp(u.low, Math.min(dt * 0.00048, 1));
         });
         return;
       }

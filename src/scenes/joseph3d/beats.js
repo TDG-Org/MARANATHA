@@ -623,32 +623,28 @@ export function createBeats(ctx) {
     ctx.joseph.root.position.y = SY;           // stand on the peak (input is off)
     ctx.joseph.turnToward(0, -1);              // face north, into the sky
     ctx.joseph.play('idle');
-    // THE FINALE, exact shots (D6): camera on the SKY → the bodies descend
-    // slowly, bowing → the camera FOLLOWS them down → the descent REVEALS
-    // Joseph from BEHIND as a dark silhouette on the summit, the bright
-    // sun/moon/stars in front of him → the camera stays behind him, tilted
-    // slightly UP so NO ground is in frame — only sky and Joseph. Hold. Fade.
-    ctx.camera.cinematicMoveTo({ angle: Math.PI, target: { x: D.FIELD.x, z: D.FIELD.z + 2 }, distance: 4.6, height: SY + 2.6, lookHeight: SY + 16, duration: 1 });
+    // THE FINALE (D7 v2): a short reveal on the sky, then ONE camera move down
+    // into THE shot — behind Joseph, tilted UP, his top half dark against the
+    // night — and it HOLDS there while the sun, the moon and the eleven stars
+    // come down SLOWLY in front of him, swelling as they near, and bow. Only
+    // sky and the boy. Then the verse, the hold, the fade.
+    ctx.camera.cinematicMoveTo({ angle: Math.PI, target: { x: D.FIELD.x, z: D.FIELD.z + 2 }, distance: 4.2, height: SY + 2.5, lookHeight: SY + 15, duration: 1 });
     ctx.camera.snap();
     await seq([
-      // (a) reveal ON THE SKY — the frame is stars and deep night, no ground
-      { t: 'fade', on: false, ms: 1400 },
-      { t: 'fn', fn: async () => { D.showSky(1); ctx.sound('stinger.dream_enter'); await wait(900); } },
-      // (b) the bodies begin their slow bowing descent…
+      // (a) reveal ON THE SKY — deep night, stars kindling
+      { t: 'fade', on: false, ms: 1200 },
+      { t: 'fn', fn: async () => { D.showSky(1); ctx.sound('stinger.dream_enter'); await wait(800); } },
+      // (b) the slow descent begins…
       { t: 'fn', fn: () => { D.descendSky(); } },
-      // (c) …and the camera FOLLOWS them down — the tilt lowers with them,
-      // and Joseph's dark back rises into the bottom of the frame
-      { t: 'cam', angle: Math.PI, target: { x: D.FIELD.x, z: D.FIELD.z + 1.9 }, distance: 3.6, height: SY + 1.9, lookHeight: SY + 7, duration: 3400 },
-      { t: 'fn', fn: async () => { await wait(600); } },
-      // (d) settle BEHIND him, tilted slightly UP: silhouette against the sky,
-      // the bright bodies bowing IN FRONT of him. No ground in frame — but HE
-      // stays in the lower third (tilt tuned: too steep and the frame is empty
-      // sky with Joseph below the edge).
-      { t: 'cam', angle: Math.PI, target: { x: D.FIELD.x, z: D.FIELD.z + 1.2 }, distance: 3.2, height: SY + 1.5, lookHeight: SY + 2.4, duration: 2600 },
-      { t: 'fn', fn: async () => { D.bowSky(); ctx.sound('sfx.sheaf_bow'); await wait(3000); } },
+      // (c) …one move down INTO the hold: behind him, facing up, top half in
+      // the lower third — the camera "follows them down" and then stays.
+      { t: 'cam', angle: Math.PI, target: { x: D.FIELD.x, z: D.FIELD.z + 1.15 }, distance: 2.9, height: SY + 1.45, lookHeight: SY + 2.15, duration: 3200 },
+      // (d) THE HOLD — they keep coming down, slow and enormous, then bow
+      { t: 'wait', ms: 1600 },
+      { t: 'fn', fn: async () => { D.bowSky(); ctx.sound('sfx.sheaf_bow'); await wait(5400); } },
       { t: 'verse', verse: WEB.gen_37_9 },
       { t: 'verseHide' },
-      { t: 'wait', ms: 900 },                  // the HOLD — sky + Joseph, nothing else
+      { t: 'wait', ms: 900 },
       { t: 'letterbox', on: true },
       { t: 'fade', on: true, ms: 1500 },
     ]);
