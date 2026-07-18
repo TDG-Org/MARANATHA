@@ -25,6 +25,8 @@ import { buildCamp, makeTentInterior } from './props.js';
 import { SheepFlock } from './sheep.js';
 import { buildNamed, buildGenericBrother, buildWorker, AmbientNPCs } from './cast.js';
 import { createBeats } from './beats.js';
+import { Narrator } from '../../systems/Narrator.js';
+import { WEB } from '../../data/versesWEB.js';
 
 // JOSEPH — SCENE 1 in full 3D (Genesis 37:1–11): the GOLD TEMPLATE. A living
 // golden-hour camp near Hebron, real rigged characters, authored camera,
@@ -453,7 +455,10 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
 
   return {
     update, dispose,
-    whenReady: castReady, // the app's loading screen holds until the rigs are in
+    // the loading screen holds for BOTH the rigs and the full narration —
+    // every verse mp3 decodes up front, so the one voice can never drop to
+    // TTS from a mid-scene network blip (D7).
+    whenReady: Promise.all([castReady, Narrator.preload(Object.values(WEB).map((v) => v.vo))]),
     debug: {
       get joseph() { return joseph; }, get controller() { return controller; },
       get ready() { return ready; }, get storyDone() { return storyDone; },

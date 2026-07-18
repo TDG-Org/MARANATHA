@@ -68,6 +68,13 @@ class NarratorSystem {
     return null;
   }
 
+  // D7: decode a whole scene's narration UP FRONT (behind the loading screen)
+  // — zero mid-scene fetches, so the baked voice can never drop to TTS from a
+  // network blip halfway through the story.
+  preload(lineIds = []) {
+    return Promise.all(lineIds.map((id) => this._loadVO(id).catch(() => null)));
+  }
+
   _playFile(buffer) {
     return new Promise((resolve) => {
       const src = Audio.playVO(buffer);

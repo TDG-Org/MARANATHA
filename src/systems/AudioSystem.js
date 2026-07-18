@@ -295,16 +295,20 @@ class AudioSystem {
   musicSadBed() { this.musicPad(0.036, [110.0, 164.81, 220.0, 261.63]); }
 
   // --- Voice bus: real VO files play here so Master/Narrator are LIVE mid-line -
+  // D7: failures are NOT cached — a single transient network blip used to
+  // null-cache a verse forever, so its every later play fell back to TTS
+  // ("the narrator turns into a robot at the end"). Only success is cached;
+  // a miss simply retries on the next play.
   async decodeVO(url) {
-    if (this._voCache[url] !== undefined) return this._voCache[url]; // incl. cached null
+    if (this._voCache[url]) return this._voCache[url];
     if (!this.ctx) return null;
     try {
       const res = await fetch(url);
-      if (!res.ok) { this._voCache[url] = null; return null; }
+      if (!res.ok) return null;
       const buf = await this.ctx.decodeAudioData(await res.arrayBuffer());
       this._voCache[url] = buf;
       return buf;
-    } catch { this._voCache[url] = null; return null; }
+    } catch { return null; }
   }
 
   // Play a decoded VO buffer through the voice bus; returns the source so the
