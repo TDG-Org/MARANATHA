@@ -95,10 +95,11 @@ export function createBeats(ctx) {
     await seq([
       { t: 'fade', on: true, ms: 0 },
       { t: 'letterbox', on: true },
-      // low, angled tracking shot alongside the procession, drifting with it
-      { t: 'cam', angle: Math.PI * 0.42, target: { x: from.x + dir.x * 0.5, z: from.z + dir.z * 0.5 }, distance: 5.6, height: 1.35, lookHeight: 1.0, duration: 1, awaitMs: false },
-      { t: 'wait', ms: 400 },
-      { t: 'fade', on: false, ms: 1400 }, // reveal: harsh daylight, the march
+      // the HOOK opens TIGHT on the carried boy, then the march pulls the
+      // camera wide (D7: the first frame is the story, not scenery)
+      { t: 'cam', angle: Math.PI * 0.42, target: { x: from.x + dir.x * 0.5, z: from.z + dir.z * 0.5 }, distance: 3.4, height: 1.25, lookHeight: 1.0, duration: 1, awaitMs: false },
+      { t: 'wait', ms: 350 },
+      { t: 'fade', on: false, ms: 1100 }, // reveal: harsh daylight, the march
       { t: 'cam', angle: Math.PI * 0.52, target: { x: to.x + 0.6, z: to.z }, distance: 4.4, height: 1.5, lookHeight: 0.9, duration: 4600, awaitMs: false },
       { t: 'fn', fn: async () => {
         const D = 4400; let e = 0;
@@ -188,10 +189,13 @@ export function createBeats(ctx) {
         ctx.futureVignette(false);        // NOW — the gloom, blur and drain lift
         ctx.camera.cinematicMoveTo({ angle: Math.PI * 0.9, target: { x: -5, z: -3 }, distance: 14, height: 7, lookHeight: 1, duration: 1 });
       } },
-      { t: 'title', heading: 'Hebron, Canaan', sub: 'The next morning · c. 1898 BC · Genesis 37', holdMs: 3200 },
+      // D7 logic fix: the pit was a FLASH-FORWARD — this morning is EARLIER,
+      // not "the next morning" (that title made the timeline read backwards).
+      { t: 'title', heading: 'Hebron, Canaan', sub: 'Days earlier · c. 1898 BC · Genesis 37', holdMs: 3200 },
       { t: 'fade', on: false, ms: 1800 },
       // (5) a slow, beautiful pan across the golden camp; Joseph steps out
-      { t: 'cam', angle: Math.PI * 1.1, target: { x: 2, z: -2 }, distance: 12, height: 5.5, lookHeight: 1.3, duration: 9000, awaitMs: false },
+      // (12s — long enough that both verses finish inside the glide)
+      { t: 'cam', angle: Math.PI * 1.1, target: { x: 2, z: -2 }, distance: 12, height: 5.5, lookHeight: 1.3, duration: 12000, awaitMs: false },
       { t: 'verse', verse: WEB.gen_37_1 },
       { t: 'verse', verse: WEB.gen_37_2_short },
       { t: 'verseHide' },
@@ -488,7 +492,9 @@ export function createBeats(ctx) {
         jd.char.turnToward(ctx.joseph.position.x - jd.pos.x, ctx.joseph.position.z - jd.pos.z);
         jd.char.play('talk');
       } },
-      { t: 'say', who: 'Judah', text: 'Look at him — the little dreamer, warming himself in his fine new coat.', color: J.Judah },
+      // D7 logic fix: no one can call him "dreamer" yet — the dreams come
+      // later THIS NIGHT. The jeer mocks what they can see: the coat.
+      { t: 'say', who: 'Judah', text: 'Look at him — father’s little prince, warming himself in his fine new coat.', color: J.Judah },
       { t: 'fn', fn: async () => {
         sm.char.turnToward(ctx.joseph.position.x - sm.pos.x, ctx.joseph.position.z - sm.pos.z);
         sm.char.play('talk');
