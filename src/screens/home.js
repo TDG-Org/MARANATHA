@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { makeSky, makeRidges, makeGround, makeSun, makeMotes, easeInOut } from '../engine/world.js';
+import { makeSky, makeRidges, makeGround, makeSun, makeMotes, easeInOut, canvasTexture } from '../engine/world.js';
 import { STORIES } from '../data/stories.js';
 import { statusOf } from '../systems/SaveSystem.js';
 import { Audio } from '../systems/AudioSystem.js';
@@ -38,6 +38,31 @@ export function buildHome({ scene, camera, app }) {
   scene.add(makeSun());
   const motes = makeMotes({ count: 90 });
   scene.add(motes.points);
+
+  // BIRDS over the vista (D7): a small flock crossing the golden sky — eased
+  // orbits around a slowly drifting anchor, wings flapping. Same painted bird
+  // as the foundation scene.
+  const birdTex = canvasTexture(96, 56, (bctx) => {
+    const ink = '#241f38';
+    bctx.fillStyle = ink; bctx.strokeStyle = ink; bctx.lineJoin = 'round'; bctx.lineCap = 'round';
+    bctx.beginPath(); bctx.ellipse(48, 34, 13, 6, -0.12, 0, Math.PI * 2); bctx.fill();
+    bctx.beginPath(); bctx.arc(60, 30, 4.6, 0, Math.PI * 2); bctx.fill();
+    bctx.beginPath(); bctx.moveTo(64, 30); bctx.lineTo(70, 31.5); bctx.lineTo(64, 33); bctx.closePath(); bctx.fill();
+    bctx.beginPath(); bctx.moveTo(36, 33); bctx.lineTo(26, 30); bctx.lineTo(27, 38); bctx.closePath(); bctx.fill();
+    bctx.lineWidth = 5;
+    bctx.beginPath(); bctx.moveTo(46, 32); bctx.quadraticCurveTo(34, 14, 20, 10); bctx.stroke();
+    bctx.beginPath(); bctx.moveTo(52, 32); bctx.quadraticCurveTo(62, 16, 76, 12); bctx.stroke();
+  });
+  const birds = [];
+  for (let i = 0; i < 5; i++) {
+    const b = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.5, 0.88),
+      new THREE.MeshBasicMaterial({ map: birdTex, transparent: true, alphaTest: 0.02, depthWrite: false, fog: true, side: THREE.DoubleSide }),
+    );
+    b.userData = { phase: i * 1.35, r: 3.2 + i * 1.1, h: i * 0.6 };
+    birds.push(b); scene.add(b);
+  }
+  const flockAnchor = new THREE.Vector3();
 
   // Gentle idle drift between two nearby poses (keeps the sun framed upper-left).
   const poseA = { pos: new THREE.Vector3(3.5, 5.2, 19), look: new THREE.Vector3(-1, 3.4, -26) };
@@ -127,35 +152,50 @@ export function buildHome({ scene, camera, app }) {
   const map = document.createElement('div');
   map.style.cssText = [
     'pointer-events:auto', 'position:relative',
-    'width:min(92vw,620px)', 'height:clamp(190px, 30vh, 290px)', 'margin:8px 0 2px',
+    'width:min(92vw,640px)', 'height:clamp(200px, 31vh, 300px)', 'margin:8px 0 2px',
   ].join(';');
 
-  // node layout: Joseph centred and BIG; the locked stories arranged around him
-  const NODE_POS = { joseph: [50, 46], creation: [15, 26], fall: [30, 76], noah: [76, 72] };
-  const PATH_ORDER = ['creation', 'fall', 'noah', 'joseph']; // the dotted thread of the Book
+  // D7 — an ACTUAL story timeline: the chapters read left→right in Bible
+  // order along an S-curving road; Joseph (the playable chapter, IV) stands
+  // biggest at the road's living end, and the road fades on beyond him toward
+  // the chapters still unwritten.
+  const NODE_POS = { creation: [11, 30], fall: [33, 72], noah: [56, 28], joseph: [80, 58] };
+  const PATH_ORDER = ['creation', 'fall', 'noah', 'joseph'];
+  const ORDINAL = { creation: 'I', fall: 'II', noah: 'III', joseph: 'IV' };
 
-  // the dotted path (SVG underlay, animated dash shimmer)
+  // the ROAD (SVG): a soft wide under-glow + the crisp animated dotted line on
+  // top + a faded continuation past Joseph — layered, it reads as a real path.
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.setAttribute('viewBox', '0 0 100 100');
   svg.setAttribute('preserveAspectRatio', 'none');
-  svg.style.cssText = 'position:absolute; inset:0; width:100%; height:100%; pointer-events:none; opacity:0.5;';
+  svg.style.cssText = 'position:absolute; inset:0; width:100%; height:100%; pointer-events:none;';
   {
     let d = '';
     PATH_ORDER.forEach((id, i) => {
       const [x, y] = NODE_POS[id];
       if (i === 0) { d += `M ${x} ${y}`; return; }
       const [px, py] = NODE_POS[PATH_ORDER[i - 1]];
-      d += ` Q ${(px + x) / 2 + (i % 2 ? 9 : -9)} ${(py + y) / 2}, ${x} ${y}`;
+      d += ` Q ${(px + x) / 2} ${py + (y - py) * 0.15}, ${x} ${y}`;
     });
-    const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    p.setAttribute('d', d);
-    p.setAttribute('fill', 'none');
-    p.setAttribute('stroke', '#f2b880');
-    p.setAttribute('stroke-width', '0.7');
-    p.setAttribute('stroke-dasharray', '0.2 3.2');
-    p.setAttribute('stroke-linecap', 'round');
-    p.style.animation = 'mr-path-shimmer 9s linear infinite';
-    svg.append(p);
+    const mk = (dd, stroke, width, opacity, dash, anim) => {
+      const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      p.setAttribute('d', dd);
+      p.setAttribute('fill', 'none');
+      p.setAttribute('stroke', stroke);
+      p.setAttribute('stroke-width', String(width));
+      p.setAttribute('stroke-opacity', String(opacity));
+      if (dash) p.setAttribute('stroke-dasharray', dash);
+      p.setAttribute('stroke-linecap', 'round');
+      if (anim) p.style.animation = anim;
+      svg.append(p);
+      return p;
+    };
+    mk(d, '#f2b880', 3.4, 0.16);                                    // the warm road bed
+    mk(d, '#ffe9c9', 0.85, 0.85, '0.01 2.6', 'mr-path-shimmer 8s linear infinite'); // the walked dots
+    // …and the road that hasn't been walked yet, fading past Joseph
+    const [jx, jy] = NODE_POS.joseph;
+    mk(`M ${jx} ${jy} Q ${jx + 10} ${jy - 8}, ${jx + 17} ${jy - 16}`, '#f2b880', 1.6, 0.1);
+    mk(`M ${jx} ${jy} Q ${jx + 10} ${jy - 8}, ${jx + 17} ${jy - 16}`, '#ffe9c9', 0.7, 0.3, '0.01 3.4', 'mr-path-shimmer 11s linear infinite');
   }
   map.append(svg);
 
@@ -194,20 +234,21 @@ export function buildHome({ scene, camera, app }) {
       const built = !!(story.sceneKey && app.hasScreen(story.sceneKey));
       const status = statusOf(story.id);
       const [x, y] = NODE_POS[story.id] ?? [50, 50];
-      const big = built; // the playable story is the hero of the map
+      const big = built; // the playable chapter is the hero of the timeline
       const node = document.createElement('button');
       node.type = 'button';
       node.dataset.id = story.id;
       node.dataset.locked = built ? '0' : '1';
-      node.setAttribute('aria-label', `${story.title}${built ? '' : ' (locked)'}`);
+      node.setAttribute('aria-label', `Chapter ${ORDINAL[story.id] ?? ''} — ${story.title}${built ? '' : ' (locked)'}`);
       node.style.cssText = [
         `position:absolute`, `left:${x}%`, `top:${y}%`, 'transform:translate(-50%,-50%)',
-        `width:${big ? 84 : 54}px`, `height:${big ? 84 : 54}px`, 'border-radius:50%',
+        `width:${big ? 88 : 56}px`, `height:${big ? 88 : 56}px`, 'border-radius:50%',
         'cursor:pointer', 'pointer-events:auto',
-        `font-size:${big ? 30 : 19}px`, 'display:flex', 'align-items:center', 'justify-content:center',
+        `font-size:${big ? 31 : 19}px`, 'display:flex', 'align-items:center', 'justify-content:center',
         `color:${big ? '#241f38' : 'rgba(253,246,227,0.75)'}`,
-        `background:${big ? 'radial-gradient(circle at 34% 30%, #ffe9c9, #f2b880 62%, #d99a5e)' : 'rgba(16,14,26,0.55)'}`,
+        `background:${big ? 'radial-gradient(circle at 34% 30%, #ffe9c9, #f2b880 62%, #d99a5e)' : 'radial-gradient(circle at 36% 32%, rgba(40,36,58,0.72), rgba(14,12,24,0.68))'}`,
         `border:2px solid ${big ? 'rgba(242,184,128,0.55)' : 'rgba(255,255,255,0.18)'}`,
+        `box-shadow:${big ? '0 6px 24px rgba(0,0,0,0.4)' : 'inset 0 0 14px rgba(0,0,0,0.45), 0 4px 14px rgba(0,0,0,0.3)'}`,
         'backdrop-filter:blur(3px)',
         `animation: mr-node-float ${5 + (x % 3)}s ease-in-out ${y % 4}s infinite${big ? ', mr-node-pulse 2.6s ease-in-out infinite' : ''}`,
         'transition:border-color 200ms ease, filter 160ms ease',
@@ -216,17 +257,40 @@ export function buildHome({ scene, camera, app }) {
       node.onmouseenter = () => { node.style.filter = 'brightness(1.12)'; };
       node.onmouseleave = () => { node.style.filter = 'none'; };
       node.onclick = () => { Audio.uiClick(); selectStory(story.id); };
-      // the name floats under every node — the map reads without clicking
+      // CHAPTER numeral riding the top of each stop — the timeline reads in order
+      const ord = document.createElement('div');
+      ord.className = 'mr-node-label';
+      ord.textContent = `Chapter ${ORDINAL[story.id] ?? ''}`;
+      ord.style.cssText = [
+        'position:absolute', `left:${x}%`, `top:calc(${y}% - ${big ? 62 : 44}px)`, 'transform:translateX(-50%)',
+        `font:600 ${big ? 11.5 : 10}px Georgia,serif`, 'letter-spacing:0.22em', 'text-transform:uppercase',
+        `color:${big ? 'rgba(255,233,201,0.9)' : 'rgba(253,246,227,0.45)'}`, 'white-space:nowrap',
+        'text-shadow:0 1px 5px rgba(15,12,26,0.8)', 'pointer-events:none',
+      ].join(';');
+      // the name beneath — and under JOSEPH, the living PLAY pill
       const label = document.createElement('div');
       label.className = 'mr-node-label';
       label.textContent = story.title;
       label.style.cssText = [
-        'position:absolute', `left:${x}%`, `top:calc(${y}% + ${big ? 52 : 36}px)`, 'transform:translateX(-50%)',
-        `font:600 ${big ? 15 : 12.5}px "Segoe UI",system-ui,sans-serif`,
+        'position:absolute', `left:${x}%`, `top:calc(${y}% + ${big ? 54 : 37}px)`, 'transform:translateX(-50%)',
+        `font:600 ${big ? 15.5 : 12.5}px "Segoe UI",system-ui,sans-serif`,
         `color:${big ? '#ffe9c9' : 'rgba(253,246,227,0.7)'}`, 'letter-spacing:0.06em', 'white-space:nowrap',
         'text-shadow:0 1px 6px rgba(15,12,26,0.8)', 'pointer-events:none',
       ].join(';');
-      map.append(node, label);
+      map.append(node, ord, label);
+      if (big) {
+        const pill = document.createElement('div');
+        pill.className = 'mr-node-label';
+        pill.textContent = '▶ PLAY NOW';
+        pill.style.cssText = [
+          'position:absolute', `left:${x}%`, `top:calc(${y}% + ${74}px)`, 'transform:translateX(-50%)',
+          'font:700 10.5px "Segoe UI",system-ui,sans-serif', 'letter-spacing:0.14em',
+          'color:#241f38', 'background:linear-gradient(180deg,#ffe9c9,#f2b880)',
+          'padding:4px 12px', 'border-radius:999px', 'pointer-events:none',
+          'box-shadow:0 3px 12px rgba(0,0,0,0.35), 0 0 16px rgba(242,184,128,0.35)',
+        ].join(';');
+        map.append(pill);
+      }
     }
     if (selectedId) selectStory(selectedId);
   }
@@ -290,6 +354,17 @@ export function buildHome({ scene, camera, app }) {
     const t = tMs / 1000;
     sky.update(dt);
     motes.update(dt, t);
+    // the flock crosses the golden sky, slow and eased, wings flapping
+    const fx = ((t * 2.1 + 40) % 150) - 75;
+    flockAnchor.set(fx, 10.5 + Math.sin(t * 0.23) * 1.4, -56);
+    for (const b of birds) {
+      const u = b.userData;
+      const a = t * 0.5 + u.phase;
+      b.position.x += (flockAnchor.x + Math.cos(a) * u.r - b.position.x) * 0.03;
+      b.position.y += (flockAnchor.y + Math.sin(a * 0.7) * 1.1 + u.h - b.position.y) * 0.03;
+      b.position.z += (flockAnchor.z + Math.sin(a) * 2.2 - b.position.z) * 0.03;
+      b.scale.y = 0.72 + Math.abs(Math.sin(t * 6.5 + u.phase)) * 0.5; // wing beat
+    }
     const k = easeInOut((Math.sin(t * (Math.PI * 2 / 34)) + 1) / 2);
     camPos.lerpVectors(poseA.pos, poseB.pos, k);
     camPos.y += Math.sin(t * 0.8) * 0.06;
