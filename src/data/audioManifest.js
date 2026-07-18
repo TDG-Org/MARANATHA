@@ -43,6 +43,7 @@ export const AUDIO_MANIFEST = [
   { key: 'music.dusk_calm', bus: 'music', loop: true, seconds: 70, file: 'music/dusk_calm', fallback: 'musicWonderBed', available: true, purpose: 'dusk quieting-down theme', scene: 'joseph3d-1' },
   { key: 'music.dream_wonder', bus: 'music', loop: true, seconds: 70, file: 'music/dream_wonder', fallback: 'musicWonderBed', available: true, purpose: 'dream sequence — hushed awe', scene: 'joseph3d-1' },
   { key: 'music.ominous_turn', bus: 'music', loop: true, seconds: 60, file: 'music/ominous_turn', fallback: null, available: true, purpose: 'the brothers’ hatred — warm → ominous shift', scene: 'joseph3d-1' },
+  { key: 'music.sad_night', bus: 'music', loop: true, seconds: 60, file: 'music/sad_night', fallback: 'musicSadBed', available: false, purpose: 'SAD — the lonely walk to his tent after the jeer (procedural minor pad until a real file lands)', scene: 'joseph3d-1' },
 
   // --- Scene 1 (3D) — reactive SFX -----------------------------------------
   { key: 'sfx.footstep_grass', bus: 'sfx', loop: false, seconds: 0.15, fallback: 'footstep', available: false, purpose: 'footfall on grass', scene: 'joseph3d-1' },

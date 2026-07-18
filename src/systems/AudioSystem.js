@@ -156,14 +156,29 @@ class AudioSystem {
 
   // Placeholder emotional pad on the MUSIC bus so the Music slider is real and
   // scenes have a bed. Real loops drop in later via the audio manifest.
+  // D7: the pad RETUNES — calling with a new chord glides the oscillators to
+  // it (a sad bed used to come out sounding like the first chord ever built).
   musicPad(level = 0.03, chord = [130.81, 196.0, 261.63]) {
     if (!this.on) return;
+    if (this._pad && this._padOscs?.length === chord.length) {
+      chord.forEach((f, i) => this._padOscs[i].frequency.setTargetAtTime(f, this.ctx.currentTime, 0.9));
+      this._pad.gain.setTargetAtTime(level, this.ctx.currentTime, 1.6);
+      return;
+    }
+    if (this._pad && this._padOscs) {
+      // different voice count — rebuild cleanly
+      this._padOscs.forEach((o) => { try { o.stop(); } catch { /* done */ } });
+      try { this._pad.disconnect(); } catch { /* done */ }
+      this._pad = null;
+    }
     if (!this._pad) {
       this._pad = this.ctx.createGain();
+      this._padOscs = [];
       this._pad.gain.value = 0;
       this._pad.connect(this.music);
       chord.forEach((f) => {
         const o = this.ctx.createOscillator();
+        this._padOscs.push(o);
         o.type = 'sine';
         o.frequency.value = f;
         const og = this.ctx.createGain();
@@ -212,6 +227,9 @@ class AudioSystem {
     const e = this._manifest?.get(key);
     const buf = this.samples[key];
     if (this.on && buf) {
+      // a REAL music loop takes over from any procedural pad still humming
+      // (a fallback bed's stub handle can't stop the pad itself — D7)
+      if (e?.bus === 'music') this.stopMusic();
       const src = this.ctx.createBufferSource();
       src.buffer = buf;
       src.loop = true;
@@ -272,6 +290,9 @@ class AudioSystem {
   ambientNightBed() { this.ambience({ wind: 0.12, birds: 0, night: 0.5 }); }
   musicWarmBed() { this.musicPad(0.03, [130.81, 196.0, 261.63]); }
   musicWonderBed() { this.musicPad(0.028, [146.83, 220.0, 293.66]); }
+  // D7: the SAD bed — a low A-minor wash for the lonely walk to the tent
+  // (a real music/sad_night.mp3 replaces it the moment Nate drops one in)
+  musicSadBed() { this.musicPad(0.036, [110.0, 164.81, 220.0, 261.63]); }
 
   // --- Voice bus: real VO files play here so Master/Narrator are LIVE mid-line -
   async decodeVO(url) {

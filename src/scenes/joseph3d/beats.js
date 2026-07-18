@@ -499,12 +499,11 @@ export function createBeats(ctx) {
       { t: 'letterbox', on: false },
     ]);
 
-    // the calm walk to his tent to rest — so the dream rises from a quiet night
-    // instead of popping out of nowhere. Their laughter follows him out (D6:
-    // the laugh fires again as the walk-back quest begins), then the night
-    // quiets back down.
+    // the lonely walk to his tent — the night has turned cold with them, and
+    // the music turns SAD (D7: a low minor bed; Nate can drop music/sad_night
+    // over it). Their laughter follows him out, then only the sad night.
     let rested = false;
-    ctx.setMusic('music.dusk_calm');
+    ctx.setMusic('music.sad_night');
     ctx.sound('sfx.men_laughing');
     ctx.hud.setObjective('The night has turned cold with them. Go to your tent and rest.', 'Walk to your tent.');
     const rest = { x: -8.6, z: -4.4 };
