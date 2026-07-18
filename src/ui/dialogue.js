@@ -79,6 +79,7 @@ export function createDialogue() {
 
   let open = false;
   let onKey = null;
+  let lastSpeaker = null; // D7: a NEW speaker re-enters the box; the same one doesn't
   const history = []; // {speaker, text, color} for the current conversation
 
   const show = () => {
@@ -89,6 +90,7 @@ export function createDialogue() {
   };
   const hide = () => {
     open = false;
+    lastSpeaker = null; // next conversation opens fresh
     box.style.pointerEvents = 'none';
     box.style.opacity = '0';
     box.style.transform = 'translateX(-50%) translateY(12px)';
@@ -134,11 +136,32 @@ export function createDialogue() {
     history.push({ speaker, text, color });
     const liveIdx = history.length - 1;
     let viewIdx = liveIdx;
+    // D7: a NEW speaker RE-ENTERS the box — a quick dip-down-and-return so the
+    // hand-off is unmissable (the same speaker keeps talking with no animation;
+    // color alone wasn't enough signal).
+    const speakerChanged = open && lastSpeaker !== null && speaker !== lastSpeaker;
+    lastSpeaker = speaker;
     show();
     Audio.uiClick?.();
 
     let revealed = false;
-    paint(history[liveIdx], { typewrite: true }).then(() => { revealed = true; });
+    const startLine = () => paint(history[liveIdx], { typewrite: true }).then(() => { revealed = true; });
+    if (speakerChanged) {
+      textEl.textContent = ''; // the old line leaves with the old speaker
+      box.style.transition = 'opacity 130ms ease-in, transform 130ms ease-in';
+      box.style.opacity = '0.12';
+      box.style.transform = 'translateX(-50%) translateY(16px) scale(0.985)';
+      setTimeout(() => {
+        box.style.transition = 'opacity 170ms ease-out, transform 170ms ease-out, background-color 170ms ease, border-color 170ms ease';
+        box.style.opacity = '1';
+        box.style.transform = 'translateX(-50%) translateY(0) scale(1)';
+        startLine();
+        // restore the resting transition once the pulse lands
+        setTimeout(() => { box.style.transition = 'opacity 220ms ease, transform 220ms ease, background-color 260ms ease, border-color 260ms ease'; }, 190);
+      }, 140);
+    } else {
+      startLine();
+    }
 
     const updateBack = () => { backBtn.style.visibility = viewIdx > 0 ? 'visible' : 'hidden'; };
     updateBack();
