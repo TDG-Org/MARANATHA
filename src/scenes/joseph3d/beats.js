@@ -335,26 +335,47 @@ export function createBeats(ctx) {
       shot('jacob', 'joseph', { side: 0.38, dist: 2.3 }),
       { t: 'say', who: 'Jacob', text: 'I had this made for you. Let all of Hebron see it.', color: J.Jacob },
       { t: 'dialogueHide' },
-      // the gift — a CLOSE, clear push-in on Joseph's shoulders so the player
-      // plainly SEES the tunic go on (D5: tighter framing + a longer hold).
-      { t: 'cam', angle: -Math.PI * 0.5, target: () => ({ x: ctx.joseph.position.x, z: ctx.joseph.position.z }), distance: 1.75, height: 1.35, lookHeight: 1.4, duration: 1500 },
+      // THE GIFT (D7 restaged — the camera was jammed against his head and the
+      // coat just appeared). Now: a full TWO-SHOT of father and son, Jacob
+      // WALKS the coat over, it settles on, and Joseph slowly TURNS in place —
+      // the player watches it wrap him, front and back.
+      { t: 'cam', angle: -Math.PI * 0.5, target: () => ({ x: (ctx.joseph.position.x + jac.pos.x) / 2, z: (ctx.joseph.position.z + jac.pos.z) / 2 }), distance: 3.4, height: 1.65, lookHeight: 1.0, duration: 1500 },
       { t: 'fn', fn: async () => {
-        await wait(300);
-        ctx.joseph.setCoat(true);       // the tunic settles ON — held in close-up
+        // Jacob carries it to his son — two slow steps
+        const jp = ctx.joseph.position;
+        const dx = jp.x - jac.pos.x, dz = jp.z - jac.pos.z;
+        const d0 = Math.hypot(dx, dz);
+        const steps = Math.max(1, Math.round((d0 - 0.95) / 0.05));
+        jac.char.play('walk');
+        for (let i = 0; i < steps; i++) {
+          await wait(42);
+          jac.pos.x += (dx / d0) * 0.05; jac.pos.z += (dz / d0) * 0.05;
+          jac.char.setPosition(jac.pos.x, jac.pos.z);
+          jac.char.turnToward(dx, dz);
+        }
+        jac.char.play('talk'); // the offering gesture
+        await wait(420);
+        ctx.joseph.setCoat(true);       // the tunic settles over his shoulders
         ctx.sound('sfx.cloth_equip');
         ctx.sound('stinger.coat_gift');
         ctx.sparkle(4);
         jac.char.play('idle');
-        await wait(1400);
+        await wait(700);
+        // Joseph turns slowly in place — wearing it, showing every side
+        const j0 = Math.atan2(jac.pos.x - jp.x, jac.pos.z - jp.z);
+        const T2 = 2100; let e = 0;
+        while (e < T2) { await wait(50); e += 50;
+          const a = j0 + (e / T2) * Math.PI * 2;
+          ctx.joseph.turnToward(Math.sin(a), Math.cos(a));
+        }
+        await wait(500);
       } },
-      // …then a cut BEHIND him: the many-colors pattern held clear on the BACK
-      // of the coat (D6 — the pattern must be seen, not implied).
+      // …then the cut BEHIND him: the banded diamonds held clear on the BACK.
       { t: 'fn', fn: async () => {
         const j = ctx.joseph.position;
-        // Joseph faces Jacob — put the camera on the opposite azimuth (his back)
         const a = Math.atan2(j.x - jac.pos.x, j.z - jac.pos.z);
-        ctx.camera.cinematicMoveTo({ angle: a, target: { x: j.x, z: j.z }, distance: 1.9, height: 1.5, lookHeight: 1.15, duration: 1400 });
-        await wait(2400); // hold on the banded diamonds across his shoulders
+        ctx.camera.cinematicMoveTo({ angle: a, target: { x: j.x, z: j.z }, distance: 2.3, height: 1.55, lookHeight: 1.1, duration: 1400 });
+        await wait(2200);
       } },
       { t: 'verse', verse: WEB.gen_37_3 },
       { t: 'verseHide' },
