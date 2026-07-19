@@ -194,7 +194,7 @@ export function createBeats(ctx) {
         ctx.joseph.setCoat(false);
         P.coatProp.visible = true;
         P.coatProp.position.set(B[1].pos.x + 0.35, 0.85, B[1].pos.z);
-        await wait(800);
+        await wait(1100);
       } },
       // SHOT 3 — THE THROW, from the rim: the dark mouth below, the boy still
       // fully lit as they seize and heave him over the edge.
@@ -235,7 +235,7 @@ export function createBeats(ctx) {
         }
         ctx.sound('sfx.pit_impact'); // the dull earth landing
       } },
-      { t: 'wait', ms: 1000 },
+      { t: 'wait', ms: 1500 },
       // SHOT 5 — CUT: the brothers walk away SLOWLY toward their camp — a
       // faint warm firelight far ahead where they live; behind them, nothing.
       // Framed from behind so no one ever looks back.
@@ -254,7 +254,7 @@ export function createBeats(ctx) {
           P.coatProp.position.set(B[1].pos.x + 0.35, 0.85, B[1].pos.z); // Judah carries it off
         }
       } },
-      { t: 'wait', ms: 500 },
+      { t: 'wait', ms: 900 },
       // SHOT 6 — CUT: back down into the dark. The boy has pulled himself up
       // to sitting — head bowed into his knees, shoulders shaking. The verse
       // lands over the sound of a child crying at the bottom of a well.
@@ -273,7 +273,7 @@ export function createBeats(ctx) {
       { t: 'wait', ms: 1400 },
       { t: 'verse', verse: WEB.gen_37_24 },
       { t: 'verseHide' },
-      { t: 'wait', ms: 2600 }, // hold on the shaking shoulders — let it be sad
+      { t: 'wait', ms: 3300 }, // hold on the shaking shoulders — let it be sad
       // SHOT 7 — slow fade to black → a PURE BLACK 2.5s hold → golden morning.
       { t: 'fade', on: true, ms: 2200 },
       { t: 'wait', ms: 2500 },
@@ -364,8 +364,8 @@ export function createBeats(ctx) {
     const all = new Promise((r) => { done = r; });
     ctx.onStrayPenned = (n) => {
       ctx.hud.flashCount('🐑', n, 3);
-      ctx.hud.setObjective(n >= 3 ? 'All three — well done!' : `Bring the stray sheep to the pen — ${n} of 3.`, n >= 3 ? '' : 'Walk up behind a sheep — it runs ahead of you.');
       if (n < 3) {
+        ctx.hud.setObjective(`Bring the stray sheep to the pen — ${n} of 3.`, 'Walk up behind a sheep — it runs ahead of you.');
         const s = ctx.sheep.nearestStray(ctx.joseph.position.x, ctx.joseph.position.z);
         if (s) ctx.guide.setTargetXZ(s.x, s.z);
       } else done();
@@ -380,7 +380,10 @@ export function createBeats(ctx) {
     ctx.onStrayPenned = null;
     ctx.guide.setTarget(null);
     ctx.sound('ui.chime');
-    await wait(900);
+    // D9 (Nate): the finished quest gets its MOMENT — a big held check before
+    // anything new is asked of the player.
+    await ctx.hud.completeObjective('All three sheep are home!');
+    await wait(500);
   }
 
   // ---------- beat 2 · 🧔 report to Jacob ----------
@@ -490,7 +493,7 @@ export function createBeats(ctx) {
         const j = ctx.joseph.position;
         const a = Math.atan2(j.x - jac.pos.x, j.z - jac.pos.z);
         ctx.camera.cinematicMoveTo({ angle: a, target: { x: j.x, z: j.z }, distance: 2.3, height: 1.55, lookHeight: 1.1, duration: 1400 });
-        await wait(2200);
+        await wait(2800);
       } },
       { t: 'verse', verse: WEB.gen_37_3 },
       { t: 'verseHide' },
@@ -724,6 +727,8 @@ export function createBeats(ctx) {
     ctx.guide.setTargetXZ(D.outer[0].position.x, D.outer[0].position.z);
     await allBowed;
     ctx.guide.setTarget(null);
+    ctx.sound('ui.chime');
+    await ctx.hud.completeObjective('Every bundle of wheat bowed!'); // D9: let it land
 
     // dream 1 answered (the field). A MOUNTAIN looms in the north — the dreamer
     // climbs it. (short playable ascent → the summit where the sky bows)
@@ -938,7 +943,7 @@ export function createBeats(ctx) {
       { t: 'fn', fn: () => { jac.char.play('idle'); } },
       { t: 'verse', verse: WEB.gen_37_10_short },
       { t: 'verseHide' },
-      { t: 'wait', ms: 600 },
+      { t: 'wait', ms: 1100 },
       // (brothers stay seated + frozen — the close holds on their envy)
     ]);
   }
@@ -950,7 +955,7 @@ export function createBeats(ctx) {
       { t: 'cam', angle: Math.PI * 0.5, target: { x: 0.2, z: -6.6 }, distance: 3.5, height: 1.75, lookHeight: 1.3, duration: 2200 },
       { t: 'grade', mood: 'ominous', ms: 2000 },
       { t: 'verse', verse: WEB.gen_37_11 },
-      { t: 'wait', ms: 900 },
+      { t: 'wait', ms: 1300 },
       { t: 'verseHide' },
     ]);
     // Joseph turns and walks back ALONE — SLOWLY, head down, and SMOOTH (D8:

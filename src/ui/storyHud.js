@@ -85,6 +85,35 @@ export function createStoryHud({ onHome } = {}) {
     }, 180);
   }
 
+  // D9 (Nate): a finished quest gets its MOMENT — the banner turns into a big
+  // glowing green-gold check and HOLDS before the next objective may appear.
+  // Resolves when the celebration is over; beats await it.
+  function completeObjective(text, holdMs = 2800) {
+    current = `✓ ${text}`;
+    obj.style.opacity = '0';
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        objIcon.textContent = '✓';
+        objIcon.style.color = '#9fe8a0';
+        objIcon.style.filter = 'drop-shadow(0 0 8px rgba(140,230,150,0.7))';
+        objText.textContent = text;
+        objHint.textContent = '';
+        objHint.style.display = 'none';
+        applyVisible();
+        if (!inCutscene) pulse();
+        setTimeout(() => {
+          // hand the banner back to normal objectives
+          objIcon.textContent = '✦';
+          objIcon.style.color = '#ffcf8a';
+          objIcon.style.filter = 'drop-shadow(0 0 6px rgba(242,184,128,0.6))';
+          obj.style.opacity = '0';
+          current = '';
+          resolve();
+        }, holdMs);
+      }, 180);
+    });
+  }
+
   function pulse() {
     try {
       // keep translateX(-50%) in every keyframe or the centered banner jumps
@@ -125,5 +154,5 @@ export function createStoryHud({ onHome } = {}) {
     counter.remove();
   }
 
-  return { setObjective, setCutscene, pulse, flashCount, destroy, homeButton: home, objectiveEl: obj, counterEl: counter };
+  return { setObjective, completeObjective, setCutscene, pulse, flashCount, destroy, homeButton: home, objectiveEl: obj, counterEl: counter };
 }

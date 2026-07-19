@@ -322,8 +322,13 @@ class AudioSystem {
   musicWarmBed() { this.musicPad(0.03, [130.81, 196.0, 261.63]); }
   musicWonderBed() { this.musicPad(0.028, [146.83, 220.0, 293.66]); }
   // D7: the SAD bed — a low A-minor wash for the lonely walk to the tent
-  // (a real music/sad_night.mp3 replaces it the moment Nate drops one in)
-  musicSadBed() { this.musicPad(0.036, [110.0, 164.81, 220.0, 261.63]); }
+  // (a real music/sad_night.mp3 replaces it the moment Nate drops one in).
+  // D9: louder — Nate couldn't hear it at all.
+  musicSadBed() { this.musicPad(0.062, [110.0, 164.81, 220.0, 261.63]); }
+  // D9: the DREAD bed — a low, uneasy minor cluster under the cold open's
+  // betrayal (the open used to play in total silence; Nate missed tension).
+  // A real music/betrayal_dark.mp3 takes over the moment it lands.
+  musicDreadBed() { this.musicPad(0.055, [55.0, 82.41, 110.0, 130.81]); }
 
   // --- Voice bus: real VO files play here so Master/Narrator are LIVE mid-line -
   // D7: failures are NOT cached — a single transient network blip used to

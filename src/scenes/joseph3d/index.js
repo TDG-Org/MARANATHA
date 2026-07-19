@@ -177,7 +177,9 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
   // back in between). Same-key requests are no-ops, so a track can't restart
   // over itself.
   const startBeat = Math.min(getCheckpoint('joseph3d'), 6);
-  const MUSIC_BY_BEAT = { 0: null, 1: 'music.camp_warm', 2: 'music.camp_warm', 3: 'music.camp_warm', 4: 'music.ominous_turn', 5: null, 6: 'music.camp_warm' };
+  // D9: the cold open carries a low DREAD bed (Nate heard silence and missed
+  // the tension — a real music/betrayal_dark.mp3 takes over when it lands)
+  const MUSIC_BY_BEAT = { 0: 'music.betrayal_dark', 1: 'music.camp_warm', 2: 'music.camp_warm', 3: 'music.camp_warm', 4: 'music.ominous_turn', 5: null, 6: 'music.camp_warm' };
   // (`in`, not `??` — beats 0 and 5 map to a DELIBERATE null = silence, which
   // `??` would silently coalesce back into the warm theme)
   let musicKey = startBeat in MUSIC_BY_BEAT ? MUSIC_BY_BEAT[startBeat] : 'music.camp_warm';
