@@ -12,8 +12,8 @@ No install, no login.
 
 ![Three.js](https://img.shields.io/badge/Three.js-r0.185-111?logo=three.js&logoColor=white)
 ![Vite](https://img.shields.io/badge/Vite-8-646cff?logo=vite&logoColor=white)
-![Assets](https://img.shields.io/badge/assets-100%25%20procedural-f2b880)
-![Scripture](https://img.shields.io/badge/Bible-Berean%20Standard%20(public%20domain)-8a7f9e)
+![Assets](https://img.shields.io/badge/art-procedural%20%2B%20CC0-f2b880)
+![Scripture](https://img.shields.io/badge/Bible-World%20English%20(public%20domain)-8a7f9e)
 
 </div>
 
@@ -23,12 +23,12 @@ No install, no login.
 
 You move a flat, hand‑drawn character through a low‑poly 3D world beneath a real, gently‑moving
 camera. You walk up to people, talk with them, and live each story exactly as Scripture tells
-it — the real verse (Berean Standard Bible) shown on screen and read aloud on every beat.
+it — the real verse (World English Bible) shown on screen and read aloud on every beat.
 
 - 🎨 **HD‑2D art** — flat sprite characters in a 3D world; single‑pass shader‑gradient skies, atmospheric haze, golden‑hour light.
 - 🚶 **Walk & talk** — free movement, a gentle follow camera, dialogue popups that always name who’s speaking, and soft on‑screen guidance so you’re never lost.
-- 🔊 **All procedural** — every visual is drawn in code and every sound is synthesized at runtime. **Zero image or audio files.**
-- 📖 **Faithful to the text** — Berean Standard Bible (public domain), verified verse‑by‑verse; verses narrated by the browser.
+- 🔊 **Drawn in code** — every visual is generated procedurally (skies, terrain, props, coat patterns, wheat), with a small set of CC0 models and textures for the characters and ground. Most sound is synthesized at runtime; the score and a few effects are real files.
+- 📖 **Faithful to the text** — World English Bible (public domain), verified verse‑by‑verse against the canonical text; narrated in one baked voice.
 - 📱 **Runs anywhere** — device‑adaptive resolution and instanced rendering keep it smooth even on low‑end phones.
 - 🔒 **Private & instant** — no accounts; your progress saves locally in your browser.
 
@@ -94,6 +94,29 @@ public/models/        rigged character GLBs (CC0 — see CREDITS.md)
   canonical text. Character models are **CC0** (credits in `public/models/CREDITS.md`).
 - The earlier Phaser 3 version (a full playable Creation story) is preserved on the
   [`phaser-archive`](https://github.com/TDG-Org/MARANATHA/tree/phaser-archive) branch.
+
+## ⚖️ Copyright & use
+
+**Copyright © 2026 Nate (TDG-Org). All rights reserved.**
+
+This source is published so the game can be played and so others can read how it was built.
+It is **not** open source and carries **no license to reuse it**. Without prior written
+permission you may not copy, modify, redistribute, or sell this code or its story content,
+in whole or in part, or use it to produce a derivative game.
+
+**The game itself is, and will remain, free to play for everyone** — that is a promise about
+players, not a grant of rights to the source.
+
+Third-party assets keep their own licenses and are **not** covered by the notice above:
+
+| Asset | License | Credits |
+|---|---|---|
+| Character models (KayKit) | CC0 | `public/models/CREDITS.md` |
+| Rock & dirt textures (Poly Haven) | CC0 | `public/textures/CREDITS.md` |
+| Scripture text (World English Bible) | Public domain | — |
+| Music, ambience & SFX | see credits file | `public/audio/CREDITS.md` |
+
+Questions, or want permission to use something here? Open an issue on the repo.
 
 <div align="center">
 
