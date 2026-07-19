@@ -83,7 +83,14 @@ export class PlayerController3D {
       const s = this._script;
       const dx = s.x - pos.x, dz = s.z - pos.z;
       const d = Math.hypot(dx, dz);
-      if (d < 0.16) {
+      // D9 stall guard: a scripted walk wedged on colliders must NEVER hang a
+      // cutscene — after ~1.3s of real movement far below the asked speed,
+      // resolve where he stands (a short fall beats a softlock).
+      const moved = s._lp ? Math.hypot(pos.x - s._lp.x, pos.z - s._lp.z) : 0;
+      if (s._lp && moved < s.speed * dt * 0.0002) s._stall = (s._stall || 0) + dt;
+      else s._stall = 0;
+      s._lp = { x: pos.x, z: pos.z };
+      if (d < 0.16 || (s._stall || 0) > 1300) {
         s.resolve();
         this._script = null;
       } else {
