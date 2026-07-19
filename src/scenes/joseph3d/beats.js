@@ -252,6 +252,8 @@ export function createBeats(ctx) {
         ctx.joseph.setPosition(-7, -2.5); // by his tent in the camp
         ctx.grading.set('goldenHour');
         ctx.futureVignette(false);        // NOW — the gloom and drain lift
+        ctx.setMusic('music.camp_warm');  // the warm theme rises WITH the morning
+        // (the open itself plays in silence — the state machine starts at null)
         ctx.camera.cinematicMoveTo({ angle: Math.PI * 0.9, target: { x: -5, z: -3 }, distance: 14, height: 7, lookHeight: 1, duration: 1 });
       } },
       // D7 logic fix: the pit was a FLASH-FORWARD — this morning is EARLIER,
