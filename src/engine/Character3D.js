@@ -115,7 +115,8 @@ export class Character3D {
     const colorOf = (node) => {
       const n = node.name || '';
       if (/leg/i.test(n)) return this.colors.robeShade;
-      if (/sash|belt/i.test(n)) return this.colors.sash ?? this.colors.robe;
+      if (/belt/i.test(n)) return this.colors.belt ?? this.colors.sash ?? this.colors.robe;
+      if (/sash/i.test(n)) return this.colors.sash ?? this.colors.robe;
       return this.colors.robe; // arms, body, torso, cloth, anything unnamed
     };
 
@@ -207,6 +208,24 @@ export class Character3D {
       const g = this.bodyMesh?.geometry;
       if (g) { g.computeBoundingBox(); top = g.boundingBox.max.y * scale; }
       this.headHeight = Math.max(1.3, top) + 0.2;
+    }
+
+    // BELT (D8): the KayKit rigs have NO belt/sash mesh (the old "terracotta
+    // sash" color never had a node to land on) — so a belt is WORN geometry,
+    // a leather band riding the spine bone like the headband rides the head.
+    if (this.colors.belt) {
+      const waist = this.rig.getObjectByName('spine') || this.rig.getObjectByName('hips');
+      if (waist) {
+        // sized to the MEASURED torso at belt height (±0.42 wide, ±0.36 deep —
+        // the robe is bulky; a round 0.29 band drowned inside it invisibly)
+        const beltGeo = new THREE.CylinderGeometry(0.435, 0.45, 0.13, 14, 1, true);
+        const belt = new THREE.Mesh(beltGeo, this._toon(this.colors.belt, { side: THREE.DoubleSide }));
+        belt.position.set(0, 0.0, 0);
+        belt.scale.set(1, 1, 0.86); // elliptical — hugs the robe, front and back
+        waist.add(belt);
+        this._ownedGeo.push(beltGeo);
+        this.beltMesh = belt;
+      }
     }
 
     this.mixer = new THREE.AnimationMixer(this.rig);

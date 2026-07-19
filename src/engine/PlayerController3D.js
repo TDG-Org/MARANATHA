@@ -31,6 +31,9 @@ export class PlayerController3D {
     this._onKeyDown = (e) => {
       const k = e.key.toLowerCase();
       if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'shift'].includes(k)) this.keys.add(k);
+      // D8: C sits the hero down wherever he stands (a held kneel/sit pose —
+      // any movement stands him back up; see the anim-state logic below).
+      if (k === 'c' && this.enabled && this.vel.lengthSq() < 0.1) this.character.play('kneel');
     };
     this._onKeyUp = (e) => this.keys.delete(e.key.toLowerCase());
     window.addEventListener('keydown', this._onKeyDown);

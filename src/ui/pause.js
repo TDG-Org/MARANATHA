@@ -82,7 +82,7 @@ export function createPauseMenu({ app, isInputOn, setInput, onSettings, onHome }
   });
 
   const hint = document.createElement('div');
-  hint.textContent = window.matchMedia?.('(pointer: coarse)')?.matches ? '' : 'Esc resumes';
+  hint.textContent = window.matchMedia?.('(pointer: coarse)')?.matches ? '' : 'Esc resumes · WASD moves · C sits down';
   hint.style.cssText = 'margin-top:22px; font:12px "Segoe UI",system-ui,sans-serif; color:#f5e6c4; opacity:0.55;';
 
   overlay.append(title, col, hint);

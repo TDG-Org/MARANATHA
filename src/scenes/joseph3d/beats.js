@@ -400,11 +400,21 @@ export function createBeats(ctx) {
       shot('jacob', 'joseph', { side: 0.38, dist: 2.3 }),
       { t: 'say', who: 'Jacob', text: 'I had this made for you. Let all of Hebron see it.', color: J.Jacob },
       { t: 'dialogueHide' },
-      // THE GIFT (D7 restaged — the camera was jammed against his head and the
-      // coat just appeared). Now: a full TWO-SHOT of father and son, Jacob
-      // WALKS the coat over, it settles on, and Joseph slowly TURNS in place —
-      // the player watches it wrap him, front and back.
-      { t: 'cam', angle: -Math.PI * 0.5, target: () => ({ x: (ctx.joseph.position.x + jac.pos.x) / 2, z: (ctx.joseph.position.z + jac.pos.z) / 2 }), distance: 3.4, height: 1.65, lookHeight: 1.0, duration: 1500 },
+      // THE GIFT (D8 restaged again — Nate: the camera must hold a SIDE angle
+      // so we watch FACES and the coat going on, never the back of Joseph's
+      // head). The two-shot sits perpendicular to the father–son axis: both in
+      // profile, Jacob walks the coat across the frame, it settles on, and
+      // Joseph slowly TURNS in place — every side of it shown.
+      { t: 'fn', fn: () => {
+        const jp = ctx.joseph.position;
+        const axis = Math.atan2(jp.x - jac.pos.x, jp.z - jac.pos.z); // father → son
+        ctx.camera.cinematicMoveTo({
+          angle: axis - Math.PI / 2, // exactly side-on to the pair
+          target: { x: (jp.x + jac.pos.x) / 2, z: (jp.z + jac.pos.z) / 2 },
+          distance: 3.3, height: 1.6, lookHeight: 1.0, duration: 1500,
+        });
+      } },
+      { t: 'wait', ms: 1500 },
       { t: 'fn', fn: async () => {
         // Jacob carries it to his son — two slow steps
         const jp = ctx.joseph.position;
