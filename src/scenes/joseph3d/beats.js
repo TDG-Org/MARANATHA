@@ -128,24 +128,44 @@ export function createBeats(ctx) {
       } },
       { t: 'wait', ms: 450 },
       { t: 'fade', on: false, ms: 1500 },
-      { t: 'wait', ms: 650 },
+      // D9 clarity: this is a glimpse of what is COMING — say so plainly
+      // (the golden morning answers it with 'Present day')
+      { t: 'title', heading: 'In the days to come', sub: 'Genesis 37', holdMs: 2600 },
       // …the frame widens as the march closes on the pit
       { t: 'cam', angle: Math.PI * 0.52, target: { x: to.x + 0.6, z: to.z }, distance: 5.0, height: 1.7, lookHeight: 0.95, duration: 5400, awaitMs: false },
       { t: 'fn', fn: () => march }, // hold until the march lands at the rim
       { t: 'wait', ms: 450 },
-      // SHOT 2 — AT THE EDGE: the betrayal, face to face. The player clicks
-      // through every line (paraphrase inside Gen 37:19-22 — the taunt about
-      // the dreams, and Reuben's "no blood" that chose the pit).
-      shot('simeon', 'joseph', { side: 0.42, dist: 2.7 }),
+      // SHOT 2 — AT THE EDGE: the betrayal. D9 camera (Nate): RAISED and
+      // looking DOWN, slowly circling the group while the lines are exchanged
+      // — from up here no one's head can ever block the lens.
+      { t: 'fn', fn: () => {
+        const g = { x: to.x - 0.3, z: to.z };
+        let stopped = false;
+        ctx.__betrayalOrbitStop = () => { stopped = true; };
+        ctx.camera.cinematicMoveTo({ angle: Math.PI * 0.45, target: g, distance: 4.6, height: 3.1, lookHeight: 0.95, duration: 1100 });
+        (async () => {
+          await wait(1100);
+          let a = Math.PI * 0.45;
+          while (!stopped) { await wait(60); a += 0.0056; // a slow prowl around them
+            const p = ctx.camera.pose; if (!p) break;
+            p.pos.set(g.x - Math.sin(a) * 4.6, 3.1, g.z - Math.cos(a) * 4.6);
+            p.look.set(g.x, 0.95, g.z);
+          }
+        })();
+      } },
+      { t: 'fn', fn: () => { const sp = posOf('simeon'), li = posOf('joseph'); charOf('simeon').turnToward(li.x - sp.x, li.z - sp.z); charOf('simeon').play('talk'); charOf('joseph').turnToward(sp.x - li.x, sp.z - li.z); } },
       { t: 'say', who: 'Simeon', text: 'Far enough. This is the place.', color: J.Simeon },
-      shot('joseph', 'judah', { side: -0.4, dist: 2.5 }),
+      { t: 'fn', fn: () => { charOf('simeon').play('idle'); const sp = posOf('joseph'), li = posOf('judah'); charOf('joseph').turnToward(li.x - sp.x, li.z - sp.z); charOf('joseph').play('talk'); } },
       { t: 'say', who: 'Joseph', text: 'Brothers — please. What have I done to you?', color: J.Joseph },
-      shot('judah', 'joseph', { side: 0.4, dist: 2.6 }),
+      { t: 'fn', fn: () => { charOf('joseph').play('idle'); const sp = posOf('judah'), li = posOf('joseph'); charOf('judah').turnToward(li.x - sp.x, li.z - sp.z); charOf('judah').play('talk'); } },
       { t: 'say', who: 'Judah', text: 'What have you done? “The sun and the moon bowed down to me.” To a boy in a fine coat.', color: J.Judah },
       { t: 'say', who: 'Judah', text: 'Here is your throne, dreamer. Now we shall see what becomes of your dreams.', color: J.Judah },
-      shot('reuben', 'judah', { side: -0.42, dist: 2.9 }),
+      { t: 'fn', fn: () => { charOf('judah').play('idle'); const sp = posOf('reuben'), li = posOf('judah'); charOf('reuben').turnToward(li.x - sp.x, li.z - sp.z); charOf('reuben').play('talk'); } },
       { t: 'say', who: 'Reuben', text: 'No blood, Judah. Do you hear me? No blood — the pit is enough.', color: J.Reuben },
       { t: 'dialogueHide' },
+      // the exchange is over: the orbit stands down, and Joseph falls SILENT —
+      // his arms must never keep gesturing into the fall (D9)
+      { t: 'fn', fn: () => { ctx.__betrayalOrbitStop?.(); charOf('reuben').play('idle'); ctx.joseph.play('idle'); } },
       // they STRIP the tunic (37:23) — it hangs from Judah's hand
       { t: 'cam', angle: Math.PI * 0.22, target: () => ({ x: ctx.joseph.position.x, z: ctx.joseph.position.z }), distance: 2.9, height: 1.6, lookHeight: 1.0, duration: 1100 },
       { t: 'fn', fn: async () => {
@@ -163,6 +183,7 @@ export function createBeats(ctx) {
         ctx.sound('stinger.hatred');
         B[1].char.play('talk'); B[2].char.play('talk'); // the two who seize him
         if (ctx.joseph.shadowMesh) ctx.joseph.shadowMesh.visible = false;
+        ctx.joseph.setAnimPaused(true); // seized — the body goes LIMP and still
         const jx = jRoot.position.x, jz = jRoot.position.z;
         const H = 340; let e = 0;
         while (e < H) { await wait(40); e += 40; const k = Math.min(1, e / H);
@@ -221,6 +242,7 @@ export function createBeats(ctx) {
       { t: 'fn', fn: () => {
         jRoot.rotation.x = 0;
         jRoot.position.set(P.PIT.x + 0.15, -4.0, P.PIT.z + 0.1);
+        ctx.joseph.setAnimPaused(false); // life returns — enough to weep
         ctx.joseph.play('kneel');        // seated on the pit floor
         ctx.joseph.turnToward(0.35, -0.8);
         ctx.joseph.setGrief(true);       // head bows deep; small sobbing hitches
@@ -256,9 +278,9 @@ export function createBeats(ctx) {
         // (the open itself plays in silence — the state machine starts at null)
         ctx.camera.cinematicMoveTo({ angle: Math.PI * 0.9, target: { x: -5, z: -3 }, distance: 14, height: 7, lookHeight: 1, duration: 1 });
       } },
-      // D7 logic fix: the pit was a FLASH-FORWARD — this morning is EARLIER,
-      // not "the next morning" (that title made the timeline read backwards).
-      { t: 'title', heading: 'Hebron, Canaan', sub: 'Days earlier · c. 1898 BC · Genesis 37', holdMs: 3200 },
+      // D9 (Nate): the open said 'In the days to come' — this card answers it
+      // plainly, so every player knows the pit was a glimpse of the future.
+      { t: 'title', heading: 'Hebron, Canaan', sub: 'Present day · c. 1898 BC · Genesis 37', holdMs: 3400 },
       { t: 'fade', on: false, ms: 2000 },
       // a slow, beautiful pan across the golden camp; Joseph steps out
       // (12s — long enough that both verses finish inside the glide)

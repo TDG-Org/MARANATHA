@@ -37,13 +37,15 @@ export class PostFX {
     this.filter = 'none';
     this._blurT = null;
 
-    // the FUTURE vignette border (shared by any scene that asks for 'future')
+    // D9 (Nate): the old FUTURE vignette drew dark borders on all four sides
+    // that overlapped the letterbox in the corners — REMOVED. The drained
+    // color grade + the letterbox carry the flash-forward look alone; only a
+    // whisper of corner falloff remains (no edge bands, no overlap).
     this.vignette = document.createElement('div');
     this.vignette.style.cssText = [
       'position:fixed', 'inset:0', 'z-index:25', 'pointer-events:none', 'opacity:0',
       'transition:opacity 1200ms ease',
-      'box-shadow:inset 0 0 26vw 11vw rgba(5,4,9,0.95)',
-      'background:radial-gradient(ellipse at center, rgba(20,22,30,0) 38%, rgba(8,8,14,0.62) 100%)',
+      'background:radial-gradient(ellipse at center, rgba(0,0,0,0) 62%, rgba(8,8,14,0.28) 100%)',
     ].join(';');
     document.body.append(this.vignette);
 
