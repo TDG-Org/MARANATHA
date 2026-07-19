@@ -58,6 +58,9 @@ export const AUDIO_MANIFEST = [
   { key: 'sfx.men_laughing', bus: 'sfx', loop: false, seconds: 2.5, file: 'sfx/men_laughing', fallback: null, available: true, purpose: 'the brothers mock/laugh at Joseph (group envy beats)', scene: 'joseph3d-1' },
   { key: 'sfx.man_laugh', bus: 'sfx', loop: false, seconds: 3.8, file: 'sfx/man_laugh', fallback: null, available: true, purpose: 'ONE brother laughs alone (the herd sneer — Nate 2026-07-17)', scene: 'joseph3d-1' },
   { key: 'sfx.boy_crying', bus: 'sfx', loop: false, seconds: 6, file: 'sfx/boy_crying', fallback: null, available: false, purpose: 'soft crying/sniffles — Joseph alone at the bottom of the pit (cold open shot 6; SILENT until the file lands — 🔴 NATE.md)', scene: 'joseph3d-1' },
+  { key: 'sfx.pit_impact', bus: 'sfx', loop: false, seconds: 1.2, file: 'sfx/pit_impact', fallback: 'thump', available: false, purpose: 'the dull earth landing at the bottom of the pit (procedural thump until a real body-drop lands)', scene: 'joseph3d-1' },
+  { key: 'sfx.fall_whoosh', bus: 'sfx', loop: false, seconds: 3, file: 'sfx/fall_whoosh', fallback: 'whooshDown', available: false, purpose: 'soft airy rush under the slow-motion fall (procedural whoosh until a real file lands)', scene: 'joseph3d-1' },
+  { key: 'sfx.march_loop', bus: 'sfx', loop: true, seconds: 10, file: 'sfx/march_loop', fallback: null, available: false, purpose: 'five men walking on dry ground — under the cold-open march (SILENT until the file lands — 🔴 NATE.md)', scene: 'joseph3d-1' },
 
   // --- Narrator VO (file-first; naming: vo/<story>/<scene>/<line-id>) ---
   // GENERATED, not recorded: `npm run vo` bakes every line below as an mp3

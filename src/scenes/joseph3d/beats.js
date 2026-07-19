@@ -1,6 +1,7 @@
 import { WEB, NARRATION } from '../../data/versesWEB.js';
 import { pausableWait } from '../../engine/Sequencer.js';
 import { Narrator } from '../../systems/Narrator.js';
+import { Audio } from '../../systems/AudioSystem.js';
 import { NAME_COLOR } from './cast.js';
 
 // SCENE 1 — the story as DATA + gates (script-writing + storyteller +
@@ -116,8 +117,11 @@ export function createBeats(ctx) {
       { t: 'cam', angle: Math.PI * 0.42, target: { x: from.x + dir.x * 0.12, z: from.z + dir.z * 0.12 }, distance: 3.2, height: 1.3, lookHeight: 1.05, duration: 1, awaitMs: false },
       { t: 'fn', fn: () => {
         march = (async () => {
+          // five men on dry ground (🔴 slot — silent until Nate's file lands)
+          const marchBed = Audio.playLoop('sfx.march_loop', { gain: 0.5 });
           const D = 8600; let e = 0; // a slow, heavy dead-march
           while (e < D) { await wait(50); e += 50; place(Math.min(1, e / D)); }
+          marchBed.stop(1.4);
           B.forEach((n) => n.char.play('idle'));
           ctx.joseph.play('idle');
         })();
@@ -173,6 +177,7 @@ export function createBeats(ctx) {
       // his back and the ring of daylight shrinks away above. Alone. Sad.
       { t: 'fn', fn: async () => {
         const D = 4600; let e = 0; // D8: slower than the old 3s fall
+        ctx.sound('sfx.fall_whoosh'); // soft air rush under the slow-mo
         const x0 = jRoot.position.x, z0 = jRoot.position.z, y0 = jRoot.position.y;
         const a0 = Math.PI * 0.3;
         while (e < D) { await wait(40); e += 40; const k = Math.min(1, e / D);
@@ -187,7 +192,7 @@ export function createBeats(ctx) {
             distance: 2.1, height: 0.55, lookHeight: 0.18, duration: 1,
           });
         }
-        ctx.sound('sfx.sheaf_bow'); // the dull landing
+        ctx.sound('sfx.pit_impact'); // the dull earth landing
       } },
       { t: 'wait', ms: 1000 },
       // SHOT 5 — CUT: the brothers walk away SLOWLY toward their camp — a
