@@ -110,7 +110,21 @@ export function makeWell(x, z, rockTex = null) {
   dyeGeometry(rope, C.cloth);
   const rig = new THREE.Mesh(mergeGeometries([bar, bucket, rope]), toonMat(0xffffff, { vertexColors: true, side: THREE.DoubleSide }));
   rig.geometry.computeVertexNormals();
-  group.add(ring, posts, roof, rig);
+  // D9 (Nate): the camp well holds WATER — a cool reflective disc just below
+  // the rim, with a faint sky-sheen so it reads wet at a glance.
+  const water = new THREE.Mesh(
+    new THREE.CircleGeometry(1.22, 18),
+    new THREE.MeshBasicMaterial({ color: 0x3e6b8a, transparent: true, opacity: 0.92, fog: true }),
+  );
+  water.rotation.x = -Math.PI / 2;
+  water.position.set(x, 0.72, z);
+  const sheen = new THREE.Mesh(
+    new THREE.CircleGeometry(0.75, 14),
+    new THREE.MeshBasicMaterial({ color: 0x9fc8de, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false, fog: true }),
+  );
+  sheen.rotation.x = -Math.PI / 2;
+  sheen.position.set(x - 0.25, 0.73, z + 0.2);
+  group.add(ring, posts, roof, rig, water, sheen);
   return { mesh: group, colliders: [{ type: 'circle', x, z, r: 1.7, group: 'well' }], blockers: [ring, roof] };
 }
 

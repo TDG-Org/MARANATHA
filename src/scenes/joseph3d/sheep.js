@@ -13,18 +13,41 @@ export class SheepFlock {
     this.onPenned = onPenned;
     this.rnd = mulberry32(seed);
 
-    // --- geometry: woolly body (merged lumps) + dark head, two instanced meshes
-    const lumps = [];
-    const mk = (r, x, y, z) => { const g = new THREE.SphereGeometry(r, 7, 5); g.translate(x, y, z); return g; };
-    lumps.push(mk(0.34, 0, 0.52, 0), mk(0.27, 0.22, 0.6, 0.1), mk(0.27, -0.2, 0.58, -0.08), mk(0.22, 0, 0.45, 0.22), mk(0.2, 0.05, 0.48, -0.24));
-    [-0.16, 0.16].forEach((x) => [-0.14, 0.16].forEach((z) => lumps.push((() => { const g = new THREE.CylinderGeometry(0.045, 0.05, 0.3, 5); g.translate(x, 0.15, z); return g; })())));
+    // --- geometry (D9 glow-up): a rounder wool CLOUD (more, softer lumps + a
+    // tail puff + a topknot crown over the brow) and a proper dark head with
+    // droopy EARS, a snout, and matching dark legs. Still two instanced draws:
+    // everything woolly merges into the body, everything dark into the head.
+    const mk = (r, x, y, z, sx = 1, sy = 1, sz = 1) => {
+      const g = new THREE.SphereGeometry(r, 7, 5);
+      g.scale(sx, sy, sz);
+      g.translate(x, y, z);
+      return g;
+    };
+    const lumps = [
+      mk(0.36, 0, 0.54, 0, 1.05, 0.95, 1.2),      // the big soft barrel
+      mk(0.26, 0.2, 0.62, 0.08), mk(0.26, -0.19, 0.6, -0.06),
+      mk(0.22, 0.12, 0.5, 0.26), mk(0.22, -0.1, 0.5, 0.24),
+      mk(0.21, 0.06, 0.5, -0.28), mk(0.2, -0.12, 0.56, -0.22),
+      mk(0.15, 0, 0.56, -0.4),                     // the tail puff
+      mk(0.13, 0, 0.72, 0.34, 1.2, 0.85, 1),       // topknot wool over the brow
+    ];
     const bodyGeo = mergeGeometries(lumps);
     // The minimal merge drops normals; a LIT (toon) material with no normals
     // renders BLACK. Regenerate them — this is why the sheep were turning dark.
     bodyGeo.computeVertexNormals();
-    const headGeo = new THREE.SphereGeometry(0.14, 7, 5);
-    headGeo.scale(1, 1.15, 1.3);
-    headGeo.translate(0, 0.5, 0.42);
+    const darkParts = [];
+    const face = new THREE.SphereGeometry(0.14, 8, 6);
+    face.scale(1, 1.12, 1.32);
+    face.translate(0, 0.52, 0.44);
+    darkParts.push(face);
+    darkParts.push(mk(0.075, 0, 0.46, 0.58, 1, 0.85, 1.15)); // the snout
+    darkParts.push(mk(0.085, 0.17, 0.5, 0.38, 0.45, 1.15, 0.75)); // droopy ears
+    darkParts.push(mk(0.085, -0.17, 0.5, 0.38, 0.45, 1.15, 0.75));
+    [-0.16, 0.16].forEach((x) => [-0.14, 0.16].forEach((z) => darkParts.push((() => {
+      const g = new THREE.CylinderGeometry(0.045, 0.05, 0.3, 5); g.translate(x, 0.15, z); return g;
+    })())));
+    const headGeo = mergeGeometries(darkParts);
+    headGeo.computeVertexNormals();
 
     this.total = count + strays.length;
     // emissive base keeps the wool WHITE even in low light (never goes dark).

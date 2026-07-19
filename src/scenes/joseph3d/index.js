@@ -777,6 +777,38 @@ function buildDreamField() {
     group.add(s);
   }
 
+  // D9 (Nate): a BORDER the player can read — tall dream-dark bushes and
+  // boulders ring the crop field so nobody wanders off into the void. A gap
+  // stays open to the north where the cairn path climbs to the mountain.
+  let borderBush = null, borderRock = null;
+  {
+    const bushGeo = (() => {
+      const a = new THREE.SphereGeometry(0.55, 7, 6); a.translate(0, 1.0, 0); a.scale(1, 1.5, 1);
+      const b = new THREE.SphereGeometry(0.38, 6, 5); b.translate(0.3, 1.7, 0.1);
+      return mergeGeometries([a, b]);
+    })();
+    const rockGeo2 = new THREE.DodecahedronGeometry(0.55, 0); rockGeo2.translate(0, 0.3, 0);
+    const bushSpots = [], rockSpots = [];
+    for (let i = 0; i < 40; i++) {
+      const a = (i / 40) * Math.PI * 2 + rnd() * 0.1;
+      let da = a - Math.PI; while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI;
+      if (Math.abs(da) < 0.42) continue; // the northern gap — the way up the mountain
+      const r = 14.3 + rnd() * 1.1;
+      const spot = [FIELD.x + Math.sin(a) * r, FIELD.z + Math.cos(a) * r, 0.85 + rnd() * 0.7, rnd() * 6];
+      (i % 3 === 0 ? rockSpots : bushSpots).push(spot);
+    }
+    const mkRing = (geo, color, spots) => {
+      const m = new THREE.InstancedMesh(geo, new THREE.MeshBasicMaterial({ color, fog: true }), spots.length);
+      const o = new THREE.Object3D();
+      spots.forEach((s, i) => { o.position.set(s[0], 0, s[1]); o.scale.setScalar(s[2]); o.rotation.y = s[3]; o.updateMatrix(); m.setMatrixAt(i, o.matrix); });
+      m.instanceMatrix.needsUpdate = true;
+      group.add(m);
+      return m;
+    };
+    borderBush = mkRing(bushGeo, 0x2a3555, bushSpots);
+    borderRock = mkRing(rockGeo2, 0x394260, rockSpots);
+  }
+
   // fog banks — big soft planes standing behind the field (dream haze)
   const softTex = (rgb) => {
     const c = document.createElement('canvas'); c.width = c.height = 128;
@@ -971,7 +1003,7 @@ function buildDreamField() {
   group.add(summitGroup);
 
   // field elements that HIDE when we cut to the summit (they were dream 1)
-  const fieldEls = [disc, wheat, center, ...outer, ...fogBanks, ...groundMist, beam, moonDisc, mountainGroup, cairns, fireflyPts, motes];
+  const fieldEls = [disc, wheat, center, ...outer, ...fogBanks, ...groundMist, beam, moonDisc, mountainGroup, cairns, fireflyPts, motes, borderBush, borderRock];
   const setSummit = (on) => { summitGroup.visible = on; fieldEls.forEach((e) => { e.visible = !on; }); };
 
   let skyState = 0; // 0 idle · 1 descending (→mid) · 2 bowing (→low)
