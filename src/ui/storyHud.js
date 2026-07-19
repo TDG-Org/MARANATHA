@@ -17,8 +17,8 @@ export function createStoryHud({ onHome } = {}) {
     'pointer-events:auto', /* D9: no backdrop-filter over a live canvas (per-frame blur readback) */
     'transition:filter 150ms ease, background 150ms ease',
   ].join(';');
-  home.onmouseenter = () => { home.style.background = 'rgba(30,26,44,0.7)'; };
-  home.onmouseleave = () => { home.style.background = 'rgba(16,14,26,0.55)'; };
+  home.onmouseenter = () => { home.style.background = 'rgba(30,26,44,0.82)'; };
+  home.onmouseleave = () => { home.style.background = 'rgba(16,14,26,0.72)'; }; // matches the D9 base
   home.onclick = () => { Audio.uiClick?.(); onHome?.(); };
 
   // The objective banner — TOP-CENTER, just under the letterbox safe zone so
