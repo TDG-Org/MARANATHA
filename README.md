@@ -104,24 +104,9 @@ public/models/        rigged character GLBs (CC0 — see CREDITS.md)
 <details>
 <summary><sub>© 2026</sub></summary>
 
-**Copyright © 2026 Christian Nate McIlvenny. All rights reserved.**
+<sub>Copyright © 2026 Christian Nate McIlvenny. All rights reserved.</sub>
 
-This source is published so the game can be played and so others can read how it was built.
-It is **not** open source and carries **no license to reuse it**. Without prior written
-permission you may not copy, modify, redistribute, or sell this code or its story content,
-in whole or in part, or use it to produce a derivative game.
-
-**The game itself is, and will remain, free to play for everyone** — that is a promise about
-players, not a grant of rights to the source.
-
-Third-party assets keep their own licenses and are **not** covered by the notice above:
-
-| Asset | License | Credits |
-|---|---|---|
-| Character models (KayKit) | CC0 | `public/models/CREDITS.md` |
-| Rock & dirt textures (Poly Haven) | CC0 | `public/textures/CREDITS.md` |
-| Scripture text (World English Bible) | Public domain | — |
-| Music, ambience & SFX | see credits file | `public/audio/CREDITS.md` |
+</details>
 
 Questions, or want permission to use something here? Open an issue on the repo.
 
