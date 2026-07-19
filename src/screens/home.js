@@ -73,7 +73,9 @@ export function buildHome({ scene, camera, app }) {
   // Warm ambience + REAL soft looping music once audio is unlocked (D6 —
   // the camp theme at low gain; falls back to the procedural pad if missing).
   let homeMusic = null;
+  let disposed = false;
   const startBeds = () => {
+    if (disposed) return; // fired after leaving home — must not start anything
     Audio.ambience({ wind: 0.22, birds: 0.18 });
     homeMusic = Audio.playLoop('music.camp_warm', { gain: 0.45 });
   };
@@ -374,6 +376,7 @@ export function buildHome({ scene, camera, app }) {
   }
 
   function dispose() {
+    disposed = true; // a late startBeds (queued gesture) must become a no-op
     window.removeEventListener('pointerdown', startBeds);
     homeMusic?.stop(0.8);
     Audio.ambience({ wind: 0, birds: 0 });

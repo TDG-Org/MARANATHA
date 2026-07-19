@@ -108,7 +108,7 @@ export class Sequencer {
           c.guide?.setTarget(null);
           break;
         case 'sound':
-          c.sound?.(s.key);
+          c.sound?.(s.key, s.gain);
           break;
         case 'wait':
           await wait(s.ms ?? 500);

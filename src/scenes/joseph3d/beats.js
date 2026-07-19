@@ -299,7 +299,7 @@ export function createBeats(ctx) {
           // Levi laughs ALONE at his own jab (the solo laugh file); the shared
           // group laughs are saved for the bigger envy beats.
           sim.char.play('talk'); lev.char.play('talk');
-          ctx.sound('sfx.man_laugh');
+          ctx.sound('sfx.man_laugh', 0.5); // D8: laughs sit under dialogue, quieter
           await wait(1500);
           sim.char.play('idle'); lev.char.play('idle');
           ctx.dialogue.hide();
@@ -471,18 +471,19 @@ export function createBeats(ctx) {
       { t: 'anim', get char() { return ctx.cast.reuben.char; }, state: 'talk' },
       { t: 'say', who: 'Reuben', text: 'Not one kind word is left in me for that boy.', color: J.Reuben },
       { t: 'anim', get char() { return ctx.cast.reuben.char; }, state: 'idle' },
-      // envy hardens into a low, scornful laugh between them
-      { t: 'sound', key: 'sfx.men_laughing' },
+      // envy hardens into a low, scornful laugh between them (D8: quiet — it
+      // sits UNDER the scene, never on top of it)
+      { t: 'sound', key: 'sfx.men_laughing', gain: 0.42 },
       { t: 'fn', fn: async () => { ctx.cast.judah.char.play('talk'); ctx.cast.reuben.char.play('talk'); await wait(1300); ctx.cast.judah.char.play('idle'); ctx.cast.reuben.char.play('idle'); } },
       { t: 'dialogueHide' },
       { t: 'verse', verse: WEB.gen_37_4 },
       { t: 'verseHide' },
       { t: 'fn', fn: () => { ctx.npcs.freeze(ctx.cast.judah, false); ctx.npcs.freeze(ctx.cast.reuben, false); } },
-      // Joseph steps back out into the gold, wearing the coat — the warm theme
-      // returns as the tension passes (for now)
+      // Joseph steps back out into the gold, wearing the coat. D8 state
+      // machine: the hatred has BEGUN — the tension score persists from here
+      // until the dream; the warm theme does not come back in between.
       { t: 'fade', on: true, ms: 300 },
       { t: 'fn', fn: () => {
-        ctx.setMusic('music.camp_warm');
         T.group.visible = false;
         jac.pos.x = jacHome.x; jac.pos.z = jacHome.z;
         jac.char.setPosition(jacHome.x, jacHome.z);
@@ -504,7 +505,8 @@ export function createBeats(ctx) {
     ctx.setInput(true);
     ctx.hud.setObjective('Sit with your brothers by the fire.', 'Walk to the fire, then press the prompt to sit.');
     ctx.guide.setTargetXZ(0.6, -4.4);
-    ctx.setMusic('music.dusk_calm');
+    // (no music change — the D8 state machine holds the tension from the envy
+    // scene; the calm dusk theme never sneaks back in between)
     ctx.grading.grade('dusk', 3200);
     ctx.onDusk?.(); // fireflies fade in (wired by the scene)
 
@@ -557,33 +559,38 @@ export function createBeats(ctx) {
     await seq([
       { t: 'cam', angle: -Math.PI * 0.62, target: { x: 0.4, z: -6.4 }, distance: 3.4, height: 1.35, lookHeight: 0.95, duration: 1200 },
       { t: 'fn', fn: () => {
-        ctx.setMusic('music.ominous_turn'); // tension under the fireside jeer
+        // (the tension score is already running — the state machine carried it
+        // in from the envy scene; nothing restarts here)
         jd.char.turnToward(ctx.joseph.position.x - jd.pos.x, ctx.joseph.position.z - jd.pos.z);
         jd.char.play('talk');
       } },
       // D7 logic fix: no one can call him "dreamer" yet — the dreams come
       // later THIS NIGHT. The jeer mocks what they can see: the coat.
       { t: 'say', who: 'Judah', text: 'Look at him — father’s little prince, warming himself in his fine new coat.', color: J.Judah },
+      // D8: the laugh lands exactly ONCE in this scene, quiet — under the
+      // moment, never over it. (It used to fire again on the walk-out.)
       { t: 'fn', fn: async () => {
         sm.char.turnToward(ctx.joseph.position.x - sm.pos.x, ctx.joseph.position.z - sm.pos.z);
         sm.char.play('talk');
-        ctx.sound('sfx.men_laughing');
+        ctx.sound('sfx.men_laughing', 0.42);
         await wait(1600);
         jd.char.play('kneel'); sm.char.play('kneel'); // back to seated by the fire
       } },
       { t: 'dialogueHide' },
-      // Joseph looks down, rises, and turns away for his tent
-      { t: 'fn', fn: () => { ctx.joseph.play('idle'); } },
-      { t: 'wait', ms: 500 },
+      // D8: Joseph is visibly STUNG — he rises, and his head drops; the camera
+      // stays with him a breath so the hurt is unmissable before the quest.
+      { t: 'fn', fn: () => { ctx.joseph.play('idle'); ctx.joseph.setGrief(true, 0.55); } },
+      { t: 'cam', angle: Math.PI * 0.3, target: () => ({ x: ctx.joseph.position.x, z: ctx.joseph.position.z }), distance: 2.6, height: 1.35, lookHeight: 1.05, duration: 1500 },
+      { t: 'wait', ms: 1700 },
       { t: 'letterbox', on: false },
     ]);
 
     // the lonely walk to his tent — the night has turned cold with them, and
-    // the music turns SAD (D7: a low minor bed; Nate can drop music/sad_night
-    // over it). Their laughter follows him out, then only the sad night.
+    // the music turns SAD. He walks with his head down (a light grief residual
+    // rides the walk animation) until he lies down to sleep.
     let rested = false;
     ctx.setMusic('music.sad_night');
-    ctx.sound('sfx.men_laughing');
+    ctx.joseph.setGrief(true, 0.32);
     ctx.hud.setObjective('The night has turned cold with them. Go to your tent and rest.', 'Walk to your tent.');
     const rest = { x: -8.6, z: -4.4 };
     ctx.guide.setTargetXZ(rest.x, rest.z);
@@ -599,6 +606,7 @@ export function createBeats(ctx) {
           rested = true;
           ctx.setInput(false);
           ctx.guide.setTarget(null);
+          ctx.joseph.setGrief(false); // the day's hurt gives way to sleep
           ctx.joseph.setPosition(rest.x, rest.z);
           ctx.joseph.turnToward(-0.9, -0.4); // face the tent
           ctx.joseph.play('kneel'); // settle down to sleep

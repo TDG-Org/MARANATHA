@@ -170,11 +170,37 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
     sheepPen: Audio.playLoop('amb.sheep_pen', { gain: 0.5 }),
     chatter: Audio.playLoop('amb.camp_chatter', { gain: 0.4 }),
   };
-  let music = Audio.playLoop('music.camp_warm');
+  // MUSIC STATE MACHINE (D8): the score is beat-driven, crossfade-only, and
+  // NEVER doubles. The cold open starts in silence (no warm camp theme under a
+  // betrayal); a checkpoint resume opens on the emotional state of its beat
+  // (tension holds from the envy scene until the dream — calm never sneaks
+  // back in between). Same-key requests are no-ops, so a track can't restart
+  // over itself.
+  const startBeat = Math.min(getCheckpoint('joseph3d'), 6);
+  const MUSIC_BY_BEAT = { 0: null, 1: 'music.camp_warm', 2: 'music.camp_warm', 3: 'music.camp_warm', 4: 'music.ominous_turn', 5: null, 6: 'music.camp_warm' };
+  // (`in`, not `??` — beats 0 and 5 map to a DELIBERATE null = silence, which
+  // `??` would silently coalesce back into the warm theme)
+  let musicKey = startBeat in MUSIC_BY_BEAT ? MUSIC_BY_BEAT[startBeat] : 'music.camp_warm';
+  let music = musicKey ? Audio.playLoop(musicKey) : { stop() {}, setGain() {} };
+  let musicHealT = 0;
   const setMusic = (key) => {
     if (disposed) return; // a zombie beat must never restart music after exit
+    if (key === musicKey) return; // already the playing state — no restart blip
+    musicKey = key;
     music.stop(1.4);
     music = Audio.playLoop(key);
+  };
+  // Heal: if the requested track's file decodes AFTER the request (samples
+  // stream in post-unlock), upgrade the silent/fallback handle to the real
+  // loop — the state machine's correctness can't depend on decode timing.
+  const healMusic = (dt) => {
+    musicHealT += dt;
+    if (musicHealT < 1000) return;
+    musicHealT = 0;
+    if (musicKey && !music.real && Audio.samples[musicKey]) {
+      music.stop(0.4);
+      music = Audio.playLoop(musicKey);
+    }
   };
 
   // --- cast (async GLB load; world plays while it streams) ---
@@ -259,7 +285,7 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
     scene, app, cinema, verseCard, dialogue, hud, guide, grading, interactables,
     camera: director, sequencer: null, setInput,
     isPaused: () => app.paused,
-    sound: (key) => { if (!disposed) Audio.play(key); },
+    sound: (key, gain) => { if (!disposed) Audio.play(key, gain !== undefined ? { gain } : {}); },
     setMusic, camp, dream, pit, tentInterior, bounds, futureVignette,
     postFX: app.postFX, // named filter looks (dream/future) + blur transitions
     get joseph() { return joseph; },
@@ -340,9 +366,8 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
     director.snap();
     ready = true;
 
-    // start (or resume) the story
-    const fromBeat = Math.min(getCheckpoint('joseph3d'), 6);
-    runStory(fromBeat);
+    // start (or resume) the story (startBeat also chose the opening music)
+    runStory(startBeat);
   })();
 
   // --- story state machine ---
@@ -372,6 +397,7 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
     clock.t = t;
     sky.update(dt);
     grading.update(dt);
+    healMusic(dt);
     motes.update(dt, t);
     smoke.update(dt, t);
     embers.update(dt, t);

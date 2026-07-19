@@ -419,7 +419,9 @@ export class Character3D {
   // GRIEF (D8 cold open): the boy at the bottom of the pit weeps — head bowed
   // deep, shoulders hitching in small sobs. Applied AFTER the mixer each frame
   // (the animation clip owns the bones; this rides on top), eased in and out.
-  setGrief(on) { this._grief = !!on; }
+  // `amount` scales the pose: 1 = full weeping · ~0.5 = stung/dejected · a low
+  // residual (~0.35) reads as walking with his head down.
+  setGrief(on, amount = 1) { this._grief = !!on; if (on) this._griefAmt = amount; }
 
   update(dt) {
     this._t += dt;
@@ -437,7 +439,7 @@ export class Character3D {
       const gTarget = this._grief ? 1 : 0;
       if (gk !== gTarget) this._griefK = gk + (gTarget - gk) * Math.min(dt * 0.0022, 1);
       if ((this._griefK ?? 0) > 0.003) {
-        const k = this._griefK;
+        const k = this._griefK * (this._griefAmt ?? 1);
         const s = this._t / 1000;
         const sob = Math.sin(s * 7.6) * 0.5 + Math.sin(s * 13.1) * 0.22; // uneven hitches
         if (this._headBone) this._headBone.rotation.x += k * (0.72 + sob * 0.06);
