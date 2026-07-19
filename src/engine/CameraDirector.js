@@ -76,6 +76,10 @@ export class CameraDirector {
 
   setDrift(on) { this.drift = !!on; }
 
+  // D9: a TRUE still — even the idle breathing sine stops (the finale's held
+  // final frame). Any new cinematicMoveTo()/release() wakes the camera again.
+  setStill(on) { this.still = !!on; }
+
   setTarget(v) { this.target.copy(v); }
   setLead(vx, vz) { this.lead.set(vx, vz); }
   setZones(zones) { this.zones = zones || []; }
@@ -175,7 +179,7 @@ export class CameraDirector {
       if (this.poseK === 0 && this._poseDir < 0) { this._poseDir = 0; this.pose = null; }
       if (this.poseK === 1 && this._poseDir > 0) this._poseDir = 0;
     }
-    const breath = Math.sin(this._t * 0.0009) * 0.045;
+    const breath = this.still ? 0 : Math.sin(this._t * 0.0009) * 0.045;
     if (this.pose && this.poseK > 0) {
       const kk = easeInOut(this.poseK);
       // pose drift: orbit the held shot around its look target (~0.03 rad/s)
@@ -210,6 +214,7 @@ export class CameraDirector {
 
   // Beat API — identical contract to the D1 camera so sequences are portable.
   cinematicMoveTo({ angle = 0, target = this.target, distance = 4, height = 1.6, lookHeight = 1.3, duration = 1400 } = {}) {
+    this.still = false; // any new shot wakes the camera from a held still
     const t = target.isVector3 ? target.clone() : new THREE.Vector3(target.x, target.y || 0, target.z);
     const pos = new THREE.Vector3(t.x - Math.sin(angle) * distance, t.y + height, t.z - Math.cos(angle) * distance);
     const look = new THREE.Vector3(t.x, t.y + lookHeight, t.z);
@@ -219,7 +224,7 @@ export class CameraDirector {
     this._driftT = 0; // each shot's drift arc starts from ITS authored frame
   }
 
-  release(duration = 1400) { this._poseDir = -1; this._poseSpeed = 1 / Math.max(1, duration); }
+  release(duration = 1400) { this.still = false; this._poseDir = -1; this._poseSpeed = 1 / Math.max(1, duration); }
   get inCinematic() { return this.poseK > 0.001 || this._poseDir > 0; }
 
   snap() { this._init = false; this.frame(0); }

@@ -889,14 +889,17 @@ function buildDreamField() {
     b.userData.low = new THREE.Vector3(FIELD.x + lx, ly, FIELD.z + lz);
     b.position.copy(b.userData.high);
   };
-  setPath(sun, -7, 22, -19, -5.5, 12, -10, -2.6, 4.6, -3.5);
-  setPath(moon, 7, 23, -19, 5.5, 13, -10, 2.6, 5.0, -3.5);
+  // D9 (Nate): the bow ends with the bodies STILL HIGH in the sky and in the
+  // distance — they lower themselves toward him, they never come down to the
+  // earth. (Old lows sat at ~y 4–5 right beside the summit — too low, too close.)
+  setPath(sun, -7, 22, -19, -5.5, 14, -13, -3.2, 8.8, -10);
+  setPath(moon, 7, 23, -19, 5.5, 14.6, -13, 3.2, 9.2, -10);
   stars.forEach((s, i) => {
     const a = (i / 10) * Math.PI;
     setPath(s,
       Math.cos(a) * 11, 15 + Math.sin(a) * 4, -17,
-      Math.cos(a) * 8, 9 + Math.sin(a) * 2.5, -9,
-      Math.cos(a) * 3.4, 3.6 + Math.sin(a) * 1.2, -3.2);
+      Math.cos(a) * 8, 11 + Math.sin(a) * 2.5, -11,
+      Math.cos(a) * 5.5, 7.6 + Math.sin(a) * 1.8, -9);
   });
 
   // --- DREAM V2: the MOUNTAIN to climb + the SUMMIT where the sky bows --------
@@ -933,8 +936,12 @@ function buildDreamField() {
   const summitGroup = new THREE.Group();
   summitGroup.visible = false;
   {
-    const rock = new THREE.Mesh(new THREE.ConeGeometry(3.4, SUMMIT_Y + 1.6, 7), darkRock(0x121830));
-    rock.position.set(FIELD.x, (SUMMIT_Y + 1.6) / 2 - 0.5, FIELD.z + 0.2);
+    // D9 (Nate): the peak is FLAT on top — a truncated cone whose top surface
+    // sits just under the dreamer's feet, so his FULL body stands clear of the
+    // rock (the old sharp cone poked up through the shot and swallowed him).
+    const rockH = SUMMIT_Y + 1.55;
+    const rock = new THREE.Mesh(new THREE.CylinderGeometry(1.7, 3.6, rockH, 7), darkRock(0x121830));
+    rock.position.set(FIELD.x, (SUMMIT_Y - 0.02) - rockH / 2, FIELD.z + 0.2);
     summitGroup.add(rock);
     // lower peaks beyond, in silhouette
     [[-11, -7, 5, 8], [12, -9, 6, 10], [-16, -13, 7, 6], [17, -14, 5, 7]].forEach(([x, z, r, h]) => {
