@@ -423,6 +423,10 @@ export class Character3D {
   // residual (~0.35) reads as walking with his head down.
   setGrief(on, amount = 1) { this._grief = !!on; if (on) this._griefAmt = amount; }
 
+  // D9: freeze the animation mid-pose (a limp body falling must be STILL —
+  // no idle arm sway, no talk gestures). Facing/grief/mouth keep working.
+  setAnimPaused(on) { if (this.mixer) this.mixer.timeScale = on ? 0 : 1; }
+
   update(dt) {
     this._t += dt;
     let d = this._targetYaw - this._yaw;
@@ -432,9 +436,19 @@ export class Character3D {
     this.facing.rotation.y = this._yaw;
 
     if (this.mode === 'glb' && this.mixer) {
+      // grief pose bookkeeping — UNDO last frame's head offset BEFORE the
+      // mixer runs (D9 head-spin fix: a clip that doesn't key the head bone —
+      // Sit_Floor_Idle, some idles — never resets our addition, so a naive
+      // `+=` accumulated every frame and the head spun like a wheel).
+      if (this._headBone && this._headGriefOffset) {
+        this._headBone.rotation.x -= this._headGriefOffset;
+        this._headGriefOffset = 0;
+      }
       this.mixer.update(dt / 1000);
-      // grief pose (post-mixer, additive): bow the head deep + sob hitches in
-      // the shoulders. Eased, so it settles in rather than snapping.
+      // grief pose (post-mixer): bow the head deep + sob hitches in the
+      // shoulders. Eased, so it settles in rather than snapping. The head
+      // offset is recorded and removed again next frame — zero accumulation
+      // whether or not the active clip animates the head.
       const gk = this._griefK ?? 0;
       const gTarget = this._grief ? 1 : 0;
       if (gk !== gTarget) this._griefK = gk + (gTarget - gk) * Math.min(dt * 0.0022, 1);
@@ -442,7 +456,10 @@ export class Character3D {
         const k = this._griefK * (this._griefAmt ?? 1);
         const s = this._t / 1000;
         const sob = Math.sin(s * 7.6) * 0.5 + Math.sin(s * 13.1) * 0.22; // uneven hitches
-        if (this._headBone) this._headBone.rotation.x += k * (0.72 + sob * 0.06);
+        if (this._headBone) {
+          this._headGriefOffset = k * (0.72 + sob * 0.06);
+          this._headBone.rotation.x += this._headGriefOffset;
+        }
         this.rig.rotation.x = k * (0.14 + sob * 0.05);
       } else if (this._griefWas) {
         this.rig.rotation.x = 0; // fully recovered — stand straight again
