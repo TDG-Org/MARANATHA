@@ -13,8 +13,8 @@ export function createStoryHud({ onHome } = {}) {
     'width:46px', 'height:46px', 'border-radius:12px', 'cursor:pointer',
     'display:flex', 'align-items:center', 'justify-content:center',
     'font-size:23px', 'line-height:1', 'color:#fdf6e3',
-    'background:rgba(16,14,26,0.55)', 'border:1px solid rgba(255,255,255,0.14)',
-    'backdrop-filter:blur(3px)', 'pointer-events:auto',
+    'background:rgba(16,14,26,0.72)', 'border:1px solid rgba(255,255,255,0.14)',
+    'pointer-events:auto', /* D9: no backdrop-filter over a live canvas (per-frame blur readback) */
     'transition:filter 150ms ease, background 150ms ease',
   ].join(';');
   home.onmouseenter = () => { home.style.background = 'rgba(30,26,44,0.7)'; };
@@ -32,8 +32,8 @@ export function createStoryHud({ onHome } = {}) {
     'max-width:min(94vw,560px)', 'padding:11px 20px', 'border-radius:14px', 'text-align:center',
     'font-family:"Segoe UI",system-ui,sans-serif', 'font-size:clamp(16px,2.4vw,21px)', 'font-weight:600',
     'letter-spacing:0.012em', 'color:#fff3d8', 'line-height:1.3',
-    'background:rgba(12,10,20,0.7)', 'border:1px solid rgba(242,184,128,0.42)',
-    'backdrop-filter:blur(3px)', 'pointer-events:none',
+    'background:rgba(12,10,20,0.82)', 'border:1px solid rgba(242,184,128,0.42)',
+    'pointer-events:none', /* D9: no backdrop-filter over a live canvas */
     'text-shadow:0 0 14px rgba(242,184,128,0.45), 0 1px 3px rgba(0,0,0,0.8)',
     'box-shadow:0 3px 18px rgba(0,0,0,0.35), 0 0 22px rgba(242,184,128,0.14)',
     'opacity:0', 'transition:opacity 350ms ease',

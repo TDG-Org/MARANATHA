@@ -120,14 +120,19 @@ export function createApp(container) {
   };
 
   startLoop((dt, now) => {
+    let updMs = 0, subMs = 0;
     if (current) {
       if (!paused) {
+        const t0 = performance.now();
         try {
           current.instance.update?.(dt, now);
         } catch (e) {
           if (updateErrors++ < 3) console.error('[app] update error', e);
         }
+        const t1 = performance.now();
         renderer.render(current.scene, camera);
+        subMs = performance.now() - t1;
+        updMs = t1 - t0;
       } else if (!pausedPainted) {
         // energy rule (D6): a paused game paints its frozen frame ONCE — the
         // GPU sleeps until resume or resize (DOM pause menu needs no canvas).
@@ -136,7 +141,10 @@ export function createApp(container) {
       }
     }
     if (!paused) quality.frame(dt);
-    hud.frame(dt);
+    // D9: the perf HUD splits SCRIPT time vs RENDER-SUBMIT time — if fps is
+    // low while both are tiny, the cost lives in the compositor/GPU (filters,
+    // resolution), not in the game code. That split diagnoses any device.
+    hud.frame(dt, updMs, subMs);
   });
 
   return app;

@@ -116,10 +116,18 @@ export class AmbientNPCs {
     cb?.();
   }
 
-  update(dt) {
+  update(dt, playerPos = null) {
     const s001 = dt * 0.001;
     for (const n of this.npcs) {
       const c = n.char;
+      // D9 anim LOD: background NPCs far from the player mix animation at 1/3
+      // rate. Frozen NPCs are CUTSCENE ACTORS — always full rate, wherever the
+      // player happens to be teleported.
+      if (n.frozen) c.animLOD = 0;
+      else if (playerPos) {
+        const dx = n.pos.x - playerPos.x, dz = n.pos.z - playerPos.z;
+        c.animLOD = dx * dx + dz * dz > 324 ? 2 : 0; // beyond 18u
+      }
       if (n.frozen) { c.update(dt); continue; } // beats can freeze/choreograph
 
       // gesture micro-action

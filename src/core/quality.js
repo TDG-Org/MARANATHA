@@ -92,18 +92,27 @@ export class DebugHud {
     if (this.el) this.el.style.display = this.enabled ? 'block' : 'none';
   }
 
-  frame(dtMs) {
+  frame(dtMs, updMs = 0, subMs = 0) {
     if (!this.enabled || !this.el) return;
     this.acc += dtMs;
     this.frames += 1;
+    this.updAcc = (this.updAcc || 0) + updMs;
+    this.subAcc = (this.subAcc || 0) + subMs;
     if (this.acc >= 500) {
       this.fps = Math.round((this.frames * 1000) / this.acc);
       this.ms = (this.acc / this.frames).toFixed(1);
+      // D9 diagnosis line: script (game update) vs submit (three.js draw
+      // calls) — the REST of a slow frame lives in the compositor/GPU.
+      const upd = (this.updAcc / this.frames).toFixed(1);
+      const sub = (this.subAcc / this.frames).toFixed(1);
       this.acc = 0;
       this.frames = 0;
+      this.updAcc = 0;
+      this.subAcc = 0;
       const info = this.renderer.info;
       this.el.textContent =
         `fps ${this.fps}  (${this.ms} ms)\n` +
+        `script ${upd} ms · submit ${sub} ms\n` +
         `draw calls ${info.render.calls}  tris ${info.render.triangles}\n` +
         `pixelRatio ${this.renderer.getPixelRatio().toFixed(2)}`;
     }

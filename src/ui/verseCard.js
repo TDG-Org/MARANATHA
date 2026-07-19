@@ -20,7 +20,7 @@ export function createVerseCard() {
     'width:min(88vw,600px)', 'padding:14px 22px', 'text-align:center',
     'max-height:calc(74vh - 42px)', 'overflow-y:auto',
     'background:rgba(12,10,20,0.68)', 'border:1px solid rgba(242,184,128,0.2)',
-    'border-radius:13px', 'backdrop-filter:blur(3px)', 'box-shadow:0 6px 24px rgba(0,0,0,0.35)',
+    'border-radius:13px', 'box-shadow:0 6px 24px rgba(0,0,0,0.35)', /* D9: no backdrop-filter over a live canvas */
     'opacity:0', 'transition:opacity 700ms ease, transform 700ms ease', 'pointer-events:none',
   ].join(';');
 

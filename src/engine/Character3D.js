@@ -436,6 +436,19 @@ export class Character3D {
     this.facing.rotation.y = this._yaw;
 
     if (this.mode === 'glb' && this.mixer) {
+      // D9 anim LOD: distant background characters advance their mixer in
+      // batched steps (set `animLOD = 2` → every 3rd frame with 3× dt) — the
+      // single biggest per-frame CPU cost in a 15-rig camp. Facing, mouth and
+      // grief bookkeeping stay per-frame; cutscene actors are never throttled
+      // (frozen NPCs get LOD 0 from AmbientNPCs).
+      const lod = this.animLOD | 0;
+      if (lod > 0 && (this._lodSkip | 0) < lod) {
+        this._lodSkip = (this._lodSkip | 0) + 1;
+        this._lodAcc = (this._lodAcc || 0) + dt;
+        return; // bones hold this frame; the next mixed step catches up
+      }
+      const mixStep = dt + (this._lodAcc || 0);
+      this._lodSkip = 0; this._lodAcc = 0;
       // grief pose bookkeeping — UNDO last frame's head offset BEFORE the
       // mixer runs (D9 head-spin fix: a clip that doesn't key the head bone —
       // Sit_Floor_Idle, some idles — never resets our addition, so a naive
@@ -444,7 +457,7 @@ export class Character3D {
         this._headBone.rotation.x -= this._headGriefOffset;
         this._headGriefOffset = 0;
       }
-      this.mixer.update(dt / 1000);
+      this.mixer.update(mixStep / 1000);
       // grief pose (post-mixer): bow the head deep + sob hitches in the
       // shoulders. Eased, so it settles in rather than snapping. The head
       // offset is recorded and removed again next frame — zero accumulation

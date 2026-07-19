@@ -38,7 +38,7 @@ export function createDialogue() {
     // box 13px off each side of a 375px phone.
     'box-sizing:border-box', 'z-index:45', 'width:min(96vw,640px)', 'padding:16px 20px 14px',
     `background:${NEUTRAL_STYLE.bg}`, `border:1px solid ${NEUTRAL_STYLE.border}`,
-    'border-radius:14px', 'box-shadow:0 12px 40px rgba(0,0,0,0.4)', 'backdrop-filter:blur(4px)',
+    'border-radius:14px', 'box-shadow:0 12px 40px rgba(0,0,0,0.4)', /* D9: no backdrop-filter over a live canvas */
     'color:#fdf6e3', 'font-family:"Segoe UI",system-ui,sans-serif',
     'opacity:0', 'transition:opacity 220ms ease, transform 220ms ease, background-color 260ms ease, border-color 260ms ease', 'pointer-events:none',
   ].join(';');

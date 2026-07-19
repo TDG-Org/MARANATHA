@@ -16,7 +16,7 @@ export function mountSkipButton() {
     'padding:clamp(8px,1.4vw,11px) clamp(13px,2vw,17px)', 'border-radius:22px', 'cursor:pointer',
     'font:600 clamp(12px,1.6vw,14px) "Segoe UI",system-ui,sans-serif',
     'color:#fdf6e3', 'background:rgba(16,14,26,0.72)',
-    'border:1px solid rgba(242,184,128,0.35)', 'backdrop-filter:blur(3px)',
+    'border:1px solid rgba(242,184,128,0.35)', /* D9: no backdrop-filter over a live canvas */
     'box-shadow:0 3px 14px rgba(0,0,0,0.3)', 'transition:filter 150ms ease',
   ].join(';');
   btn.onmouseenter = () => { btn.style.filter = 'brightness(1.12)'; };

@@ -130,11 +130,18 @@ export class Interactables {
     this._v.set(best._px, (best.y ?? 0) + (best.lift ?? 1.9), best._pz);
     this._v.project(this.camera);
     if (this._v.z > 1) { this.pill.style.display = 'none'; return; }
-    // Words match the input (ui-clarity law 7): key on desktop, tap on touch.
-    this._label.textContent = this._touch ? `${best.label}` : `[E]  ${best.label}`;
-    this.pill.style.left = `${(this._v.x * 0.5 + 0.5) * window.innerWidth}px`;
-    this.pill.style.top = `${(-this._v.y * 0.5 + 0.5) * window.innerHeight}px`;
-    this.pill.style.display = 'block';
+    // D9 perf: write the DOM only when something CHANGED (label / >0.5px move)
+    // — style writes every frame forced layout while a prompt was on screen.
+    const label = this._touch ? `${best.label}` : `[E]  ${best.label}`;
+    if (this._lastLabel !== label) { this._label.textContent = label; this._lastLabel = label; }
+    const x = (this._v.x * 0.5 + 0.5) * window.innerWidth;
+    const y = (-this._v.y * 0.5 + 0.5) * window.innerHeight;
+    if (Math.abs(x - (this._lastX ?? -9)) > 0.5 || Math.abs(y - (this._lastY ?? -9)) > 0.5) {
+      this._lastX = x; this._lastY = y;
+      this.pill.style.left = `${x.toFixed(1)}px`;
+      this.pill.style.top = `${y.toFixed(1)}px`;
+    }
+    if (this.pill.style.display !== 'block') this.pill.style.display = 'block';
   }
 
   dispose() {

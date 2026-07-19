@@ -422,7 +422,7 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
     director.setLead(controller.vel.x, controller.vel.y);
     director.frame(dt);
     ctx.sheep.update(dt, joseph.position, t);
-    npcs.update(dt);
+    npcs.update(dt, joseph.position);
     interactables.update();
     guide.update(dt, camera);
     nameTags.update(camera);

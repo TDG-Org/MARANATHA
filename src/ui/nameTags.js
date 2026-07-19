@@ -14,7 +14,8 @@ export function createNameTags() {
     const el = document.createElement('div');
     el.textContent = text;
     el.style.cssText = [
-      'position:absolute', 'transform-origin:center bottom', 'white-space:nowrap',
+      // pinned at 0,0 — ALL positioning happens in the composited transform
+      'position:absolute', 'left:0', 'top:0', 'transform-origin:center bottom', 'white-space:nowrap',
       'padding:3px 10px', 'border-radius:9px',
       'font:600 clamp(11px,1.5vw,13px) "Segoe UI",system-ui,sans-serif',
       'color:#fdf6e3', 'background:rgba(16,14,26,0.62)',
@@ -22,7 +23,10 @@ export function createNameTags() {
       'will-change:transform,left,top', 'transition:opacity 200ms ease',
     ].join(';');
     layer.append(el);
-    const tag = { character, el, maxDist };
+    // D9 perf: position via ONE composited transform (left/top writes forced a
+    // layout pass per tag per frame), and skip DOM writes entirely when the
+    // value hasn't meaningfully changed.
+    const tag = { character, el, maxDist, lx: -1, ly: -1, ls: -1, lo: '' };
     tags.push(tag);
     return tag;
   }
@@ -37,15 +41,20 @@ export function createNameTags() {
       p.y += (c.headHeight || 1.7) + 0.15;
       p.project(camera);
       const dist = camera.position.distanceTo(c.position);
-      if (p.z > 1 || dist > tag.maxDist) { tag.el.style.opacity = '0'; continue; }
+      if (p.z > 1 || dist > tag.maxDist) {
+        if (tag.lo !== '0') { tag.el.style.opacity = '0'; tag.lo = '0'; }
+        continue;
+      }
       const x = (p.x * 0.5 + 0.5) * W;
       const y = (-p.y * 0.5 + 0.5) * H;
       // Clamp on-screen scale so the tag is readable close AND far.
       const scale = clamp(1.15 - dist * 0.02, 0.62, 1.0);
-      tag.el.style.left = `${x}px`;
-      tag.el.style.top = `${y}px`;
-      tag.el.style.transform = `translate(-50%, -100%) scale(${scale.toFixed(3)})`;
-      tag.el.style.opacity = dist > tag.maxDist * 0.85 ? '0.45' : '1';
+      if (Math.abs(x - tag.lx) > 0.5 || Math.abs(y - tag.ly) > 0.5 || Math.abs(scale - tag.ls) > 0.01) {
+        tag.lx = x; tag.ly = y; tag.ls = scale;
+        tag.el.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) translate(-50%, -100%) scale(${scale.toFixed(3)})`;
+      }
+      const op = dist > tag.maxDist * 0.85 ? '0.45' : '1';
+      if (tag.lo !== op) { tag.el.style.opacity = op; tag.lo = op; }
     }
   }
 

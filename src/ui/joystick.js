@@ -16,7 +16,7 @@ export class Joystick {
       'position:fixed', posX, 'bottom:calc(22px + env(safe-area-inset-bottom))', 'z-index:35',
       'width:clamp(96px,26vw,132px)', 'height:clamp(96px,26vw,132px)', 'border-radius:50%',
       'touch-action:none', 'background:rgba(16,14,26,0.26)',
-      'border:1px solid rgba(255,255,255,0.16)', 'backdrop-filter:blur(2px)',
+      'border:1px solid rgba(255,255,255,0.16)', /* D9: no backdrop-filter over a live canvas */
     ].join(';');
     const thumb = document.createElement('div');
     thumb.style.cssText = [

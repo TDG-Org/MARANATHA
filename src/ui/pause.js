@@ -25,8 +25,8 @@ export function createPauseMenu({ app, isInputOn, setInput, onSettings, onHome }
     'z-index:40', 'width:46px', 'height:46px', 'border-radius:12px', 'cursor:pointer',
     'display:flex', 'align-items:center', 'justify-content:center',
     'font-size:19px', 'line-height:1', 'color:#fdf6e3',
-    'background:rgba(16,14,26,0.55)', 'border:1px solid rgba(255,255,255,0.14)',
-    'backdrop-filter:blur(3px)', 'transition:filter 150ms ease',
+    'background:rgba(16,14,26,0.72)', 'border:1px solid rgba(255,255,255,0.14)',
+    'transition:filter 150ms ease', /* D9: no backdrop-filter over a live canvas (the OVERLAY keeps its blur — the world is frozen behind it) */
   ].join(';');
   btn.onmouseenter = () => { btn.style.filter = 'brightness(1.15)'; };
   btn.onmouseleave = () => { btn.style.filter = 'none'; };

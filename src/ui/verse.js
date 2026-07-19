@@ -11,7 +11,7 @@ export function createVerseDisplay() {
     'position:fixed', 'left:50%', 'top:11%', 'transform:translateX(-50%) translateY(-8px)',
     'z-index:38', 'width:min(90vw,560px)', 'padding:13px 20px', 'text-align:center',
     'background:rgba(16,14,26,0.72)', 'border:1px solid rgba(242,184,128,0.16)',
-    'border-radius:13px', 'backdrop-filter:blur(3px)', 'box-shadow:0 6px 22px rgba(0,0,0,0.3)',
+    'border-radius:13px', 'box-shadow:0 6px 22px rgba(0,0,0,0.3)', /* D9: no backdrop-filter over a live canvas */
     'opacity:0', 'transition:opacity 600ms ease, transform 600ms ease', 'pointer-events:none',
   ].join(';');
 
