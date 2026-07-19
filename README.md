@@ -95,9 +95,16 @@ public/models/        rigged character GLBs (CC0 — see CREDITS.md)
 - The earlier Phaser 3 version (a full playable Creation story) is preserved on the
   [`phaser-archive`](https://github.com/TDG-Org/MARANATHA/tree/phaser-archive) branch.
 
-## ⚖️ Copyright & use
+<div align="center">
 
-**Copyright © 2026 Nate (TDG-Org). All rights reserved.**
+*Built with care. Every frame eases; nothing pops.*
+
+</div>
+
+<details>
+<summary><sub>© 2026</sub></summary>
+
+**Copyright © 2026 Christian Nate McIlvenny. All rights reserved.**
 
 This source is published so the game can be played and so others can read how it was built.
 It is **not** open source and carries **no license to reuse it**. Without prior written
@@ -118,8 +125,4 @@ Third-party assets keep their own licenses and are **not** covered by the notice
 
 Questions, or want permission to use something here? Open an issue on the repo.
 
-<div align="center">
-
-*Built with care. Every frame eases; nothing pops.*
-
-</div>
+</details>
