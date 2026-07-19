@@ -13,10 +13,12 @@ import { Graphics } from '../systems/Graphics.js';
 // The BASE GRADE scales with the Graphics preset (part of making presets
 // visually obvious): High = rich vibrance · Medium = standard · Low = none
 // (also the cheapest path — no filter on the canvas at all).
+// D8 grade push (Nate: "the whole game must FEEL 10x") — richer saturation
+// and a warmer, deeper read on both tiers; Low stays untouched for perf.
 const BASE = {
   low: '',
-  medium: 'saturate(1.18) contrast(1.05) brightness(1.03)',
-  high: 'saturate(1.32) contrast(1.09) brightness(1.05)',
+  medium: 'saturate(1.3) contrast(1.06) brightness(1.04)',
+  high: 'saturate(1.46) contrast(1.1) brightness(1.06)',
 };
 
 // Named filter looks, composed ON TOP of the base grade.

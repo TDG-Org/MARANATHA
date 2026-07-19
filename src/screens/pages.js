@@ -80,8 +80,8 @@ export function buildAbout({ scene, camera, app }) {
   const bg = backdrop(scene);
   const { card, cleanup } = pageShell({ app, camera, heading: 'About MARANATHA', passage: '“Maranatha — Come, Lord.”' });
   card.innerHTML = `
-    <p style="margin:0 0 14px;"><strong>MARANATHA</strong> is a biblically accurate browser game that
-    lets you <em>walk through the real events of the Bible</em> — so you come to know God, the people
+    <p style="margin:0 0 14px;"><strong>MARANATHA</strong> is a Bible game — a biblically accurate
+    browser world that lets you <em>walk through the Bible</em> — so you come to know God, the people
     of that time, and how His promise always comes true.</p>
     <p style="margin:0 0 14px;">It's built to be <strong>free and open to everyone</strong>: no login,
     no cost, no barrier. You just start playing. Every scene shows the real Scripture on screen and

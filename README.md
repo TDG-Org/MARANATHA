@@ -4,7 +4,7 @@
 
 ***“Maranatha — Come, Lord.”***
 
-A calm, **biblically‑accurate** browser game. Walk through the real events of the Bible —
+A Bible game — calm and **biblically‑accurate**. Walk through the Bible —
 in a hand‑drawn **HD‑2D** world with the painterly stillness of *Alto’s Adventure*.
 No install, no login.
 

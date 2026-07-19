@@ -26,8 +26,9 @@ export const MOODS = {
   pit: { skyTop: 0x3a3550, skyBottom: 0x6b5a63, fog: 0x6b6274, fogNear: 36, key: 0xa89dbc, keyI: 0.72, hemi: 0.46, hemiSky: 0x6b5a63, sun: [0, 12, 5], ridge: [0x8b8496, 0x776f84, 0x565064], tint: '#1c1830', tintA: 0.12 },
   // Jacob's tent interior: warm lamplight raking from one side.
   tentWarm: { skyTop: 0x4a4e8f, skyBottom: 0xe88d67, fog: 0x2e2118, fogNear: 11, key: 0xffc888, keyI: 1.0, hemi: 0.45, hemiSky: 0xe8a86a, sun: [-3.5, 5, 2.5], ridge: [0x8a6a7e, 0x74566e, 0x4e3a54], tint: '#2a1c10', tintA: 0.08 },
-  dusk: { skyTop: 0x434b9e, skyBottom: 0xf28a58, fog: 0xc08a70, fogNear: 38, key: 0xffb877, keyI: 0.82, hemi: 0.46, hemiSky: 0xf28a58, sun: [-15, 4.5, 3], ridge: [0xc08578, 0xa66a72, 0x6f4560], tint: '#3a2f55', tintA: 0.08 },
-  ominous: { skyTop: 0x3a3550, skyBottom: 0x6b5a63, fog: 0x5a5464, fogNear: 26, key: 0xcab39a, keyI: 0.66, hemi: 0.4, hemiSky: 0x6b5a63, sun: [-7, 8, 3], ridge: [0x77708a, 0x655e76, 0x484157], tint: '#251f33', tintA: 0.12 },
+  // D8 deeper-mood push: dusk burns a touch deeper, ominous presses harder.
+  dusk: { skyTop: 0x3c4499, skyBottom: 0xf4854e, fog: 0xc08a70, fogNear: 38, key: 0xffb877, keyI: 0.82, hemi: 0.46, hemiSky: 0xf4854e, sun: [-15, 4.5, 3], ridge: [0xc08578, 0xa66a72, 0x6f4560], tint: '#3a2f55', tintA: 0.09 },
+  ominous: { skyTop: 0x363050, skyBottom: 0x675663, fog: 0x585264, fogNear: 26, key: 0xcab39a, keyI: 0.66, hemi: 0.4, hemiSky: 0x675663, sun: [-7, 8, 3], ridge: [0x77708a, 0x655e76, 0x484157], tint: '#251f33', tintA: 0.14 },
   dream: { skyTop: 0x2b3a67, skyBottom: 0x9a8fd2, fog: 0x6f6ca4, fogNear: 34, key: 0xc8d4ff, keyI: 0.72, hemi: 0.5, hemiSky: 0x9a8fd2, sun: [7, 10, -7], ridge: [0x6a6fa6, 0x585d94, 0x3d426f], tint: '#1d2547', tintA: 0.1 },
   night: { skyTop: 0x0b1026, skyBottom: 0x2b3a67, fog: 0x1b2340, fogNear: 30, key: 0x9fb6e0, keyI: 0.5, hemi: 0.36, hemiSky: 0x2b3a67, sun: [11, 7, -6], ridge: [0x333c66, 0x2a3258, 0x1c2340], tint: '#060a18', tintA: 0.12 },
 };

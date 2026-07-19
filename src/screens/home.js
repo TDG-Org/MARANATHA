@@ -64,6 +64,49 @@ export function buildHome({ scene, camera, app }) {
   }
   const flockAnchor = new THREE.Vector3();
 
+  // D8 · a LIVING vista: painted clouds drifting slowly across the golden sky
+  // at two depths, and a few faint first-stars twinkling near the zenith —
+  // the storefront breathes, it doesn't sit still.
+  const cloudTex = canvasTexture(160, 96, (cctx) => {
+    const puff = (x, y, r, a) => {
+      const g = cctx.createRadialGradient(x, y, r * 0.2, x, y, r);
+      g.addColorStop(0, `rgba(255,244,224,${a})`);
+      g.addColorStop(1, 'rgba(255,244,224,0)');
+      cctx.fillStyle = g;
+      cctx.beginPath(); cctx.arc(x, y, r, 0, Math.PI * 2); cctx.fill();
+    };
+    puff(50, 58, 34, 0.75); puff(84, 50, 40, 0.8); puff(116, 60, 30, 0.7); puff(72, 66, 44, 0.55);
+  });
+  const clouds = [];
+  for (let i = 0; i < 5; i++) {
+    const far = i % 2 === 0;
+    const c = new THREE.Mesh(
+      new THREE.PlaneGeometry(far ? 26 : 16, far ? 12 : 8),
+      new THREE.MeshBasicMaterial({ map: cloudTex, transparent: true, opacity: far ? 0.5 : 0.68, depthWrite: false, fog: false }),
+    );
+    c.position.set(-70 + i * 34, 16 + (i % 3) * 5, far ? -150 : -110);
+    c.userData = { speed: far ? 0.35 : 0.6, span: 95 };
+    clouds.push(c); scene.add(c);
+  }
+  const starTex = canvasTexture(32, 32, (sctx) => {
+    const g = sctx.createRadialGradient(16, 16, 1, 16, 16, 14);
+    g.addColorStop(0, 'rgba(255,250,235,0.95)'); g.addColorStop(1, 'rgba(255,250,235,0)');
+    sctx.fillStyle = g; sctx.fillRect(0, 0, 32, 32);
+  });
+  const starGeo = new THREE.BufferGeometry();
+  const starN = 12;
+  {
+    const pts = new Float32Array(starN * 3);
+    for (let i = 0; i < starN; i++) {
+      pts[i * 3] = -90 + Math.random() * 180;
+      pts[i * 3 + 1] = 34 + Math.random() * 22;
+      pts[i * 3 + 2] = -170;
+    }
+    starGeo.setAttribute('position', new THREE.BufferAttribute(pts, 3));
+  }
+  const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({ map: starTex, color: 0xfff4da, size: 1.6, transparent: true, opacity: 0.5, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true, fog: false }));
+  scene.add(stars);
+
   // Gentle idle drift between two nearby poses (keeps the sun framed upper-left).
   const poseA = { pos: new THREE.Vector3(3.5, 5.2, 19), look: new THREE.Vector3(-1, 3.4, -26) };
   const poseB = { pos: new THREE.Vector3(-4.5, 4.4, 17.5), look: new THREE.Vector3(1.5, 3.0, -24) };
@@ -100,7 +143,7 @@ export function buildHome({ scene, camera, app }) {
   ].join(';');
 
   const subtitle = document.createElement('div');
-  subtitle.textContent = 'Walk through the real events of the Bible';
+  subtitle.textContent = 'A Bible game — walk through the Bible'; // D8 tagline (Nate)
   subtitle.style.cssText = [
     'margin-top:10px', 'font-size:clamp(12px,1.8vw,15px)', 'letter-spacing:0.16em',
     'opacity:0.72', 'text-shadow:0 1px 6px rgba(15,12,26,0.6)',
@@ -146,7 +189,8 @@ export function buildHome({ scene, camera, app }) {
   const mapStyle = document.createElement('style');
   mapStyle.textContent = `
     @keyframes mr-node-float { 0%,100% { transform: translate(-50%,-50%) translateY(0); } 50% { transform: translate(-50%,-50%) translateY(-5px); } }
-    @keyframes mr-node-pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(242,184,128,0.4), 0 6px 24px rgba(0,0,0,0.4); } 50% { box-shadow: 0 0 0 12px rgba(242,184,128,0), 0 6px 24px rgba(0,0,0,0.4); } }
+    @keyframes mr-node-pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(242,184,128,0.45), 0 0 26px 6px rgba(255,196,120,0.4), 0 6px 24px rgba(0,0,0,0.4); } 50% { box-shadow: 0 0 0 13px rgba(242,184,128,0), 0 0 38px 10px rgba(255,196,120,0.55), 0 6px 24px rgba(0,0,0,0.4); } }
+    @keyframes mr-seal-glow { 0%,100% { box-shadow: inset 0 0 14px rgba(0,0,0,0.45), 0 4px 14px rgba(0,0,0,0.3), 0 0 12px 2px rgba(242,184,128,0.12); } 50% { box-shadow: inset 0 0 14px rgba(0,0,0,0.45), 0 4px 14px rgba(0,0,0,0.3), 0 0 18px 4px rgba(242,184,128,0.22); } }
     @keyframes mr-path-shimmer { to { stroke-dashoffset: -64; } }
   `;
   document.head.append(mapStyle);
@@ -252,7 +296,7 @@ export function buildHome({ scene, camera, app }) {
         `border:2px solid ${big ? 'rgba(242,184,128,0.55)' : 'rgba(255,255,255,0.18)'}`,
         `box-shadow:${big ? '0 6px 24px rgba(0,0,0,0.4)' : 'inset 0 0 14px rgba(0,0,0,0.45), 0 4px 14px rgba(0,0,0,0.3)'}`,
         'backdrop-filter:blur(3px)',
-        `animation: mr-node-float ${5 + (x % 3)}s ease-in-out ${y % 4}s infinite${big ? ', mr-node-pulse 2.6s ease-in-out infinite' : ''}`,
+        `animation: mr-node-float ${5 + (x % 3)}s ease-in-out ${y % 4}s infinite, ${big ? 'mr-node-pulse 2.6s' : `mr-seal-glow ${3.4 + (x % 2)}s`} ease-in-out infinite`,
         'transition:border-color 200ms ease, filter 160ms ease',
       ].join(';');
       node.textContent = built ? (status === 'done' ? '✔' : '▶') : '🔒';
@@ -367,6 +411,13 @@ export function buildHome({ scene, camera, app }) {
       b.position.z += (flockAnchor.z + Math.sin(a) * 2.2 - b.position.z) * 0.03;
       b.scale.y = 0.72 + Math.abs(Math.sin(t * 6.5 + u.phase)) * 0.5; // wing beat
     }
+    // D8: the clouds drift, wrap, and breathe; the first stars twinkle
+    for (const c of clouds) {
+      c.position.x += c.userData.speed * dt * 0.001;
+      if (c.position.x > c.userData.span) c.position.x = -c.userData.span;
+      c.material.opacity += (Math.sin(t * 0.14 + c.position.z) * 0.0025);
+    }
+    stars.material.opacity = 0.34 + (Math.sin(t * 0.9) + Math.sin(t * 1.7)) * 0.09;
     const k = easeInOut((Math.sin(t * (Math.PI * 2 / 34)) + 1) / 2);
     camPos.lerpVectors(poseA.pos, poseB.pos, k);
     camPos.y += Math.sin(t * 0.8) * 0.06;
@@ -380,6 +431,7 @@ export function buildHome({ scene, camera, app }) {
     window.removeEventListener('pointerdown', startBeds);
     homeMusic?.stop(0.8);
     Audio.ambience({ wind: 0, birds: 0 });
+    cloudTex.dispose(); starTex.dispose();
     root.remove();
     gear.remove();
     links.remove();
