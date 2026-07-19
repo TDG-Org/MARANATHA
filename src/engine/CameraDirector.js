@@ -60,6 +60,8 @@ export class CameraDirector {
     this._blend = new THREE.Vector3();
     this._ray = new THREE.Raycaster();
     this._occ = new Map(); // occluder object -> target opacity (eased)
+    this._hits = [];       // reusable raycast target (no per-frame alloc)
+    this._goal = { ...this.defaults }; // reusable zone-merge scratch
 
     this.pose = null;
     this.poseK = 0;
@@ -105,8 +107,18 @@ export class CameraDirector {
     if (this.drift) this._driftT += dt;
 
     // 1) authored params: active zone (or defaults), damped for the glide.
+    // Zone params merge into a reusable scratch — a {...spread} here allocated
+    // an object EVERY frame the player stood inside any camera zone.
     const zn = this._zoneAt(this.target.x, this.target.z);
-    const goal = zn ? { ...this.defaults, ...zn } : this.defaults;
+    let goal = this.defaults;
+    if (zn) {
+      const g = this._goal, d = this.defaults;
+      g.yaw = zn.yaw ?? d.yaw;
+      g.distance = zn.distance ?? d.distance;
+      g.height = zn.height ?? d.height;
+      g.lookHeight = zn.lookHeight ?? d.lookHeight;
+      goal = g;
+    }
     const k = Math.min(dt * this.paramDamp, 1);
     // yaw eases the short way around
     let dy = goal.yaw - this.p.yaw;
@@ -148,10 +160,15 @@ export class CameraDirector {
       this._ray.set(this._desired, this._dir);
       this._ray.far = Math.max(0, len - 0.4); // don't count the hero's own body
       this._ray.camera = this.camera; // required when groups contain Sprites
-      const hits = this._ray.intersectObjects(this.occluders, true).filter((h) => !h.object.isSprite);
-      const nowHit = new Set(hits.map((h) => h.object));
-      for (const o of nowHit) this._occ.set(o, this.occludeOpacity);
-      for (const o of this._occ.keys()) if (!nowHit.has(o)) this._occ.set(o, 1);
+      // Allocation-free: assume every tracked occluder cleared, then re-mark
+      // whatever the ray still hits (same semantics as the old Set diff).
+      for (const o of this._occ.keys()) this._occ.set(o, 1);
+      this._hits.length = 0;
+      this._ray.intersectObjects(this.occluders, true, this._hits);
+      for (let i = 0; i < this._hits.length; i++) {
+        const o = this._hits[i].object;
+        if (!o.isSprite) this._occ.set(o, this.occludeOpacity);
+      }
     }
     // ease every tracked occluder toward its target opacity
     if (this._occ.size) {

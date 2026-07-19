@@ -126,6 +126,7 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
     return { light: L, phase: e.x * 1.7 };
   });
   let fireLevel = 0.35; // 0..1 base intensity scale (grading raises it at night)
+  let lastFireGain = -1; // change-gate for the crackle bed's proximity gain
 
   // --- presentation ---
   let disposed = false; // set on dispose(); async init + the story loop check it
@@ -432,15 +433,24 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
     guide.update(dt, camera);
     nameTags.update(camera);
 
-    // fire crackle proximity (live gain on the bed)
+    // fire crackle proximity — change-gated: an unconditional setGain queued
+    // ~60 WebAudio automation events/s on the bed all game long
     const fires = camp.fireEmitters;
     let nearest = Infinity;
     for (const f of fires) nearest = Math.min(nearest, Math.hypot(joseph.position.x - f.x, joseph.position.z - f.z));
-    beds.fire.setGain(Math.max(0, 1 - nearest / 7));
+    const fireGain = Math.max(0, 1 - nearest / 7);
+    if (Math.abs(fireGain - lastFireGain) > 0.005) {
+      lastFireGain = fireGain;
+      beds.fire.setGain(fireGain);
+    }
   }
 
   function dispose() {
     disposed = true; // stops the story loop, zombie async init, sound/finish
+    // the betrayal exchange's camera orbit is the one UNBOUNDED scripted loop —
+    // exiting mid-dialogue would leave it ticking forever (its stop hook lives
+    // on ctx; calling it again after a normal open is a harmless no-op)
+    ctx.__betrayalOrbitStop?.();
     // (canvas filter/vignette live in app.postFX now — app resets on navigate)
     renderer.domElement.removeEventListener('contextmenu', onCanvasContextMenu);
     Object.values(beds).forEach((b) => b.stop(0.6));

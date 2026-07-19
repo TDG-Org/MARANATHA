@@ -25,7 +25,10 @@ export class Interactables {
     this.pill = document.createElement('button');
     this.pill.type = 'button';
     this.pill.style.cssText = [
-      'position:fixed', 'z-index:36', 'transform:translate(-50%,-100%)',
+      // pinned at 0,0 — ALL positioning rides the composited transform (a
+      // left/top write forces a layout pass per frame; nameTags pattern)
+      'position:fixed', 'left:0', 'top:0', 'z-index:36', 'will-change:transform',
+      'transform:translate3d(-9999px,-9999px,0) translate(-50%,-100%)',
       'padding:clamp(8px,1.3vw,10px) clamp(13px,1.9vw,16px)', 'border-radius:16px', 'cursor:pointer',
       'font:600 clamp(12.5px,1.7vw,14.5px) "Segoe UI",system-ui,sans-serif', 'white-space:nowrap',
       'color:#241f38', 'background:rgba(248,214,166,0.97)', 'border:none',
@@ -118,10 +121,9 @@ export class Interactables {
     let bestD = Infinity;
     for (const p of this.prompts) {
       if (!p.when()) continue;
-      const px = p.getPos ? p.getPos().x : p.x;
-      const pz = p.getPos ? p.getPos().z : p.z;
-      const d = Math.hypot(px - pp.x, pz - pp.z);
-      if (d < p.r && d < bestD) { bestD = d; best = p; best._px = px; best._pz = pz; }
+      const at = p.getPos ? p.getPos() : p; // one call, not two
+      const d = Math.hypot(at.x - pp.x, at.z - pp.z);
+      if (d < p.r && d < bestD) { bestD = d; best = p; best._px = at.x; best._pz = at.z; }
     }
     this._active = best;
     if (!best) { this.pill.style.display = 'none'; return; }
@@ -138,8 +140,7 @@ export class Interactables {
     const y = (-this._v.y * 0.5 + 0.5) * window.innerHeight;
     if (Math.abs(x - (this._lastX ?? -9)) > 0.5 || Math.abs(y - (this._lastY ?? -9)) > 0.5) {
       this._lastX = x; this._lastY = y;
-      this.pill.style.left = `${x.toFixed(1)}px`;
-      this.pill.style.top = `${y.toFixed(1)}px`;
+      this.pill.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) translate(-50%, -100%)`;
     }
     if (this.pill.style.display !== 'block') this.pill.style.display = 'block';
   }
