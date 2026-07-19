@@ -12,7 +12,7 @@ import { mkdir, rename, rm, stat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { MsEdgeTTS, OUTPUT_FORMAT } from 'msedge-tts';
-import { WEB } from '../src/data/versesWEB.js';
+import { WEB, NARRATION } from '../src/data/versesWEB.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const VO_DIR = join(ROOT, 'public', 'audio', 'vo');
@@ -36,6 +36,7 @@ const speakable = (text) => text
 // vo line-id) + the two non-verse lines the narrator can speak.
 const LINES = [
   ...Object.values(WEB).map((v) => ({ id: v.vo, text: speakable(v.text) })),
+  ...Object.values(NARRATION).map((v) => ({ id: v.vo, text: speakable(v.text) })), // D8 non-verse narration
   { id: 'ui/voice-test', text: 'The Lord was with Joseph.' },           // settings slider test
   { id: 'playground/demo/line-1', text: 'In the beginning, God created the heavens and the earth.' }, // Gen 1:1 (WEB) — bench demo
 ];

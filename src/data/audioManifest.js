@@ -77,6 +77,7 @@ export const AUDIO_MANIFEST = [
   { key: 'vo/joseph/1/verse-37-10', bus: 'voice', loop: false, available: true, purpose: 'narrate Gen 37:10 (short)', scene: 'joseph3d-1' },
   { key: 'vo/joseph/1/verse-37-11', bus: 'voice', loop: false, available: true, purpose: 'narrate Gen 37:11', scene: 'joseph3d-1' },
   { key: 'vo/joseph/1/verse-37-24', bus: 'voice', loop: false, available: true, purpose: 'narrate Gen 37:24 (cold open)', scene: 'joseph3d-1' },
+  { key: 'vo/joseph/1/narr-dream-begins', bus: 'voice', loop: false, available: true, purpose: 'D8 non-verse narration: present-moment dream opener (no card)', scene: 'joseph3d-1' },
   { key: 'vo/ui/voice-test', bus: 'voice', loop: false, available: true, purpose: 'settings Narrator-slider sample line', scene: 'ui' },
   { key: 'vo/playground/demo/line-1', bus: 'voice', loop: false, available: true, purpose: 'playground narrator test line (Gen 1:1)', scene: 'playground' },
 ];

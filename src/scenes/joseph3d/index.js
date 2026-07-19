@@ -26,7 +26,7 @@ import { SheepFlock } from './sheep.js';
 import { buildNamed, buildGenericBrother, buildWorker, AmbientNPCs } from './cast.js';
 import { createBeats } from './beats.js';
 import { Narrator } from '../../systems/Narrator.js';
-import { WEB } from '../../data/versesWEB.js';
+import { WEB, NARRATION } from '../../data/versesWEB.js';
 
 // JOSEPH — SCENE 1 in full 3D (Genesis 37:1–11): the GOLD TEMPLATE. A living
 // golden-hour camp near Hebron, real rigged characters, authored camera,
@@ -490,7 +490,7 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
     // the loading screen holds for BOTH the rigs and the full narration —
     // every verse mp3 decodes up front, so the one voice can never drop to
     // TTS from a mid-scene network blip (D7).
-    whenReady: Promise.all([castReady, Narrator.preload(Object.values(WEB).map((v) => v.vo))]),
+    whenReady: Promise.all([castReady, Narrator.preload([...Object.values(WEB), ...Object.values(NARRATION)].map((v) => v.vo))]),
     debug: {
       get joseph() { return joseph; }, get controller() { return controller; },
       get ready() { return ready; }, get storyDone() { return storyDone; },
@@ -696,15 +696,18 @@ function buildDreamField() {
   const stalkGeo = mergeGeometries([cardA, cardB]);
   // ROOTED (D6): instances in FIELD-LOCAL coords, the mesh at the field center
   // (world-coord instances once swayed around a 62u-distant pivot = bouncing).
+  // D8: the BACKGROUND wheat sits LOW in the ground and cool-dimmed — only the
+  // seven interactive sheaves stand tall and golden, so what to touch is
+  // instantly obvious.
   const wheat = new THREE.InstancedMesh(
     stalkGeo,
-    new THREE.MeshBasicMaterial({ map: wheatCardTex, alphaTest: 0.4, side: THREE.DoubleSide, fog: true }),
+    new THREE.MeshBasicMaterial({ map: wheatCardTex, color: 0x8f96b4, alphaTest: 0.4, side: THREE.DoubleSide, fog: true }),
     wheatSpots.length,
   );
   const wd = new THREE.Object3D();
   wheatSpots.forEach((s, i) => {
-    wd.position.set(s[0], 0, s[1]); // local to the field center
-    wd.scale.set(s[2], s[2], s[2]);
+    wd.position.set(s[0], -0.12, s[1]); // local to the field center, feet sunk
+    wd.scale.set(s[2] * 0.62, s[2] * 0.42, s[2] * 0.62); // a LOW, hushed field
     wd.rotation.set(0, s[3], 0);
     wd.updateMatrix();
     wheat.setMatrixAt(i, wd.matrix);
@@ -755,10 +758,12 @@ function buildDreamField() {
   const sheafCardGeo = mergeGeometries([sheafGeoA, sheafGeoB]);
   const mkSheaf = (x, z, scale = 1) => {
     const g = new THREE.Group();
-    const card = new THREE.Mesh(sheafCardGeo, new THREE.MeshBasicMaterial({ map: sheafCardTex, alphaTest: 0.4, side: THREE.DoubleSide, fog: true }));
+    // D8: the interactive sheaves glow WARM and stand tall over the low cool
+    // field — the one thing in the frame that says "walk to me".
+    const card = new THREE.Mesh(sheafCardGeo, new THREE.MeshBasicMaterial({ map: sheafCardTex, color: 0xffedbe, alphaTest: 0.4, side: THREE.DoubleSide, fog: true }));
     g.add(card);
     g.position.set(x, 0, z);
-    g.scale.setScalar(scale);
+    g.scale.setScalar(scale * 1.12);
     return g;
   };
   const center = mkSheaf(FIELD.x, FIELD.z, 1.25);

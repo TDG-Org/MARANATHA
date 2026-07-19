@@ -1,5 +1,6 @@
-import { WEB } from '../../data/versesWEB.js';
+import { WEB, NARRATION } from '../../data/versesWEB.js';
 import { pausableWait } from '../../engine/Sequencer.js';
+import { Narrator } from '../../systems/Narrator.js';
 import { NAME_COLOR } from './cast.js';
 
 // SCENE 1 — the story as DATA + gates (script-writing + storyteller +
@@ -651,8 +652,14 @@ export function createBeats(ctx) {
       // LONG blur-to-clear — the field swims into focus like waking inside it.
       { t: 'fade', on: false, ms: 600 },
       { t: 'fn', fn: async () => { ctx.postFX.eyeOpen(3400); await wait(2600); } },
-      { t: 'verse', verse: WEB.gen_37_5 },
-      { t: 'verseHide' },
+      // D8: PRESENT-moment narration ONLY — spoken, no verse card, no
+      // foreshadowing. (Gen 37:5's card now lands at the campfire telling,
+      // where the telling actually happens.)
+      { t: 'fn', fn: async () => {
+        const line = Narrator.speak(NARRATION.dream_begins.text, NARRATION.dream_begins.vo);
+        await ctx.cinema.titleCard({ heading: 'That night', sub: 'Joseph began to dream', holdMs: 2400 });
+        await line;
+      } },
       { t: 'letterbox', on: false },
       { t: 'objective', text: 'Walk to each bundle of wheat.' },
     ]);
@@ -710,25 +717,55 @@ export function createBeats(ctx) {
     ctx.joseph.root.position.y = SY;           // stand on the peak (input is off)
     ctx.joseph.turnToward(0, -1);              // face north, into the sky
     ctx.joseph.play('idle');
-    // THE FINALE (D7 v2): a short reveal on the sky, then ONE camera move down
-    // into THE shot — behind Joseph, tilted UP, his top half dark against the
-    // night — and it HOLDS there while the sun, the moon and the eleven stars
-    // come down SLOWLY in front of him, swelling as they near, and bow. Only
-    // sky and the boy. Then the verse, the hold, the fade.
-    ctx.camera.cinematicMoveTo({ angle: Math.PI, target: { x: D.FIELD.x, z: D.FIELD.z + 2 }, distance: 4.2, height: SY + 2.5, lookHeight: SY + 15, duration: 1 });
+    // THE FINALE (D8 v3 — the exact five shots): 1) the camera looks STRAIGHT
+    // UP at the sky, Joseph nowhere in frame · 2) sun, moon and eleven stars
+    // descend, bowing, and the camera slowly FOLLOWS them down · 3) the
+    // tilt-down REVEALS Joseph standing on the peak — a dark silhouette
+    // against the bright bodies · 4) the camera pulls slowly BACKWARDS behind
+    // him as he watches the glowing sky · 5) fade → wake in the tent, morning.
+    const CAMX = D.FIELD.x, CAMY = SY + 1.45, CAMZ0 = D.FIELD.z + 2.4;
+    // shot 1 pose: from just south of the boy, pitched steeply UP — only night
+    // sky, the sun/moon glows kindling at the frame's lower edge (Joseph
+    // projects ~3.7 NDC below frame — verified out of the shot at fov 46)
+    ctx.camera.cinematicMoveTo({ angle: Math.PI, target: { x: CAMX, y: SY, z: D.FIELD.z - 3.4 }, distance: 5.8, height: 1.45, lookHeight: 11, duration: 1 });
     ctx.camera.snap();
     await seq([
-      // (a) reveal ON THE SKY — deep night, stars kindling
+      // (1) reveal ON THE SKY — deep night, the bodies kindling far above
       { t: 'fade', on: false, ms: 1200 },
-      { t: 'fn', fn: async () => { D.showSky(1); ctx.sound('stinger.dream_enter'); await wait(800); } },
-      // (b) the slow descent begins…
-      { t: 'fn', fn: () => { D.descendSky(); } },
-      // (c) …one move down INTO the hold: behind him, facing up, top half in
-      // the lower third — the camera "follows them down" and then stays.
-      { t: 'cam', angle: Math.PI, target: { x: D.FIELD.x, z: D.FIELD.z + 1.15 }, distance: 2.9, height: SY + 1.45, lookHeight: SY + 2.15, duration: 3200 },
-      // (d) THE HOLD — they keep coming down, slow and enormous, then bow
-      { t: 'wait', ms: 1600 },
-      { t: 'fn', fn: async () => { D.bowSky(); ctx.sound('sfx.sheaf_bow'); await wait(5400); } },
+      { t: 'fn', fn: async () => { D.showSky(1); ctx.sound('stinger.dream_enter'); await wait(1400); } },
+      // (2) the descent begins — the look glides down WITH the bodies (the
+      // camera's own pose is driven directly: position pinned, gaze tracking
+      // the live sun/moon centroid, floored at the reveal line)
+      { t: 'fn', fn: async () => {
+        D.descendSky();
+        const pose = () => ctx.camera.pose;
+        const D2 = 9000; let e = 0;
+        while (e < D2) { await wait(60); e += 60;
+          const p = pose(); if (!p) break;
+          const cy = (D.sun.position.y + D.moon.position.y) / 2;
+          const cz = (D.sun.position.z + D.moon.position.z) / 2;
+          p.pos.set(CAMX, CAMY, CAMZ0);
+          p.look.x += (CAMX - p.look.x) * 0.05;
+          p.look.y += (Math.max(cy, SY + 1.9) - p.look.y) * 0.045;
+          p.look.z += (cz - p.look.z) * 0.05;
+        }
+      } },
+      // (3→4) they bow before him — and the camera, now framing the boy's dark
+      // shape against them, pulls SLOWLY backwards behind him while he watches
+      { t: 'fn', fn: async () => {
+        D.bowSky(); ctx.sound('sfx.sheaf_bow');
+        const D3 = 7200; let e = 0;
+        while (e < D3) { await wait(60); e += 60; const k = Math.min(1, e / D3);
+          const ke = k * k * (3 - 2 * k);
+          const p = ctx.camera.pose; if (!p) break;
+          const cy = (D.sun.position.y + D.moon.position.y) / 2;
+          const cz = (D.sun.position.z + D.moon.position.z) / 2;
+          p.pos.set(CAMX, CAMY + ke * 0.35, CAMZ0 + ke * 2.1); // the slow retreat
+          p.look.x += (CAMX - p.look.x) * 0.05;
+          p.look.y += (Math.max(cy, SY + 1.9) - p.look.y) * 0.045;
+          p.look.z += (cz - p.look.z) * 0.05;
+        }
+      } },
       { t: 'verse', verse: WEB.gen_37_9 },
       { t: 'verseHide' },
       { t: 'wait', ms: 900 },

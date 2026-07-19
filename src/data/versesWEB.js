@@ -73,6 +73,19 @@ export const WEB = {
 // standalone card — a presentation-casing change only, no wording change.
 
 // ─────────────────────────────────────────────────────────────────────────────
+// NARRATION (D8) — non-scripture narrator lines. These are NEVER shown on a
+// verse card (no ref, no quote styling); they are spoken-only storytelling in
+// the same baked voice. Kept apart from WEB so the scripture table stays pure.
+export const NARRATION = {
+  dream_begins: {
+    vo: 'joseph/1/narr-dream-begins',
+    // present-moment only (D8): the dream's opening may not foreshadow the
+    // telling — Gen 37:5's card now lands at the campfire, where it happens.
+    text: 'That night, Joseph began to dream.',
+  },
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // SCENE 1 LINE ROUTING (D4 Task 8) — the VO manifest's source of truth for who
 // carries each beat. Rule: CUTSCENES → the NARRATOR (voiced verse cards) carries
 // the story; GAMEPLAY → CHARACTERS speak (text popups, unvoiced) to guide the
