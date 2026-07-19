@@ -27,9 +27,12 @@ export function createBeats(ctx) {
   // Dialogue cinematography: an over-the-shoulder SHOT computed from LIVE
   // positions — camera behind the listener's shoulder, speaker favored on the
   // near third. Alternate `side` sign between cuts to swap shoulders.
+  // D9 framing law (Nate): these characters have BIG heads — every dialogue
+  // camera keeps more air (dist ≥3.0, raised, looking slightly down) so a
+  // skull can never fill the lens or turn its back to it.
   const posOf = (who) => (who === 'joseph' ? ctx.joseph.position : ctx.cast[who].pos);
   const charOf = (who) => (who === 'joseph' ? ctx.joseph : ctx.cast[who].char);
-  const shot = (speaker, listener, { side = 0.42, dist = 2.9, height = 1.55, look = 1.3, ms = 850 } = {}) => ({
+  const shot = (speaker, listener, { side = 0.42, dist = 3.2, height = 1.75, look = 1.25, ms = 850 } = {}) => ({
     t: 'fn',
     fn: async () => {
       const sp = posOf(speaker), li = posOf(listener);
@@ -47,6 +50,23 @@ export function createBeats(ctx) {
       await wait(ms * 0.6); // the cut lands as the line starts
     },
   });
+
+  // D9: the TWO-SHOT, computed from LIVE positions at call time — side-on to
+  // the pair's axis, raised and looking a touch down, distance scaled to the
+  // separation (never under 3.0). Call it AGAIN after anyone moves: the coat
+  // gift used a pre-walk framing, and Jacob's walk put the back of his head
+  // square in the lens.
+  const twoShot = (aWho, bWho, { ms = 1200, distMin = 3.0, height = 2.05, look = 1.05 } = {}) => {
+    const a = posOf(aWho), b = posOf(bWho);
+    const axis = Math.atan2(b.x - a.x, b.z - a.z);
+    const sep = Math.hypot(b.x - a.x, b.z - a.z);
+    ctx.camera.cinematicMoveTo({
+      angle: axis - Math.PI / 2,
+      target: { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2 },
+      distance: Math.max(distMin, sep * 1.35 + 1.6),
+      height, lookHeight: look, duration: ms,
+    });
+  };
 
   // ---------- beat 0 · 🕳️ COLD OPEN v4 (D8): the 7 exact shots ---------------
   // 1 march · 2 the edge (clickable betrayal) · 3 the throw · 4 slow-mo fall,
@@ -430,20 +450,10 @@ export function createBeats(ctx) {
       shot('jacob', 'joseph', { side: 0.38, dist: 2.3 }),
       { t: 'say', who: 'Jacob', text: 'I had this made for you. Let all of Hebron see it.', color: J.Jacob },
       { t: 'dialogueHide' },
-      // THE GIFT (D8 restaged again — Nate: the camera must hold a SIDE angle
-      // so we watch FACES and the coat going on, never the back of Joseph's
-      // head). The two-shot sits perpendicular to the father–son axis: both in
-      // profile, Jacob walks the coat across the frame, it settles on, and
-      // Joseph slowly TURNS in place — every side of it shown.
-      { t: 'fn', fn: () => {
-        const jp = ctx.joseph.position;
-        const axis = Math.atan2(jp.x - jac.pos.x, jp.z - jac.pos.z); // father → son
-        ctx.camera.cinematicMoveTo({
-          angle: axis - Math.PI / 2, // exactly side-on to the pair
-          target: { x: (jp.x + jac.pos.x) / 2, z: (jp.z + jac.pos.z) / 2 },
-          distance: 3.3, height: 1.6, lookHeight: 1.0, duration: 1500,
-        });
-      } },
+      // THE GIFT (D9 framing law): a SIDE two-shot from LIVE positions —
+      // and recomputed AFTER Jacob walks over (the old pre-walk framing left
+      // the back of his head square in the lens once he'd crossed the room).
+      { t: 'fn', fn: () => twoShot('jacob', 'joseph', { ms: 1500 }) },
       { t: 'wait', ms: 1500 },
       { t: 'fn', fn: async () => {
         // Jacob carries it to his son — a real per-frame walk (D8: the old
@@ -457,6 +467,7 @@ export function createBeats(ctx) {
         await ctx.npcs.sendTo(jac, tx, tz, { speed: 0.8 });
         ctx.npcs.freeze(jac, true);
         jac.char.turnToward(dx, dz);
+        twoShot('jacob', 'joseph', { ms: 900 }); // re-frame the CLOSED-UP pair
         jac.char.play('talk'); // the offering gesture
         await wait(420);
         ctx.joseph.setCoat(true);       // the tunic settles over his shoulders
