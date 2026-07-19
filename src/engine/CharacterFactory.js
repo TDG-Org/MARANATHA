@@ -56,6 +56,7 @@ export class CharacterFactory {
       if (!base) continue;
       base.scene.traverse((o) => {
         if (!o.isMesh && !o.isSkinnedMesh) return;
+        if (o.isSkinnedMesh) o.skeleton?.dispose?.(); // bone DataTexture (idempotent)
         o.geometry?.dispose?.();
         const mats = Array.isArray(o.material) ? o.material : [o.material];
         mats.forEach((m) => {

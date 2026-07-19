@@ -517,6 +517,14 @@ export class Character3D {
 
   dispose() {
     this.mixer?.stopAllAction();
+    // The classic SkinnedMesh leak: each skeleton uploads its bone matrices as
+    // a GPU DataTexture that ONLY Skeleton.dispose() frees — no geometry or
+    // material path ever reaches it (found: ~2 per rigged character leaked per
+    // scene entry, +30 textures per Joseph cycle). Dedupe: the merged body
+    // shares a part's skeleton.
+    const skeletons = new Set();
+    this.rig?.traverse?.((o) => { if (o.isSkinnedMesh && o.skeleton) skeletons.add(o.skeleton); });
+    skeletons.forEach((s) => s.dispose?.());
     // Only per-instance geometry is freed here; the factory owns the shared
     // base GLB geometry (see CharacterFactory.dispose).
     this._ownedGeo.forEach((g) => g.dispose());
