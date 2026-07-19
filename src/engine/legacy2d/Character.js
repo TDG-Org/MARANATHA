@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { blobShadow, clamp } from './world.js';
+import { blobShadow, clamp } from '../world.js';
 
 // A flat HD-2D character: a yaw-billboarded canvas sprite that lives in the 3D
 // world, animated by a multi-frame stride atlas PLUS procedural bob / sway /

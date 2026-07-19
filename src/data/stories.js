@@ -5,7 +5,7 @@ export const STORIES = [
     id: 'creation',
     title: 'Creation',
     passage: 'Genesis 1–2',
-    sceneKey: 'Creation',
+    sceneKey: null, // the Phaser-era Creation scene lives on `phaser-archive`; rebuild pending
     blurb: 'In the beginning… Watch God speak the world into being — and take part as His hands: lift the sky, raise the land, light the stars.',
   },
   {

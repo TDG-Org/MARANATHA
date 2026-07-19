@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { clamp } from './world.js';
-import { Audio } from '../systems/AudioSystem.js';
+import { clamp } from '../world.js';
+import { Audio } from '../../systems/AudioSystem.js';
 
 // Free movement for the player: WASD / arrow keys (camera-relative), tap /
 // click to move, and an on-screen joystick on touch devices. Velocity ramps in

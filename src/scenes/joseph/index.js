@@ -7,10 +7,10 @@ import { confirmModal } from '../../ui/modal.js';
 import { createDialogue } from '../../ui/dialogue.js';
 import { createVerseDisplay } from '../../ui/verse.js';
 import { makeJoseph, giveCoat, makeJacob, makeReuben, makeJudah, makeBrother, makeSheep } from './cast.js';
-import { PlayerController } from '../../engine/PlayerController.js';
-import { FollowCamera } from '../../engine/FollowCamera.js';
+import { PlayerController } from '../../engine/legacy2d/PlayerController.js';
+import { FollowCamera } from '../../engine/legacy2d/FollowCamera.js';
 import { Guidance } from '../../engine/Guidance.js';
-import { Interaction } from '../../engine/Interaction.js';
+import { Interaction } from '../../engine/legacy2d/Interaction.js';
 
 // JOSEPH — SCENE 1: The Coat & the Dreams (Genesis 37:1-11).
 // The player walks the warm camp, receives the robe of many colors from Jacob,

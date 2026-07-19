@@ -1,4 +1,4 @@
-import { Character } from '../../engine/Character.js';
+import { Character } from '../../engine/legacy2d/Character.js';
 
 // The Joseph cast, drawn procedurally (character-design skill): distinct
 // silhouette + one or two signature colours per named person, plus a stride

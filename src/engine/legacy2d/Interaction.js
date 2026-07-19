@@ -1,4 +1,4 @@
-import { Audio } from '../systems/AudioSystem.js';
+import { Audio } from '../../systems/AudioSystem.js';
 
 // NPC interaction: NPCs stand in the world; when the player comes near, a
 // "Talk to <name>" prompt appears above them (E key or tap), and on the very

@@ -1,3 +1,5 @@
+// LEGACY (2D era): displayed only by #legacy-joseph via ui/verse.js — the live
+// game reads WEB from versesWEB.js. Retires with engine/legacy2d/.
 // Berean Standard Bible (BSB) — public domain.
 // Every string below was verified verbatim against the published BSB text
 // (biblehub.com/bsb) on 2026-07-06. Do NOT edit wording by hand — reverify.

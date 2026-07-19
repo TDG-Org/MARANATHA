@@ -1,6 +1,8 @@
 import { Narrator } from '../systems/Narrator.js';
 import { VERSES } from '../data/verses.js';
 
+// LEGACY (2D era): used only by #legacy-joseph — the live 3D scenes use
+// ui/verseCard.js + data/versesWEB.js. Retires with engine/legacy2d/.
 // The Scripture panel — every beat shows its real BSB verse, subtle but always
 // legible (≥4.5:1), narrated fully before the beat advances, tap-to-skip after
 // a moment (scripture-accuracy + game-scene skills). One source of truth for

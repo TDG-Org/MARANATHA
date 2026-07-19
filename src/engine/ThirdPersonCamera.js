@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { clamp, lerp, easeInOut } from './world.js';
 
+// NOTE: used only by #playground today — story scenes frame through
+// CameraDirector (authored zones + occluder fade) instead.
 // True 3rd-person camera (cinematography skill): sits behind + above the
 // shoulder, trails the move direction with smooth-damped position AND yaw, and
 // leads the look slightly in the move direction. Dramatic beats ease to a
