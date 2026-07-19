@@ -53,6 +53,18 @@ export class PlayerController3D {
 
   setEnabled(on) { this.enabled = on; if (!on) this._clearInput(); }
 
+  // D8: cutscene walking WITHOUT the chop. Beats used to move the hero in
+  // 50ms-quantized jumps (pausableWait's polling floor) — visible stutter on
+  // slow walks. This drives him through the controller's own per-frame eased
+  // integration + collision + real-velocity animation instead. Resolves on
+  // arrival. Input is ignored while a script move is active.
+  scriptMoveTo(x, z, speed = 1.6) {
+    this._script?.resolve?.(); // a newer order supersedes an unfinished one
+    return new Promise((resolve) => { this._script = { x, z, speed, resolve }; });
+  }
+
+  cancelScriptMove() { this._script?.resolve?.(); this._script = null; }
+
   _cameraBasis() {
     this.camera.getWorldDirection(this._fwd);
     this._fwd.y = 0;
@@ -64,7 +76,23 @@ export class PlayerController3D {
     const pos = this.character.position;
     let ix = 0, iz = 0, running = false;
 
-    if (this.enabled) {
+    // scripted walk: steer straight at the target through the normal easing/
+    // collision path below (walkSpeed is temporarily the script's speed).
+    let scriptSpeed = null;
+    if (this._script) {
+      const s = this._script;
+      const dx = s.x - pos.x, dz = s.z - pos.z;
+      const d = Math.hypot(dx, dz);
+      if (d < 0.16) {
+        s.resolve();
+        this._script = null;
+      } else {
+        this._moveDir.set(dx / d, 0, dz / d);
+        scriptSpeed = s.speed;
+      }
+    }
+
+    if (!scriptSpeed && this.enabled) {
       this._cameraBasis();
       const k = this.keys;
       if (k.has('w') || k.has('arrowup')) iz += 1;
@@ -79,13 +107,18 @@ export class PlayerController3D {
     }
 
     let wantX = 0, wantZ = 0;
-    this._moveDir.set(0, 0, 0);
-    if (ix !== 0 || iz !== 0) {
-      this._moveDir.addScaledVector(this._fwd, iz).addScaledVector(this._right, ix);
-      if (this._moveDir.lengthSq() > 1) this._moveDir.normalize();
-      const spd = running ? this.runSpeed : this.walkSpeed;
-      wantX = this._moveDir.x * spd;
-      wantZ = this._moveDir.z * spd;
+    if (scriptSpeed) {
+      wantX = this._moveDir.x * scriptSpeed;
+      wantZ = this._moveDir.z * scriptSpeed;
+    } else {
+      this._moveDir.set(0, 0, 0);
+      if (ix !== 0 || iz !== 0) {
+        this._moveDir.addScaledVector(this._fwd, iz).addScaledVector(this._right, ix);
+        if (this._moveDir.lengthSq() > 1) this._moveDir.normalize();
+        const spd = running ? this.runSpeed : this.walkSpeed;
+        wantX = this._moveDir.x * spd;
+        wantZ = this._moveDir.z * spd;
+      }
     }
 
     // Ease velocity, integrate, resolve collision (smooth slide), clamp.

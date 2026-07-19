@@ -417,18 +417,17 @@ export function createBeats(ctx) {
       } },
       { t: 'wait', ms: 1500 },
       { t: 'fn', fn: async () => {
-        // Jacob carries it to his son — two slow steps
+        // Jacob carries it to his son — a real per-frame walk (D8: the old
+        // timer-stepped loop was the same quantized shuffle as the lone walk)
         const jp = ctx.joseph.position;
         const dx = jp.x - jac.pos.x, dz = jp.z - jac.pos.z;
         const d0 = Math.hypot(dx, dz);
-        const steps = Math.max(1, Math.round((d0 - 0.95) / 0.05));
-        jac.char.play('walk');
-        for (let i = 0; i < steps; i++) {
-          await wait(42);
-          jac.pos.x += (dx / d0) * 0.05; jac.pos.z += (dz / d0) * 0.05;
-          jac.char.setPosition(jac.pos.x, jac.pos.z);
-          jac.char.turnToward(dx, dz);
-        }
+        const tx = jac.pos.x + (dx / d0) * (d0 - 0.95);
+        const tz = jac.pos.z + (dz / d0) * (d0 - 0.95);
+        ctx.npcs.freeze(jac, false);
+        await ctx.npcs.sendTo(jac, tx, tz, { speed: 0.8 });
+        ctx.npcs.freeze(jac, true);
+        jac.char.turnToward(dx, dz);
         jac.char.play('talk'); // the offering gesture
         await wait(420);
         ctx.joseph.setCoat(true);       // the tunic settles over his shoulders
@@ -859,12 +858,37 @@ export function createBeats(ctx) {
       { t: 'say', who: 'Joseph', text: 'Brothers — hear this dream I dreamed.', color: J.Joseph },
       // "sheaves" explained once, naturally, inside the line (ui-clarity law 2)
       { t: 'say', who: 'Joseph', text: 'We were binding sheaves — bundles of wheat — in the field. Mine arose… and yours bowed down to it.', color: J.Joseph },
-      { t: 'fn', fn: () => { ctx.joseph.play('idle'); } },
+      { t: 'dialogueHide' },
+      // D8: Gen 37:5 lands HERE — where the telling actually happens — and the
+      // camera performs ONE slow orbit of the whole seated circle while the
+      // narrator carries it: brothers, father and dreamer all passing in frame.
+      { t: 'fn', fn: async () => {
+        ctx.joseph.play('talk');
+        let stopOrbit = false;
+        const orbit = (async () => {
+          const a0 = Math.PI * 0.55, RAD = 6.1, H = 2.7;
+          ctx.camera.cinematicMoveTo({ angle: a0, target: { x: FIRE.x, z: FIRE.z }, distance: RAD, height: H, lookHeight: 1.15, duration: 1200 });
+          await wait(1200);
+          const T = 12500; let e = 0;
+          while (e < T && !stopOrbit) { await wait(50); e += 50;
+            const k = e / T;
+            const a = a0 + (k * k * (3 - 2 * k)) * 3.4; // eased ~195° sweep
+            const p = ctx.camera.pose; if (!p) break;
+            p.pos.set(FIRE.x - Math.sin(a) * RAD, H + 0.35, FIRE.z - Math.cos(a) * RAD);
+            p.look.set(FIRE.x, 1.15, FIRE.z);
+          }
+        })();
+        await ctx.verseCard.show(WEB.gen_37_5);
+        ctx.verseCard.hide();
+        await orbit; // the sweep glides to rest before the first cut
+        ctx.joseph.play('idle');
+      } },
       { t: 'sound', key: 'stinger.hatred' },
       { t: 'grade', mood: 'ominous', ms: 1600 },
-      // the brothers' scorn — a DISTINCT venom line (the narrator/verse 37:8
-      // carries their canonical "will you reign over us"; the character never
-      // repeats the verse — script-routing rule).
+      // D8: the MOMENT Judah's reply begins, the tension score hits — and it
+      // owns the scene from here. (His venom line stays DISTINCT from verse
+      // 37:8, which the narrator carries — script-routing rule.)
+      { t: 'fn', fn: () => ctx.setMusic('music.ominous_turn') },
       shot('judah', 'joseph', { side: -0.42, dist: 2.6 }),
       { t: 'anim', get char() { return ctx.cast.judah.char; }, state: 'talk' },
       { t: 'say', who: 'Judah', text: 'A dreamer of dreams — and a lord of nothing.', color: J.Judah },
@@ -899,22 +923,18 @@ export function createBeats(ctx) {
       { t: 'wait', ms: 900 },
       { t: 'verseHide' },
     ]);
-    // Joseph turns and walks back ALONE; their envy follows him out of the ring
+    // Joseph turns and walks back ALONE — SLOWLY, head down, and SMOOTH (D8:
+    // the old loop stepped him in 50ms-quantized jumps, the visible chop Nate
+    // called out; scriptMoveTo drives him through the controller's own
+    // per-frame eased movement instead).
     const lone = { x: -4.6, z: -2.0 };
     ctx.joseph.turnToward(lone.x - ctx.joseph.position.x, lone.z - ctx.joseph.position.z);
-    ctx.joseph.play('walk');
     await seq([
       // a wide, lonely frame — Joseph small, the seated circle left behind him
       { t: 'cam', angle: Math.PI * 0.9, target: () => ({ x: ctx.joseph.position.x, z: ctx.joseph.position.z }), distance: 6.4, height: 3.1, lookHeight: 1.2, duration: 3200, awaitMs: false },
       { t: 'fn', fn: async () => {
-        let e = 0; const D = 3400;
-        while (e < D) { await wait(60); e += 60;
-          const p = ctx.joseph.position;
-          const dx = lone.x - p.x, dz = lone.z - p.z; const d = Math.hypot(dx, dz);
-          if (d < 0.2) break;
-          ctx.joseph.setPosition(p.x + (dx / d) * 2.4 * 0.06, p.z + (dz / d) * 2.4 * 0.06);
-          ctx.joseph.turnToward(dx, dz);
-        }
+        ctx.joseph.setGrief(true, 0.42); // it's all on his shoulders
+        await ctx.controller.scriptMoveTo(lone.x, lone.z, 1.15); // a slow trudge
         ctx.joseph.play('idle');
       } },
     ]);
@@ -924,6 +944,7 @@ export function createBeats(ctx) {
       { t: 'wait', ms: 900 },
       { t: 'grade', mood: 'goldenHour', ms: 2200 },
       { t: 'fade', on: true, ms: 1800 },
+      { t: 'fn', fn: () => ctx.joseph.setGrief(false) },
       { t: 'title', heading: 'To be continued', sub: 'Genesis 37:12 — the road to Dothan', holdMs: 4200 },
     ]);
     ctx.finish?.();

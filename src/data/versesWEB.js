@@ -99,7 +99,7 @@ export const SCENE1_ROUTING = [
   { beat: 'report', voice: 'CHARACTER', line: 'Jacob/Joseph (text; gameplay dialogue, no verse)' },
   { beat: 'coat', voice: 'MIXED', line: 'Jacob + brothers speak (text) · verses 37:3, 37:4 narrated — no line quotes its verse' },
   { beat: 'dusk', voice: 'GAMEPLAY', line: 'objective + Sit prompt only (no spoken lines)' },
-  { beat: 'dream', voice: 'NARRATOR', line: 'gen_37_5, 37:7, 37:9 (verse cards + VO) — no character speaks in the dream' },
-  { beat: 'tell', voice: 'MIXED', line: 'Joseph recounts the dreams (text) · Judah/Jacob add DISTINCT venom (text) · verses 37:8, 37:10 narrated — characters no longer quote the verses' },
+  { beat: 'dream', voice: 'NARRATOR', line: 'narr-dream-begins (spoken-only present-moment opener, D8) · 37:7, 37:9 (verse cards + VO) — no character speaks in the dream; 37:5 moved to the telling' },
+  { beat: 'tell', voice: 'MIXED', line: 'Joseph recounts the dreams (text) · gen_37_5 verse card + VO under the D8 orbit shot · Judah/Jacob add DISTINCT venom (text) · verses 37:8, 37:10 narrated — characters never quote the verses' },
   { beat: 'close', voice: 'NARRATOR', line: 'gen_37_11 (verse card + VO) + tease title' },
 ];
