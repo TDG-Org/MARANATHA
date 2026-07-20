@@ -328,7 +328,8 @@ class AudioSystem {
   // D9: the DREAD bed — a low, uneasy minor cluster under the cold open's
   // betrayal (the open used to play in total silence; Nate missed tension).
   // A real music/betrayal_dark.mp3 takes over the moment it lands.
-  musicDreadBed() { this.musicPad(0.055, [55.0, 82.41, 110.0, 130.81]); }
+  // D11: louder still — "sometimes there is no music" = a bed nobody can hear.
+  musicDreadBed() { this.musicPad(0.08, [55.0, 82.41, 110.0, 130.81]); }
 
   // --- Voice bus: real VO files play here so Master/Narrator are LIVE mid-line -
   // D7: failures are NOT cached — a single transient network blip used to

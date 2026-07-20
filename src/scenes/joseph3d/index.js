@@ -90,7 +90,10 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
   // sunrise between the two mountains, never anywhere else.
   const ridges = makeRidges({ sunNotch: { x: 8, width: 34, depth: 30 } });
   scene.add(ridges);
-  scene.add(makeSun({ x: 8, y: 22, z: -200, core: 62, halo: 165 }));
+  // named handle: the cold open HIDES the sun (the pit plays as night — D11)
+  // and the morning brings it back.
+  const sunSprite = makeSun({ x: 8, y: 22, z: -200, core: 62, halo: 165 });
+  scene.add(sunSprite);
   const motes = makeMotes({ count: Graphics.particles(70) });
   scene.add(motes.points);
 
@@ -292,7 +295,7 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
     camera: director, sequencer: null, setInput,
     isPaused: () => app.paused,
     sound: (key, gain) => { if (!disposed) Audio.play(key, gain !== undefined ? { gain } : {}); },
-    setMusic, camp, dream, pit, tentInterior, bounds, futureVignette,
+    setMusic, camp, dream, pit, tentInterior, bounds, futureVignette, sunSprite,
     postFX: app.postFX, // named filter looks (dream/future) + blur transitions
     get joseph() { return joseph; },
     get cast() { return cast; },
@@ -431,7 +434,7 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
     npcs.update(dt, joseph.position);
     interactables.update();
     guide.update(dt, camera);
-    nameTags.update(camera);
+    nameTags.update(camera, dt);
 
     // fire crackle proximity — change-gated: an unconditional setGain queued
     // ~60 WebAudio automation events/s on the bed all game long
@@ -447,10 +450,8 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
 
   function dispose() {
     disposed = true; // stops the story loop, zombie async init, sound/finish
-    // the betrayal exchange's camera orbit is the one UNBOUNDED scripted loop —
-    // exiting mid-dialogue would leave it ticking forever (its stop hook lives
-    // on ctx; calling it again after a normal open is a harmless no-op)
-    ctx.__betrayalOrbitStop?.();
+    // (D11: scripted camera moves all ride CameraDirector's per-frame pose
+    // driver now — no timer loops exist to outlive the scene)
     // (canvas filter/vignette live in app.postFX now — app resets on navigate)
     renderer.domElement.removeEventListener('contextmenu', onCanvasContextMenu);
     Object.values(beds).forEach((b) => b.stop(0.6));

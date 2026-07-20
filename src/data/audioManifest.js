@@ -44,7 +44,8 @@ export const AUDIO_MANIFEST = [
   { key: 'music.dream_wonder', bus: 'music', loop: true, seconds: 70, file: 'music/dream_wonder', fallback: 'musicWonderBed', available: true, purpose: 'dream sequence — hushed awe', scene: 'joseph3d-1' },
   { key: 'music.ominous_turn', bus: 'music', loop: true, seconds: 60, file: 'music/ominous_turn', fallback: null, available: true, purpose: 'the brothers’ hatred — warm → ominous shift', scene: 'joseph3d-1' },
   { key: 'music.sad_night', bus: 'music', loop: true, seconds: 60, file: 'music/sad_night', fallback: 'musicSadBed', available: false, purpose: 'SAD — the lonely walk to his tent after the jeer (procedural minor pad until a real file lands; D9 louder)', scene: 'joseph3d-1' },
-  { key: 'music.betrayal_dark', bus: 'music', loop: true, seconds: 60, file: 'music/betrayal_dark', fallback: 'musicDreadBed', available: false, purpose: 'DREAD — the cold-open betrayal march + pit (D9: a low uneasy procedural cluster until a real dark tension track lands — 🔴 NATE.md)', scene: 'joseph3d-1' },
+  { key: 'music.betrayal_dark', bus: 'music', loop: true, seconds: 60, file: 'music/betrayal_dark', fallback: 'musicDreadBed', available: false, purpose: 'DREAD — the cold-open betrayal march + throw (D9: a low uneasy procedural cluster until a real dark tension track lands — 🔴 NATE.md)', scene: 'joseph3d-1' },
+  { key: 'music.pit_sad', bus: 'music', loop: true, seconds: 60, file: 'music/pit_sad', fallback: 'musicSadBed', available: false, purpose: 'GRIEF — the boy crying alone at the pit bottom (D11, Nate: the shot had no music; a quiet minor pad until a real sorrow track lands — 🔴 NATE.md)', scene: 'joseph3d-1' },
 
   // --- Scene 1 (3D) — reactive SFX -----------------------------------------
   { key: 'sfx.footstep_grass', bus: 'sfx', loop: false, seconds: 0.15, fallback: 'footstep', available: false, purpose: 'footfall on grass', scene: 'joseph3d-1' },

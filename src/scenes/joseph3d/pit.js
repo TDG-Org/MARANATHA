@@ -23,7 +23,17 @@ export function buildPitStage(tex = {}) {
   group.add(patch);
   const rockGeo = new THREE.DodecahedronGeometry(0.5, 0); rockGeo.translate(0, 0.18, 0);
   const rspots = [];
-  for (let i = 0; i < 12; i++) { const a = rnd() * Math.PI * 2, r = 3.8 + rnd() * 5; rspots.push([PIT.x + Math.cos(a) * r, PIT.z + Math.sin(a) * r]); }
+  // the brothers' WALK-OFF CORRIDOR heads east-by-south (dir ≈ (6.5,-2.2), angle
+  // ≈ −0.33 rad) — no rock may sit in that lane (D11: they clipped through one)
+  const CORRIDOR_A = Math.atan2(-2.2, 6.5);
+  for (let i = 0; i < 12; i++) {
+    const a = rnd() * Math.PI * 2, r = 3.8 + rnd() * 5;
+    let da = a - CORRIDOR_A;
+    while (da > Math.PI) da -= Math.PI * 2;
+    while (da < -Math.PI) da += Math.PI * 2;
+    if (Math.abs(da) < 0.55) continue; // keep the walk-off lane clear
+    rspots.push([PIT.x + Math.cos(a) * r, PIT.z + Math.sin(a) * r]);
+  }
   const rocks = new THREE.InstancedMesh(rockGeo, new THREE.MeshBasicMaterial({ color: 0x796d55, fog: true }), rspots.length);
   const rd = new THREE.Object3D();
   rspots.forEach((s, i) => { rd.position.set(s[0], 0, s[1]); rd.scale.setScalar(0.6 + rnd() * 1.3); rd.rotation.y = rnd() * 6; rd.updateMatrix(); rocks.setMatrixAt(i, rd.matrix); });
@@ -32,19 +42,20 @@ export function buildPitStage(tex = {}) {
   // (D7: the old opaque "mouth" disc is GONE — the hole is real. Looking down
   // the shaft you now see the walls, the floor, and the boy on his back.)
 
-  // the pit INTERIOR (below ground) — walls + floor, lit enough to READ from
-  // above: the shaft darkens with depth but Joseph at the bottom stays visible.
-  const wall = new THREE.Mesh(new THREE.CylinderGeometry(2.05, 1.85, 4.1, 20, 1, true), new THREE.MeshBasicMaterial({ color: 0x4a4058, side: THREE.BackSide, fog: true }));
+  // the pit INTERIOR (below ground) — D11 (Nate): MUCH darker, with a true
+  // BLACK floor at the very bottom; the boy stays visible only in the narrow
+  // pool of light on him (D7 law: he must be SEEN — but the pit reads night).
+  const wall = new THREE.Mesh(new THREE.CylinderGeometry(2.05, 1.85, 4.1, 20, 1, true), new THREE.MeshBasicMaterial({ color: 0x2a2433, side: THREE.BackSide, fog: true }));
   wall.position.set(PIT.x, -2.0, PIT.z); group.add(wall);
-  const floor = new THREE.Mesh(new THREE.CircleGeometry(1.95, 20), new THREE.MeshBasicMaterial({ color: 0x3a3345, fog: true }));
+  const floor = new THREE.Mesh(new THREE.CircleGeometry(1.95, 20), new THREE.MeshBasicMaterial({ color: 0x0c0a12, fog: true }));
   floor.rotation.x = -Math.PI / 2; floor.position.set(PIT.x, -4.0, PIT.z); group.add(floor);
-  // a faint pool of daylight on the floor — the light that follows him down
-  const floorGlow = new THREE.Mesh(new THREE.CircleGeometry(1.3, 18), new THREE.MeshBasicMaterial({ color: 0x8a7a68, transparent: true, opacity: 0.5, fog: true }));
+  // only a whisper of light reaches the floor around him now
+  const floorGlow = new THREE.Mesh(new THREE.CircleGeometry(1.15, 18), new THREE.MeshBasicMaterial({ color: 0x5f5648, transparent: true, opacity: 0.26, fog: true }));
   floorGlow.rotation.x = -Math.PI / 2; floorGlow.position.set(PIT.x, -3.98, PIT.z); group.add(floorGlow);
   // …and a real shaft of daylight ON HIM: one warm point light inside the pit
   // (lives in this group, so it dies with the stage after the cold open —
   // the boy at the bottom must be SEEN, not implied).
-  const shaftLight = new THREE.PointLight(0xfff0d0, 1.5, 8.5, 1.4);
+  const shaftLight = new THREE.PointLight(0xfff0d0, 1.05, 8.5, 1.4);
   shaftLight.position.set(PIT.x, -1.1, PIT.z);
   group.add(shaftLight);
 
@@ -78,15 +89,17 @@ export function buildPitStage(tex = {}) {
     g2.fillStyle = g; g2.fillRect(0, 0, 64, 64);
     return new THREE.CanvasTexture(c);
   })();
-  const campGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0xffc890, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
-  campGlow.position.set(PIT.x + 30, 2.2, PIT.z - 9);
-  campGlow.scale.set(9, 5.5, 1);
+  // D11: deeper fire-red + smaller — it must read as distant CAMPFIRES, never
+  // as a sunrise on the horizon (the pit plays as night).
+  const campGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0xff8f4a, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+  campGlow.position.set(PIT.x + 30, 2.0, PIT.z - 9);
+  campGlow.scale.set(7, 4.2, 1);
   group.add(campGlow);
 
   return {
     group, PIT, coatProp, skyLight,
     setSkyLight(k) { skyLight.material.opacity = 0.9 * k; },
-    setCampGlow(k) { campGlow.material.opacity = 0.75 * k; },
+    setCampGlow(k) { campGlow.material.opacity = 0.6 * k; },
     shrinkSkyLight(k) { skyLight.scale.setScalar(8 - 6.5 * k); }, // k 0→1 closes over him
     update() { /* static set — the beat animates the cast */ },
     dispose() {

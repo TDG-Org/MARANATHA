@@ -20,6 +20,10 @@ export const MOODS = {
   // SEE in the ridge saddle (D6 sunrise) — shading and sky agree on where the
   // light is. The warm hemi keeps camera-facing sides painterly, not backlit.
   goldenHour: { skyTop: 0xefa45e, skyBottom: 0xffe4b6, fog: 0xffd6a2, fogNear: 44, key: 0xffe1ad, keyI: 1.05, hemi: 0.62, hemiSky: 0xffe4b6, sun: [2, 9, -12], ridge: [0xc9a184, 0xb08a8a, 0x74597a], tint: '#000000', tintA: 0 },
+  // D11: the FIRST LIGHT after the pit — a deep warm daybreak the morning pan
+  // eases into full goldenHour from (the straight gray→gold cut read "way too
+  // white"). Sunrise, not a lightswitch.
+  dawn: { skyTop: 0xc9824f, skyBottom: 0xf2c68e, fog: 0xe6b98a, fogNear: 42, key: 0xf7d3a0, keyI: 0.8, hemi: 0.5, hemiSky: 0xf2c68e, sun: [2, 6, -12], ridge: [0xbd9078, 0xa27a80, 0x67506f], tint: '#000000', tintA: 0 },
   // The pit (cold open): trapped and airless in COLOR, not in visibility —
   // D8: fog pushed back (18→36) + a stronger key so every figure reads
   // clearly; the drained "future" PostFX carries the gloom instead.

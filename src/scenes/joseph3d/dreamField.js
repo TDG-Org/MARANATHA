@@ -215,6 +215,38 @@ export function buildDreamField() {
     borderRock = mkRing(rockGeo2, 0x394260, rockSpots);
   }
 
+  // D11 (Nate: "the rocks are floating? that gives me a magical idea"):
+  // MAGICAL FLOATING ROCKS — stones hovering over the field, bobbing softly
+  // (the wheat's whisper-sway, made literal), plus a sparser ring of bigger
+  // ones drifting far beyond the border. Never the interactable sheaves.
+  // ONE instanced draw; matrices re-written per frame like the sheep flock.
+  const floatSpots = []; // [x, baseY, z, scale, phase, bobSpeed] — field-local
+  for (let i = 0; i < 26; i++) { // the inner drift — over the wheat, clear of the sheaf ring
+    const a = rnd() * Math.PI * 2, r = 8 + rnd() * 5;
+    floatSpots.push([Math.cos(a) * r, 1.0 + rnd() * 1.6, Math.sin(a) * r, 0.5 + rnd() * 0.9, rnd() * Math.PI * 2, 0.45 + rnd() * 0.5]);
+  }
+  for (let i = 0; i < 16; i++) { // the far ring — glimpsed past the border, fog-softened
+    const a = rnd() * Math.PI * 2, r = 17.5 + rnd() * 7.5;
+    floatSpots.push([Math.cos(a) * r, 1.8 + rnd() * 2.8, Math.sin(a) * r, 0.9 + rnd() * 1.4, rnd() * Math.PI * 2, 0.3 + rnd() * 0.4]);
+  }
+  const floatGeo = new THREE.DodecahedronGeometry(0.34, 0);
+  const floatRocks = new THREE.InstancedMesh(floatGeo, new THREE.MeshBasicMaterial({ color: 0x596390, fog: true }), floatSpots.length);
+  floatRocks.position.set(FIELD.x, 0, FIELD.z); // field-local (the D6 sway lesson)
+  floatRocks.frustumCulled = false; // instances span past the geometry bounds
+  const frd = new THREE.Object3D();
+  const writeFloatRocks = (t) => {
+    floatSpots.forEach((s, i) => {
+      frd.position.set(s[0], s[1] + Math.sin(t * s[5] + s[4]) * 0.22, s[2]);
+      frd.scale.setScalar(s[3]);
+      frd.rotation.y = s[4] + t * 0.05; // the slowest turn — weightless
+      frd.updateMatrix();
+      floatRocks.setMatrixAt(i, frd.matrix);
+    });
+    floatRocks.instanceMatrix.needsUpdate = true;
+  };
+  writeFloatRocks(0);
+  group.add(floatRocks);
+
   // fog banks — big soft planes standing behind the field (dream haze)
   const softTex = (rgb) => {
     const c = document.createElement('canvas'); c.width = c.height = 128;
@@ -409,7 +441,7 @@ export function buildDreamField() {
   group.add(summitGroup);
 
   // field elements that HIDE when we cut to the summit (they were dream 1)
-  const fieldEls = [disc, wheat, center, ...outer, ...fogBanks, ...groundMist, beam, moonDisc, mountainGroup, cairns, fireflyPts, motes, borderBush, borderRock];
+  const fieldEls = [disc, wheat, center, ...outer, ...fogBanks, ...groundMist, beam, moonDisc, mountainGroup, cairns, fireflyPts, motes, borderBush, borderRock, floatRocks];
   const setSummit = (on) => { summitGroup.visible = on; fieldEls.forEach((e) => { e.visible = !on; }); };
 
   let skyState = 0; // 0 idle · 1 descending (→mid) · 2 bowing (→low)
@@ -459,6 +491,8 @@ export function buildDreamField() {
       // center (rooted; ≤9cm at the rim — never the old 1u bounce)
       wheat.rotation.z = Math.sin(t * 0.55) * 0.006;
       wheat.rotation.x = Math.cos(t * 0.4) * 0.004;
+      // the floating rocks bob on their own slow phases (D11)
+      writeFloatRocks(t);
       // low ground mist breathes
       groundMist.forEach((m) => { m.material.opacity = 0.24 + Math.sin(t * 0.25 + m.userData.phase) * 0.08; });
       // dream fireflies: slow drift + soft per-point blink

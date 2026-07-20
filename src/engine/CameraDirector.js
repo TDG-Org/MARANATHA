@@ -78,6 +78,13 @@ export class CameraDirector {
 
   setDrift(on) { this.drift = !!on; }
 
+  // D11: a PER-FRAME pose driver for shots that must move every frame (orbits,
+  // gaze-follows, descents). The old pattern drove pose.pos/look from 50–60ms
+  // polled beat loops — visible 16–20Hz stepping (Nate: "very very jittery").
+  // The driver runs inside frame() with real dt; any new cinematicMoveTo()/
+  // release() clears it (a new shot supersedes).
+  setPoseDriver(fn) { this._poseDriver = fn || null; }
+
   // D9: a TRUE still — even the idle breathing sine stops (the finale's held
   // final frame). Any new cinematicMoveTo()/release() wakes the camera again.
   setStill(on) { this.still = !!on; }
@@ -191,6 +198,7 @@ export class CameraDirector {
     this._look.lerp(this._lookT, Math.min(dt * this.lookDamp, 1));
 
     // 5) cinematic pose blend
+    if (this.pose && this._poseDriver) this._poseDriver(this.pose, dt);
     if (this._poseDir !== 0) {
       this.poseK = clamp(this.poseK + this._poseDir * this._poseSpeed * dt, 0, 1);
       if (this.poseK === 0 && this._poseDir < 0) { this._poseDir = 0; this.pose = null; }
@@ -232,6 +240,7 @@ export class CameraDirector {
   // Beat API — identical contract to the D1 camera so sequences are portable.
   cinematicMoveTo({ angle = 0, target = this.target, distance = 4, height = 1.6, lookHeight = 1.3, duration = 1400 } = {}) {
     this.still = false; // any new shot wakes the camera from a held still
+    this._poseDriver = null; // a new authored shot supersedes any driver
     const t = target.isVector3 ? target.clone() : new THREE.Vector3(target.x, target.y || 0, target.z);
     const pos = new THREE.Vector3(t.x - Math.sin(angle) * distance, t.y + height, t.z - Math.cos(angle) * distance);
     const look = new THREE.Vector3(t.x, t.y + lookHeight, t.z);
@@ -241,7 +250,7 @@ export class CameraDirector {
     this._driftT = 0; // each shot's drift arc starts from ITS authored frame
   }
 
-  release(duration = 1400) { this.still = false; this._poseDir = -1; this._poseSpeed = 1 / Math.max(1, duration); }
+  release(duration = 1400) { this.still = false; this._poseDriver = null; this._poseDir = -1; this._poseSpeed = 1 / Math.max(1, duration); }
   get inCinematic() { return this.poseK > 0.001 || this._poseDir > 0; }
 
   snap() { this._init = false; this.frame(0); }

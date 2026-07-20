@@ -56,14 +56,16 @@ export function createBeats(ctx) {
   // separation (never under 3.0). Call it AGAIN after anyone moves: the coat
   // gift used a pre-walk framing, and Jacob's walk put the back of his head
   // square in the lens.
-  const twoShot = (aWho, bWho, { ms = 1200, distMin = 3.0, height = 2.05, look = 1.05 } = {}) => {
+  const twoShot = (aWho, bWho, { ms = 1200, distMin = 3.0, distMax = Infinity, height = 2.05, look = 1.05 } = {}) => {
     const a = posOf(aWho), b = posOf(bWho);
     const axis = Math.atan2(b.x - a.x, b.z - a.z);
     const sep = Math.hypot(b.x - a.x, b.z - a.z);
     ctx.camera.cinematicMoveTo({
       angle: axis - Math.PI / 2,
       target: { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2 },
-      distance: Math.max(distMin, sep * 1.35 + 1.6),
+      // distMax: INTERIOR shots cap the pull-back so the lens can never
+      // back out through the tent shell (D11 — Nate saw the outside)
+      distance: Math.min(distMax, Math.max(distMin, sep * 1.35 + 1.6)),
       height, lookHeight: look, duration: ms,
     });
   };
@@ -99,6 +101,9 @@ export function createBeats(ctx) {
     // (vignette + drain — D8: barely any blur; it must never hide the action).
     ctx.futureVignette(true);
     ctx.grading.set('pit');
+    // D11 (Nate): the pit plays as NIGHT — the golden sun sprite in the north
+    // sky read as a sunrise from the crying shot. Dark until the real morning.
+    ctx.sunSprite.visible = false;
     P.group.visible = true;
     P.setSkyLight(1); P.shrinkSkyLight(0);
     ctx.joseph.setCoat(true); // in the flash he STILL wears the coat — they strip it (37:23)
@@ -148,44 +153,41 @@ export function createBeats(ctx) {
       } },
       { t: 'wait', ms: 450 },
       { t: 'fade', on: false, ms: 1500 },
-      // D9 clarity: this is a glimpse of what is COMING — say so plainly
-      // (the golden morning answers it with 'Present day')
-      { t: 'title', heading: 'In the days to come', sub: 'Genesis 37', holdMs: 2600 },
+      // D9 clarity: this is a glimpse of what is COMING — say so plainly, and
+      // HOLD it (D11, Nate's brother was still confused: clearer sub + ~2x the
+      // time on screen; the golden morning answers it with 'Present day')
+      { t: 'title', heading: 'In the days to come', sub: 'What lies ahead · Genesis 37', holdMs: 4800 },
       // …the frame widens as the march closes on the pit
       { t: 'cam', angle: Math.PI * 0.52, target: { x: to.x + 0.6, z: to.z }, distance: 5.0, height: 1.7, lookHeight: 0.95, duration: 5400, awaitMs: false },
       { t: 'fn', fn: () => march }, // hold until the march lands at the rim
       { t: 'wait', ms: 450 },
       // SHOT 2 — AT THE EDGE: the betrayal. D9 camera (Nate): RAISED and
-      // looking DOWN, slowly circling the group while the lines are exchanged
-      // — from up here no one's head can ever block the lens.
+      // looking DOWN, slowly circling the group while the lines are exchanged.
+      // D11: the prowl rides the per-frame pose driver (the 60ms polled loop
+      // stepped visibly), and the talk is SMALL — three short lines only
+      // (Nate: the invented "no blood" exchange strayed too far; Reuben's
+      // canonical plea belongs to the real scene when we build it).
       { t: 'fn', fn: () => {
         const g = { x: to.x - 0.3, z: to.z };
-        let stopped = false;
-        ctx.__betrayalOrbitStop = () => { stopped = true; };
         ctx.camera.cinematicMoveTo({ angle: Math.PI * 0.45, target: g, distance: 4.6, height: 3.1, lookHeight: 0.95, duration: 1100 });
-        (async () => {
-          await wait(1100);
-          let a = Math.PI * 0.45;
-          while (!stopped) { await wait(60); a += 0.0056; // a slow prowl around them
-            const p = ctx.camera.pose; if (!p) break;
-            p.pos.set(g.x - Math.sin(a) * 4.6, 3.1, g.z - Math.cos(a) * 4.6);
-            p.look.set(g.x, 0.95, g.z);
-          }
-        })();
+        let a = Math.PI * 0.45, hold = 1100;
+        ctx.camera.setPoseDriver((pose, dt) => {
+          if ((hold -= dt) > 0) return;            // let the move-in land first
+          a += dt * 0.0000933;                     // the same slow prowl, now smooth
+          pose.pos.set(g.x - Math.sin(a) * 4.6, 3.1, g.z - Math.cos(a) * 4.6);
+          pose.look.set(g.x, 0.95, g.z);
+        });
       } },
       { t: 'fn', fn: () => { const sp = posOf('simeon'), li = posOf('joseph'); charOf('simeon').turnToward(li.x - sp.x, li.z - sp.z); charOf('simeon').play('talk'); charOf('joseph').turnToward(sp.x - li.x, sp.z - li.z); } },
       { t: 'say', who: 'Simeon', text: 'Far enough. This is the place.', color: J.Simeon },
       { t: 'fn', fn: () => { charOf('simeon').play('idle'); const sp = posOf('joseph'), li = posOf('judah'); charOf('joseph').turnToward(li.x - sp.x, li.z - sp.z); charOf('joseph').play('talk'); } },
       { t: 'say', who: 'Joseph', text: 'Brothers — please. What have I done to you?', color: J.Joseph },
       { t: 'fn', fn: () => { charOf('joseph').play('idle'); const sp = posOf('judah'), li = posOf('joseph'); charOf('judah').turnToward(li.x - sp.x, li.z - sp.z); charOf('judah').play('talk'); } },
-      { t: 'say', who: 'Judah', text: 'What have you done? “The sun and the moon bowed down to me.” To a boy in a fine coat.', color: J.Judah },
       { t: 'say', who: 'Judah', text: 'Here is your throne, dreamer. Now we shall see what becomes of your dreams.', color: J.Judah },
-      { t: 'fn', fn: () => { charOf('judah').play('idle'); const sp = posOf('reuben'), li = posOf('judah'); charOf('reuben').turnToward(li.x - sp.x, li.z - sp.z); charOf('reuben').play('talk'); } },
-      { t: 'say', who: 'Reuben', text: 'No blood, Judah. Do you hear me? No blood — the pit is enough.', color: J.Reuben },
       { t: 'dialogueHide' },
-      // the exchange is over: the orbit stands down, and Joseph falls SILENT —
+      // the exchange is over: the prowl stands down, and Joseph falls SILENT —
       // his arms must never keep gesturing into the fall (D9)
-      { t: 'fn', fn: () => { ctx.__betrayalOrbitStop?.(); charOf('reuben').play('idle'); ctx.joseph.play('idle'); } },
+      { t: 'fn', fn: () => { ctx.camera.setPoseDriver(null); charOf('judah').play('idle'); ctx.joseph.play('idle'); } },
       // they STRIP the tunic (37:23) — it hangs from Judah's hand
       { t: 'cam', angle: Math.PI * 0.22, target: () => ({ x: ctx.joseph.position.x, z: ctx.joseph.position.z }), distance: 2.9, height: 1.6, lookHeight: 1.0, duration: 1100 },
       { t: 'fn', fn: async () => {
@@ -204,6 +206,16 @@ export function createBeats(ctx) {
         B[1].char.play('talk'); B[2].char.play('talk'); // the two who seize him
         if (ctx.joseph.shadowMesh) ctx.joseph.shadowMesh.visible = false;
         ctx.joseph.setAnimPaused(true); // seized — the body goes LIMP and still
+        // D11 deterministic FACE-UP landing: move his yaw from the facing child
+        // onto the root (order YXZ = yaw first, then pitch in his own frame) —
+        // world orientation is IDENTICAL this frame, but now the fall's pitch
+        // always tips him onto his BACK regardless of who he was looking at
+        // (the old fixed-sign root.rotation.x read face-down at some yaws).
+        const yaw0 = ctx.joseph.facing.rotation.y;
+        jRoot.rotation.order = 'YXZ';
+        jRoot.rotation.y = yaw0;
+        ctx.joseph.facing.rotation.y = 0;
+        ctx.joseph._yaw = 0; ctx.joseph._targetYaw = 0;
         const jx = jRoot.position.x, jz = jRoot.position.z;
         const H = 340; let e = 0;
         while (e < H) { await wait(40); e += 40; const k = Math.min(1, e / H);
@@ -225,7 +237,7 @@ export function createBeats(ctx) {
           jRoot.position.y = y0 - k * (y0 + 3.8);              // → -3.8 (pit floor)
           jRoot.position.x = x0 + (P.PIT.x - x0) * k;
           jRoot.position.z = z0 + (P.PIT.z - z0) * k;
-          jRoot.rotation.x = k * (Math.PI / 2);                // flat, FACE UP
+          jRoot.rotation.x = k * (-Math.PI / 2);               // back-first → FACE UP (yaw lives on root.y now)
           P.shrinkSkyLight(k);                                 // daylight closes over him
           ctx.camera.cinematicMoveTo({
             angle: a0 + k * 0.55,                              // a slow drift around the boy
@@ -260,13 +272,21 @@ export function createBeats(ctx) {
       // lands over the sound of a child crying at the bottom of a well.
       { t: 'fade', on: true, ms: 600 },
       { t: 'fn', fn: () => {
-        jRoot.rotation.x = 0;
+        jRoot.rotation.set(0, 0, 0);     // upright again (behind the black)
+        jRoot.rotation.order = 'XYZ';    // the fall's yaw-then-pitch order ends here
         jRoot.position.set(P.PIT.x + 0.15, -4.0, P.PIT.z + 0.1);
         ctx.joseph.setAnimPaused(false); // life returns — enough to weep
         ctx.joseph.play('kneel');        // seated on the pit floor
         ctx.joseph.turnToward(0.35, -0.8);
         ctx.joseph.setGrief(true);       // head bows deep; small sobbing hitches
         ctx.sound('sfx.boy_crying');     // 🔴 silent until Nate's file lands (NATE.md)
+        // D11 (Nate): the pit is NIGHT-dark — the shrunken sky-disc above him
+        // read as a rising sun from this camera; dim it to a faint memory.
+        P.setSkyLight(0.16);
+        // …and the scene is no longer silent: a quiet GRIEF pad under the
+        // crying (real file slot music/pit_sad — see NATE.md).
+        ctx.setMusic('music.pit_sad');
+        ctx.hud.emote('Joseph is sad');
       } },
       { t: 'cam', angle: -Math.PI * 0.2, target: { x: P.PIT.x, y: -4.0, z: P.PIT.z }, distance: 2.5, height: 1.05, lookHeight: 0.6, duration: 1, awaitMs: false },
       { t: 'fade', on: false, ms: 900 },
@@ -292,7 +312,11 @@ export function createBeats(ctx) {
         B.forEach((n, i) => { n.pos.x = homes[i].x; n.pos.z = homes[i].z; n.char.setPosition(homes[i].x, homes[i].z); n.char.play('idle'); ctx.npcs.freeze(n, false); });
         ctx.controller.bounds = ctx.bounds;
         ctx.joseph.setPosition(-7, -2.5); // by his tent in the camp
-        ctx.grading.set('goldenHour');
+        // D11 (Nate: the cut from the gray pit went "way too white"): the
+        // morning arrives as a DEEP warm dawn and only eases into full gold
+        // across the pan below — a sunrise, not a lightswitch.
+        ctx.grading.set('dawn');
+        ctx.sunSprite.visible = true;     // the sun returns WITH the morning
         ctx.futureVignette(false);        // NOW — the gloom and drain lift
         ctx.setMusic('music.camp_warm');  // the warm theme rises WITH the morning
         // (the open itself plays in silence — the state machine starts at null)
@@ -300,10 +324,13 @@ export function createBeats(ctx) {
       } },
       // D9 (Nate): the open said 'In the days to come' — this card answers it
       // plainly, so every player knows the pit was a glimpse of the future.
-      { t: 'title', heading: 'Hebron, Canaan', sub: 'Present day · c. 1898 BC · Genesis 37', holdMs: 3400 },
+      // D11: held longer, matching the opening card's new weight.
+      { t: 'title', heading: 'Hebron, Canaan', sub: 'Present day · c. 1898 BC · Genesis 37', holdMs: 4200 },
       { t: 'fade', on: false, ms: 2000 },
       // a slow, beautiful pan across the golden camp; Joseph steps out
-      // (12s — long enough that both verses finish inside the glide)
+      // (12s — long enough that both verses finish inside the glide) while the
+      // dawn warms into full gold underneath it
+      { t: 'fn', fn: () => { ctx.grading.grade('goldenHour', 9000); } },
       { t: 'cam', angle: Math.PI * 1.1, target: { x: 2, z: -2 }, distance: 12, height: 5.5, lookHeight: 1.3, duration: 12000, awaitMs: false },
       { t: 'verse', verse: WEB.gen_37_1 },
       { t: 'verse', verse: WEB.gen_37_2_short },
@@ -456,7 +483,8 @@ export function createBeats(ctx) {
       // THE GIFT (D9 framing law): a SIDE two-shot from LIVE positions —
       // and recomputed AFTER Jacob walks over (the old pre-walk framing left
       // the back of his head square in the lens once he'd crossed the room).
-      { t: 'fn', fn: () => twoShot('jacob', 'joseph', { ms: 1500 }) },
+      // D11: distance capped + a touch lower — the lens stays INSIDE the tent.
+      { t: 'fn', fn: () => twoShot('jacob', 'joseph', { ms: 1500, distMax: 3.4, height: 1.8 }) },
       { t: 'wait', ms: 1500 },
       { t: 'fn', fn: async () => {
         // Jacob carries it to his son — a real per-frame walk (D8: the old
@@ -470,7 +498,7 @@ export function createBeats(ctx) {
         await ctx.npcs.sendTo(jac, tx, tz, { speed: 0.8 });
         ctx.npcs.freeze(jac, true);
         jac.char.turnToward(dx, dz);
-        twoShot('jacob', 'joseph', { ms: 900 }); // re-frame the CLOSED-UP pair
+        twoShot('jacob', 'joseph', { ms: 900, distMax: 3.2, height: 1.75 }); // re-frame the CLOSED-UP pair (still inside the tent)
         jac.char.play('talk'); // the offering gesture
         await wait(420);
         ctx.joseph.setCoat(true);       // the tunic settles over his shoulders
@@ -506,11 +534,12 @@ export function createBeats(ctx) {
       // the TENSION music takes over while envy talks (D6: use the real track)
       { t: 'fn', fn: () => { ctx.setMusic('music.ominous_turn'); ctx.npcs.freeze(ctx.cast.judah, true); ctx.npcs.freeze(ctx.cast.reuben, true); } },
       { t: 'fade', on: false, ms: 420 },
-      shot('judah', 'reuben', { side: 0.45, dist: 3.1 }),
+      // D11 (Nate): raised further — heads were still clipping the lens here
+      shot('judah', 'reuben', { side: 0.45, dist: 3.1, height: 2.15, look: 1.15 }),
       { t: 'anim', get char() { return ctx.cast.judah.char; }, state: 'talk' },
       { t: 'say', who: 'Judah', text: 'A prince’s tunic… while we wear the dust of his father’s fields.', color: J.Judah },
       { t: 'anim', get char() { return ctx.cast.judah.char; }, state: 'idle' },
-      shot('reuben', 'judah', { side: -0.42, dist: 3.1 }),
+      shot('reuben', 'judah', { side: -0.42, dist: 3.1, height: 2.15, look: 1.15 }),
       { t: 'anim', get char() { return ctx.cast.reuben.char; }, state: 'talk' },
       { t: 'say', who: 'Reuben', text: 'Not one kind word is left in me for that boy.', color: J.Reuben },
       { t: 'anim', get char() { return ctx.cast.reuben.char; }, state: 'idle' },
@@ -622,7 +651,7 @@ export function createBeats(ctx) {
       { t: 'dialogueHide' },
       // D8: Joseph is visibly STUNG — he rises, and his head drops; the camera
       // stays with him a breath so the hurt is unmissable before the quest.
-      { t: 'fn', fn: () => { ctx.joseph.play('idle'); ctx.joseph.setGrief(true, 0.55); } },
+      { t: 'fn', fn: () => { ctx.joseph.play('idle'); ctx.joseph.setGrief(true, 0.55); ctx.hud.emote('Joseph is sad'); } },
       { t: 'cam', angle: Math.PI * 0.3, target: () => ({ x: ctx.joseph.position.x, z: ctx.joseph.position.z }), distance: 2.6, height: 1.35, lookHeight: 1.05, duration: 1500 },
       { t: 'wait', ms: 1700 },
       { t: 'letterbox', on: false },
@@ -698,6 +727,7 @@ export function createBeats(ctx) {
       // foreshadowing. (Gen 37:5's card now lands at the campfire telling,
       // where the telling actually happens.)
       { t: 'fn', fn: async () => {
+        ctx.hud.emote('Joseph is dreaming');
         const line = Narrator.speak(NARRATION.dream_begins.text, NARRATION.dream_begins.vo);
         await ctx.cinema.titleCard({ heading: 'That night', sub: 'Joseph began to dream', holdMs: 2400 });
         await line;
@@ -769,35 +799,48 @@ export function createBeats(ctx) {
     // standing on the flat peak with the bodies bowing in front of him, still
     // high — and there the camera STOPS. A held, still, final frame.
     const CAMX = D.FIELD.x, CAMY = SY + 1.15, CAMZ = D.FIELD.z + 6.6;
-    ctx.camera.cinematicMoveTo({ angle: Math.PI, target: { x: CAMX, y: SY, z: D.FIELD.z - 6 }, distance: 12.6, height: 1.15, lookHeight: 14, duration: 1 });
+    const CAMY0 = SY + 4.4; // D11: the camera starts HIGH behind him and comes
+    // DOWN with the stars — and the drift orbit is OFF for the whole finale
+    // (its slow rotation was why the shot ended "at an angle" instead of
+    // dead behind Joseph).
+    ctx.camera.setDrift(false);
+    ctx.camera.cinematicMoveTo({ angle: Math.PI, target: { x: CAMX, y: SY, z: D.FIELD.z - 6 }, distance: 12.6, height: CAMY0 - SY, lookHeight: 14, duration: 1 });
     ctx.camera.snap();
     await seq([
-      // the sky, briefly alone — then the bodies kindle high ahead
+      // the sky, briefly alone — then the bodies KINDLE, fading up out of the
+      // dark (D11: they used to pop in fully lit)
       { t: 'fade', on: false, ms: 1100 },
-      { t: 'fn', fn: async () => { D.showSky(1); ctx.sound('stinger.dream_enter'); await wait(1600); } },
-      // the descent — the gaze tracks them down; the reveal line is fixed so
-      // the shot settles on his full body with the bodies high in front
+      { t: 'fn', fn: async () => {
+        ctx.sound('stinger.dream_enter');
+        let k = 0;
+        while (k < 1) { await wait(50); k = Math.min(1, k + 50 / 1900); D.showSky(k); }
+        await wait(1200);
+      } },
+      // the descent — the camera AND the gaze come down WITH the lights,
+      // per-frame smooth on the pose driver (the old 60ms polled loop was the
+      // "choppy" Nate called out), locked dead behind Joseph the whole way
       { t: 'fn', fn: async () => {
         D.descendSky();
-        const drive = async (ms) => {
-          let e = 0;
-          while (e < ms) { await wait(60); e += 60;
-            const p = ctx.camera.pose; if (!p) break;
-            const cy = (D.sun.position.y + D.moon.position.y) / 2;
-            p.pos.set(CAMX, CAMY, CAMZ);
-            p.look.x = CAMX;
-            p.look.y += (Math.max(cy - 3.1, SY + 2.3) - p.look.y) * 0.05;
-            p.look.z += ((D.FIELD.z - 8) - p.look.z) * 0.05;
-          }
-        };
-        await drive(5000);           // they come down from on high…
+        const cy0 = (D.sun.position.y + D.moon.position.y) / 2;
+        ctx.camera.setPoseDriver((pose, dt) => {
+          const cy = (D.sun.position.y + D.moon.position.y) / 2;
+          const prog = Math.min(1, Math.max(0, (cy0 - cy) / Math.max(0.001, cy0 - 9.0)));
+          const e = prog * prog * (3 - 2 * prog);  // eased sky progress
+          const k = 1 - Math.exp(-dt * 0.0016);    // frame-rate-safe damping
+          pose.pos.x = CAMX; pose.pos.z = CAMZ;    // never off-axis
+          pose.pos.y += ((CAMY0 + (CAMY - CAMY0) * e) - pose.pos.y) * k;
+          pose.look.x = CAMX;
+          pose.look.y += (Math.max(cy - 3.1, SY + 2.3) - pose.look.y) * k;
+          pose.look.z += ((D.FIELD.z - 8) - pose.look.z) * k;
+        });
+        await wait(5000);            // they come down from on high…
         D.bowSky(); ctx.sound('sfx.sheaf_bow');
-        await drive(6200);           // …and bow — still high, still distant
+        await wait(6200);            // …and bow — still high, still distant
         // the frame has found him: FULL body on the flat peak, the lights
         // bowed before him. The camera STOPS — completely.
+        ctx.camera.setPoseDriver(null);
         const p = ctx.camera.pose;
         if (p) { p.pos.set(CAMX, CAMY, CAMZ); p.look.set(CAMX, SY + 2.3, D.FIELD.z - 8); }
-        ctx.camera.setDrift(false);
         ctx.camera.setStill(true);   // not even the breathing — a held still
       } },
       { t: 'verse', verse: WEB.gen_37_9 },
@@ -889,7 +932,9 @@ export function createBeats(ctx) {
     await seq([
       { t: 'cam', angle: Math.PI * 0.55, target: { x: 0.3, z: -5.7 }, distance: 5.7, height: 2.7, lookHeight: 1.2, duration: 1600 },
       { t: 'fn', fn: () => { ctx.joseph.play('talk'); } },
-      shot('joseph', 'judah', { side: 0.4 }),
+      // D11 (Nate): the fire-circle cuts ride higher too — a seated ring plus a
+      // standing speaker put heads in every low lane
+      shot('joseph', 'judah', { side: 0.4, height: 2.15, look: 1.15 }),
       { t: 'say', who: 'Joseph', text: 'Brothers — hear this dream I dreamed.', color: J.Joseph },
       // "sheaves" explained once, naturally, inside the line (ui-clarity law 2)
       { t: 'say', who: 'Joseph', text: 'We were binding sheaves — bundles of wheat — in the field. Mine arose… and yours bowed down to it.', color: J.Joseph },
@@ -899,23 +944,23 @@ export function createBeats(ctx) {
       // narrator carries it: brothers, father and dreamer all passing in frame.
       { t: 'fn', fn: async () => {
         ctx.joseph.play('talk');
-        let stopOrbit = false;
-        const orbit = (async () => {
-          const a0 = Math.PI * 0.55, RAD = 6.1, H = 2.7;
-          ctx.camera.cinematicMoveTo({ angle: a0, target: { x: FIRE.x, z: FIRE.z }, distance: RAD, height: H, lookHeight: 1.15, duration: 1200 });
-          await wait(1200);
-          const T = 12500; let e = 0;
-          while (e < T && !stopOrbit) { await wait(50); e += 50;
-            const k = e / T;
-            const a = a0 + (k * k * (3 - 2 * k)) * 3.4; // eased ~195° sweep
-            const p = ctx.camera.pose; if (!p) break;
-            p.pos.set(FIRE.x - Math.sin(a) * RAD, H + 0.35, FIRE.z - Math.cos(a) * RAD);
-            p.look.set(FIRE.x, 1.15, FIRE.z);
-          }
-        })();
+        // D11: the orbit rides the per-frame pose driver — the 50ms polled
+        // sweep was Nate's "very very jittery". Same eased ~195° path.
+        const a0 = Math.PI * 0.55, RAD = 6.1, H = 2.7, T = 12500;
+        ctx.camera.cinematicMoveTo({ angle: a0, target: { x: FIRE.x, z: FIRE.z }, distance: RAD, height: H, lookHeight: 1.15, duration: 1200 });
+        await wait(1200);
+        let e = 0;
+        ctx.camera.setPoseDriver((pose, dt) => {
+          e = Math.min(T, e + dt);
+          const k = e / T;
+          const a = a0 + (k * k * (3 - 2 * k)) * 3.4;
+          pose.pos.set(FIRE.x - Math.sin(a) * RAD, H + 0.35, FIRE.z - Math.cos(a) * RAD);
+          pose.look.set(FIRE.x, 1.15, FIRE.z);
+        });
         await ctx.verseCard.show(WEB.gen_37_5);
         ctx.verseCard.hide();
-        await orbit; // the sweep glides to rest before the first cut
+        while (e < T) await wait(120); // the sweep glides to rest before the first cut
+        ctx.camera.setPoseDriver(null);
         ctx.joseph.play('idle');
       } },
       { t: 'sound', key: 'stinger.hatred' },
@@ -924,20 +969,20 @@ export function createBeats(ctx) {
       // owns the scene from here. (His venom line stays DISTINCT from verse
       // 37:8, which the narrator carries — script-routing rule.)
       { t: 'fn', fn: () => ctx.setMusic('music.ominous_turn') },
-      shot('judah', 'joseph', { side: -0.42, dist: 2.6 }),
+      shot('judah', 'joseph', { side: -0.42, dist: 2.6, height: 2.1, look: 1.15 }),
       { t: 'anim', get char() { return ctx.cast.judah.char; }, state: 'talk' },
       { t: 'say', who: 'Judah', text: 'A dreamer of dreams — and a lord of nothing.', color: J.Judah },
       { t: 'anim', get char() { return ctx.cast.judah.char; }, state: 'idle' },
       { t: 'dialogueHide' },
       { t: 'verse', verse: WEB.gen_37_8 },
       { t: 'verseHide' },
-      shot('joseph', 'reuben', { side: 0.44, dist: 2.7 }),
+      shot('joseph', 'reuben', { side: 0.44, dist: 2.7, height: 2.15, look: 1.15 }),
       { t: 'fn', fn: () => { ctx.joseph.play('talk'); } },
       { t: 'say', who: 'Joseph', text: 'And again — the sun, the moon, eleven stars… all of them bowed to me.', color: J.Joseph },
       { t: 'fn', fn: () => { ctx.joseph.play('idle'); jac.char.play('talk'); } },
       // Jacob's rebuke — sharp, but the verse 37:10 (narrator) carries his full
       // canonical words; his spoken line does NOT quote it (script-routing rule).
-      shot('jacob', 'joseph', { side: -0.4, dist: 2.8 }),
+      shot('jacob', 'joseph', { side: -0.4, dist: 2.8, height: 2.1, look: 1.15 }),
       { t: 'say', who: 'Jacob', text: 'Joseph! Enough. You must not speak so — not even of a dream.', color: J.Jacob },
       { t: 'dialogueHide' },
       { t: 'fn', fn: () => { jac.char.play('idle'); } },
@@ -969,6 +1014,7 @@ export function createBeats(ctx) {
       { t: 'cam', angle: Math.PI * 0.9, target: () => ({ x: ctx.joseph.position.x, z: ctx.joseph.position.z }), distance: 6.4, height: 3.1, lookHeight: 1.2, duration: 3200, awaitMs: false },
       { t: 'fn', fn: async () => {
         ctx.joseph.setGrief(true, 0.42); // it's all on his shoulders
+        ctx.hud.emote('Joseph is sad');
         await ctx.controller.scriptMoveTo(lone.x, lone.z, 1.15); // a slow trudge
         ctx.joseph.play('idle');
       } },

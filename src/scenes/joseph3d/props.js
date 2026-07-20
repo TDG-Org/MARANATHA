@@ -299,15 +299,17 @@ export function makeBoulders(spots, colliderWorld = null, rockTex = null) {
 // play inside). Warm wool, rugs, a low lamp; fog near ~11 closes the air in.
 export function makeTentInterior(x, z) {
   const group = new THREE.Group();
-  // the tent shell seen from inside
+  // the tent shell seen from inside — D11: ENLARGED (the coat two-shot's lens
+  // could back out through the old 4.3-radius cone and catch the outside; the
+  // beat also caps its shot distance — belt and braces)
   const shell = new THREE.Mesh(
-    new THREE.ConeGeometry(4.3, 4.4, 8, 1, true),
+    new THREE.ConeGeometry(5.8, 5.6, 8, 1, true),
     toonMat(0x9a7550, { side: THREE.BackSide }),
   );
-  shell.position.set(x, 2.2, z);
+  shell.position.set(x, 2.8, z);
   group.add(shell);
   // floor rug layers
-  const rug = new THREE.Mesh(new THREE.CircleGeometry(3.4, 18), toonMat(0x7c4038));
+  const rug = new THREE.Mesh(new THREE.CircleGeometry(4.0, 18), toonMat(0x7c4038));
   rug.rotation.x = -Math.PI / 2;
   rug.position.set(x, 0.015, z);
   const rug2 = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.6), toonMat(0x4f6b8a));

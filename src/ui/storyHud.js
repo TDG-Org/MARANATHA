@@ -59,7 +59,23 @@ export function createStoryHud({ onHome } = {}) {
     'opacity:0', 'transition:opacity 500ms ease',
   ].join(';');
 
-  document.body.append(home, obj, counter);
+  // D11 (Nate): a small right-side EMOTION line — "Joseph is sad" / "Joseph is
+  // dreaming" — slides in, holds a moment, fades. Visible during cutscenes
+  // (that's where the feelings live); never blocks anything.
+  const emoteEl = document.createElement('div');
+  emoteEl.style.cssText = [
+    // top 55%: clear of the verse card above and the dialogue box below at
+    // every tested size (390×844 → 2560×1080)
+    'position:fixed', 'right:calc(18px + env(safe-area-inset-right))', 'top:55%', 'z-index:39',
+    'font:italic 500 clamp(13px,1.8vw,16px) Georgia,"Times New Roman",serif',
+    'color:#f5e6c4', 'letter-spacing:0.04em', 'pointer-events:none', 'white-space:nowrap',
+    'padding:8px 14px', 'border-radius:10px', 'background:rgba(16,14,26,0.55)',
+    'border-right:2px solid rgba(242,184,128,0.55)', 'text-shadow:0 1px 4px rgba(0,0,0,0.7)',
+    'opacity:0', 'transform:translateX(14px)',
+    'transition:opacity 420ms ease, transform 420ms ease',
+  ].join(';');
+
+  document.body.append(home, obj, counter, emoteEl);
 
   let current = '';
   // D6: the banner AUTO-HIDES while a cutscene sequence runs (the Sequencer
@@ -128,6 +144,20 @@ export function createStoryHud({ onHome } = {}) {
     } catch { /* animate() unsupported — no-op */ }
   }
 
+  // emote('Joseph is sad') — the right-side feeling line. Re-calls restart the
+  // hold; it always fades itself out.
+  let emoteTimer = 0;
+  function emote(text, holdMs = 2800) {
+    emoteEl.textContent = text;
+    emoteEl.style.opacity = '1';
+    emoteEl.style.transform = 'translateX(0)';
+    clearTimeout(emoteTimer);
+    emoteTimer = setTimeout(() => {
+      emoteEl.style.opacity = '0';
+      emoteEl.style.transform = 'translateX(14px)';
+    }, holdMs);
+  }
+
   // flashCount('🐑', 2, 3) — the big center pop for number quests.
   let counterTimer = 0;
   function flashCount(icon, n, total) {
@@ -149,10 +179,12 @@ export function createStoryHud({ onHome } = {}) {
 
   function destroy() {
     clearTimeout(counterTimer);
+    clearTimeout(emoteTimer);
     home.remove();
     obj.remove();
     counter.remove();
+    emoteEl.remove();
   }
 
-  return { setObjective, completeObjective, setCutscene, pulse, flashCount, destroy, homeButton: home, objectiveEl: obj, counterEl: counter };
+  return { setObjective, completeObjective, setCutscene, pulse, flashCount, emote, destroy, homeButton: home, objectiveEl: obj, counterEl: counter, emoteEl };
 }
