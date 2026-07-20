@@ -373,6 +373,25 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
 
     director.setTarget(joseph.position);
     director.snap();
+
+    // D13 GPU PRE-WARM (the other half of the "choppy dream intro"): the pit
+    // and dream stages are built hidden, so their shaders compile and their
+    // textures upload on the FIRST frame they appear — a guaranteed hitch at
+    // the exact moment a cutscene starts. Warm them here instead, behind the
+    // loading screen (the veil covers the frames these lines may touch).
+    try {
+      const wasDream = dream.group.visible, wasPit = pit.group.visible, wasTent = tentInterior.mesh.visible;
+      dream.group.visible = true; pit.group.visible = true; tentInterior.mesh.visible = true;
+      scene.traverse((o) => {
+        const mats = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
+        for (const m of mats) {
+          for (const k in m) { const v = m[k]; if (v && v.isTexture) renderer.initTexture(v); }
+        }
+      });
+      renderer.compile(scene, camera);
+      dream.group.visible = wasDream; pit.group.visible = wasPit; tentInterior.mesh.visible = wasTent;
+    } catch (e) { console.warn('[joseph3d] stage pre-warm skipped', e); }
+
     ready = true;
 
     // start (or resume) the story (startBeat also chose the opening music)
@@ -417,7 +436,7 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
 
     // fire glow: brighter at night (dark moods), flickering; the pool must
     // VISIBLY light the ground + nearby characters after dark (D6 boost).
-    const dark = ['dusk', 'night', 'dream', 'ominous', 'tentWarm', 'pit'].includes(grading.current);
+    const dark = ['dusk', 'night', 'dream', 'ominous', 'tentWarm', 'pit', 'pitTalk'].includes(grading.current);
     fireLevel += ((dark ? 1 : 0.22) - fireLevel) * Math.min(dt * 0.0015, 1);
     for (const f of fireLights) {
       const flick = 2.15 + Math.sin(t * 11 + f.phase) * 0.34 + Math.sin(t * 5.3 + f.phase) * 0.2;

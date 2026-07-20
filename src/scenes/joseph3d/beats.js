@@ -56,12 +56,16 @@ export function createBeats(ctx) {
   // separation (never under 3.0). Call it AGAIN after anyone moves: the coat
   // gift used a pre-walk framing, and Jacob's walk put the back of his head
   // square in the lens.
-  const twoShot = (aWho, bWho, { ms = 1200, distMin = 3.0, distMax = Infinity, height = 2.05, look = 1.05 } = {}) => {
+  // `towardB` (D13) swings the camera around toward B's side of the pair, so
+  // A is seen three-quarter FRONT instead of in flat profile. The coat gift
+  // needs it: at a pure 90° the giver can end up as the back of a head filling
+  // the lens (Nate saw exactly that). 0 = the old side-on framing.
+  const twoShot = (aWho, bWho, { ms = 1200, distMin = 3.0, distMax = Infinity, height = 2.05, look = 1.05, towardB = 0 } = {}) => {
     const a = posOf(aWho), b = posOf(bWho);
     const axis = Math.atan2(b.x - a.x, b.z - a.z);
     const sep = Math.hypot(b.x - a.x, b.z - a.z);
     ctx.camera.cinematicMoveTo({
-      angle: axis - Math.PI / 2,
+      angle: axis - Math.PI / 2 - towardB,
       target: { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2 },
       // distMax: INTERIOR shots cap the pull-back so the lens can never
       // back out through the tent shell (D11 — Nate saw the outside)
@@ -169,13 +173,23 @@ export function createBeats(ctx) {
       // canonical plea belongs to the real scene when we build it).
       { t: 'fn', fn: () => {
         const g = { x: to.x - 0.3, z: to.z };
-        ctx.camera.cinematicMoveTo({ angle: Math.PI * 0.45, target: g, distance: 4.6, height: 3.1, lookHeight: 0.95, duration: 1100 });
+        // D13 (Nate: "the camera goes inside of the brother's heads"): the
+        // prowl now flies ABOVE every skull — y 4.2 is more than double head
+        // height, so no orbit position can ever intersect a body — and its
+        // radius clears the widest brother by ≥2u whatever formation the
+        // march ended in (measured from LIVE positions, not assumed).
+        const R = Math.max(6.0, ...B.map((n) => Math.hypot(n.pos.x - g.x, n.pos.z - g.z) + 2.2));
+        const H = 4.2;
+        // …and the GLOOM eases for this cut only: same fog, lit faces (D13).
+        ctx.grading.grade('pitTalk', 900);
+        ctx.postFX.setFilter('futureSoft', 900);
+        ctx.camera.cinematicMoveTo({ angle: Math.PI * 0.45, target: g, distance: R, height: H, lookHeight: 1.0, duration: 1100 });
         let a = Math.PI * 0.45, hold = 1100;
         ctx.camera.setPoseDriver((pose, dt) => {
           if ((hold -= dt) > 0) return;            // let the move-in land first
           a += dt * 0.0000933;                     // the same slow prowl, now smooth
-          pose.pos.set(g.x - Math.sin(a) * 4.6, 3.1, g.z - Math.cos(a) * 4.6);
-          pose.look.set(g.x, 0.95, g.z);
+          pose.pos.set(g.x - Math.sin(a) * R, H, g.z - Math.cos(a) * R);
+          pose.look.set(g.x, 1.0, g.z);
         });
       } },
       { t: 'fn', fn: () => { const sp = posOf('simeon'), li = posOf('joseph'); charOf('simeon').turnToward(li.x - sp.x, li.z - sp.z); charOf('simeon').play('talk'); charOf('joseph').turnToward(sp.x - li.x, sp.z - li.z); } },
@@ -187,7 +201,13 @@ export function createBeats(ctx) {
       { t: 'dialogueHide' },
       // the exchange is over: the prowl stands down, and Joseph falls SILENT —
       // his arms must never keep gesturing into the fall (D9)
-      { t: 'fn', fn: () => { ctx.camera.setPoseDriver(null); charOf('judah').play('idle'); ctx.joseph.play('idle'); } },
+      { t: 'fn', fn: () => {
+        ctx.camera.setPoseDriver(null); charOf('judah').play('idle'); ctx.joseph.play('idle');
+        // the talking is over — the cold, drained gloom closes back in for the
+        // strip, the throw and the fall (D13: it lifted only for the faces)
+        ctx.grading.grade('pit', 1200);
+        ctx.postFX.setFilter('future', 1200);
+      } },
       // they STRIP the tunic (37:23) — it hangs from Judah's hand
       { t: 'cam', angle: Math.PI * 0.22, target: () => ({ x: ctx.joseph.position.x, z: ctx.joseph.position.z }), distance: 2.9, height: 1.6, lookHeight: 1.0, duration: 1100 },
       { t: 'fn', fn: async () => {
@@ -260,13 +280,18 @@ export function createBeats(ctx) {
       { t: 'cam', angle: 1.9, target: { x: P.PIT.x + 6, z: P.PIT.z - 1 }, distance: 7.2, height: 2.2, lookHeight: 1.1, duration: 1, awaitMs: false },
       { t: 'fade', on: false, ms: 700 },
       { t: 'fn', fn: async () => {
-        const D = 5200; let e = 0; // slow — no one hurries, no one looks back
+        // D13 (Nate: "they walk then they stop in place"): the walk runs right
+        // through the hold and INTO the fade — the old version finished its
+        // travel loop and then stood there moon-walking for 900ms. Nobody
+        // stops; the black takes them.
+        const D = 6100; let e = 0, fading = false; // slow — no one hurries, no one looks back
         while (e < D) { await wait(50); e += 50; const k = e / D;
-          B.forEach((n, i) => put(n, P.PIT.x + AWAY[i][0] + k * 6.5, P.PIT.z + AWAY[i][1] - k * 2.2));
+          B.forEach((n, i) => put(n, P.PIT.x + AWAY[i][0] + k * 7.6, P.PIT.z + AWAY[i][1] - k * 2.6));
           P.coatProp.position.set(B[1].pos.x + 0.35, 0.85, B[1].pos.z); // Judah carries it off
+          // the black starts falling WHILE they are still walking (not after)
+          if (!fading && e > D - 700) { fading = true; ctx.cinema.fade(true, 700); }
         }
       } },
-      { t: 'wait', ms: 900 },
       // SHOT 6 — CUT: back down into the dark. The boy has pulled himself up
       // to sitting — head bowed into his knees, shoulders shaking. The verse
       // lands over the sound of a child crying at the bottom of a well.
@@ -484,7 +509,9 @@ export function createBeats(ctx) {
       // and recomputed AFTER Jacob walks over (the old pre-walk framing left
       // the back of his head square in the lens once he'd crossed the room).
       // D11: distance capped + a touch lower — the lens stays INSIDE the tent.
-      { t: 'fn', fn: () => twoShot('jacob', 'joseph', { ms: 1500, distMax: 3.4, height: 1.8 }) },
+      // D13: swung 0.6 rad toward Joseph's side so we watch FATHER'S FACE give
+      // the coat, never the back of his head.
+      { t: 'fn', fn: () => twoShot('jacob', 'joseph', { ms: 1500, distMax: 3.4, height: 1.9, look: 1.2, towardB: 0.6 }) },
       { t: 'wait', ms: 1500 },
       { t: 'fn', fn: async () => {
         // Jacob carries it to his son — a real per-frame walk (D8: the old
@@ -498,7 +525,7 @@ export function createBeats(ctx) {
         await ctx.npcs.sendTo(jac, tx, tz, { speed: 0.8 });
         ctx.npcs.freeze(jac, true);
         jac.char.turnToward(dx, dz);
-        twoShot('jacob', 'joseph', { ms: 900, distMax: 3.2, height: 1.75 }); // re-frame the CLOSED-UP pair (still inside the tent)
+        twoShot('jacob', 'joseph', { ms: 900, distMax: 3.3, height: 1.9, look: 1.2, towardB: 0.6 }); // re-frame the CLOSED-UP pair — his face, inside the tent
         jac.char.play('talk'); // the offering gesture
         await wait(420);
         ctx.joseph.setCoat(true);       // the tunic settles over his shoulders
@@ -529,7 +556,9 @@ export function createBeats(ctx) {
       // CUT (cutscene-director: clean transitions, never a glide through walls)
       { t: 'fade', on: true, ms: 300 },
       { t: 'cam', angle: Math.PI * 0.55, target: { x: 0.8, z: -7.6 }, distance: 5.4, height: 1.8, lookHeight: 1.3, duration: 1, awaitMs: false },
-      { t: 'grade', mood: 'ominous', ms: 10 },
+      // D13 (Nate): this is the SAME DAY, minutes after the coat — `ominous`
+      // is a night palette and read as nightfall. Daytime tension instead.
+      { t: 'grade', mood: 'tenseDay', ms: 10 },
       { t: 'sound', key: 'stinger.hatred' },
       // the TENSION music takes over while envy talks (D6: use the real track)
       { t: 'fn', fn: () => { ctx.setMusic('music.ominous_turn'); ctx.npcs.freeze(ctx.cast.judah, true); ctx.npcs.freeze(ctx.cast.reuben, true); } },
@@ -657,11 +686,12 @@ export function createBeats(ctx) {
       { t: 'letterbox', on: false },
     ]);
 
-    // the lonely walk to his tent — the night has turned cold with them, and
-    // the music turns SAD. He walks with his head down (a light grief residual
-    // rides the walk animation) until he lies down to sleep.
+    // the lonely walk to his tent. D13 (Nate: "the tension music stops when
+    // joseph walks to his tent, it shouldn't, till right before the dream"):
+    // NO music change here — the tension carried from the envy scene holds all
+    // the way to the tent, and only the dream (next beat) takes it away. He
+    // walks with his head down (a light grief residual rides the walk).
     let rested = false;
-    ctx.setMusic('music.sad_night');
     ctx.joseph.setGrief(true, 0.32);
     ctx.hud.setObjective('The night has turned cold with them. Go to your tent and rest.', 'Walk to your tent.');
     const rest = { x: -8.6, z: -4.4 };
@@ -719,10 +749,19 @@ export function createBeats(ctx) {
     await seq([
       { t: 'grade', mood: 'dream', ms: 30 },
       { t: 'fn', fn: () => { D.showMoon(1); ctx.postFX.setFilter('dream', 1800); } },
-      // EYES OPENING into the dream (D6): a short lift of the black, then a
-      // LONG blur-to-clear — the field swims into focus like waking inside it.
-      { t: 'fade', on: false, ms: 600 },
-      { t: 'fn', fn: async () => { ctx.postFX.eyeOpen(3400); await wait(2600); } },
+      // EYES OPENING into the dream. D13 (Nate: "the intro to that dream seems
+      // a little choppy, and laggy") — three real causes, all fixed:
+      //   1. the blur was SET AFTER the black lifted, so the frame snapped
+      //      clear→blurred in one jump; it now starts UNDER the black and the
+      //      reveal shows it already clearing.
+      //   2. the reveal fade fired a competing blur PULSE that stomped the
+      //      ramp mid-flight — suppressed with `pulse: false`.
+      //   3. a 14px full-canvas blur is the most expensive thing this game can
+      //      ask a compositor for (power-efficiency kill-list); 5px reads the
+      //      same at this scale and costs a fraction.
+      { t: 'fn', fn: () => ctx.postFX.eyeOpen(2600) },
+      { t: 'fade', on: false, ms: 900, pulse: false },
+      { t: 'wait', ms: 1500 },
       // D8: PRESENT-moment narration ONLY — spoken, no verse card, no
       // foreshadowing. (Gen 37:5's card now lands at the campfire telling,
       // where the telling actually happens.)
@@ -964,7 +1003,9 @@ export function createBeats(ctx) {
         ctx.joseph.play('idle');
       } },
       { t: 'sound', key: 'stinger.hatred' },
-      { t: 'grade', mood: 'ominous', ms: 1600 },
+      // D13: the telling happens in the MORNING and stays there — the light
+      // hardens, the day does not end (Nate: "the day quickly goes to dark").
+      { t: 'grade', mood: 'tenseDay', ms: 1600 },
       // D8: the MOMENT Judah's reply begins, the tension score hits — and it
       // owns the scene from here. (His venom line stays DISTINCT from verse
       // 37:8, which the narrator carries — script-routing rule.)
@@ -998,7 +1039,8 @@ export function createBeats(ctx) {
     // ENVY SHOT (37:11): hold on the circle's jealous faces as the light hardens
     await seq([
       { t: 'cam', angle: Math.PI * 0.5, target: { x: 0.2, z: -6.6 }, distance: 3.5, height: 1.75, lookHeight: 1.3, duration: 2200 },
-      { t: 'grade', mood: 'ominous', ms: 2000 },
+      { t: 'grade', mood: 'tenseDay', ms: 2000 }, // D13: still morning — the envy is cold, the sky isn't
+
       { t: 'verse', verse: WEB.gen_37_11 },
       { t: 'wait', ms: 1300 },
       { t: 'verseHide' },

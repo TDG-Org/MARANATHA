@@ -27,6 +27,10 @@ const FILTERS = {
   // the cold-open flash-forward: gloomy and drained, but CLEAR — the vignette
   // + desaturation carry the "future" read; blur may never hide the action (D8).
   future: 'saturate(0.4) contrast(1.08) brightness(0.87) blur(1px)',
+  // D13: the same flash-forward look with the GLOOM PULLED BACK — worn for the
+  // betrayal exchange, where faces and eyes have to read (no darkening, no
+  // blur, no vignette; still visibly drained of colour so the era-shift holds).
+  futureSoft: 'saturate(0.62) contrast(1.04) brightness(1.02)',
   // the dream: cool, soft, faintly glowing (brightness lifts the additive glows)
   dream: 'saturate(1.12) contrast(0.98) brightness(1.08) hue-rotate(-8deg)',
 };
@@ -97,7 +101,11 @@ export class PostFX {
   eyeOpen(ms = 2600) {
     clearTimeout(this._blurT);
     this.canvas.style.transition = 'none';
-    this._compose('blur(14px) brightness(0.7)');
+    // D13: 14px → 5px. A full-canvas blur is re-rasterized every frame it
+    // animates; at 14px that is the single heaviest compositor ask in the
+    // game (it read as lag). 5px + the brightness lift gives the same
+    // "eyes focusing" read for a fraction of the cost.
+    this._compose('blur(5px) brightness(0.72)');
     // force the style to commit before easing out
     void this.canvas.offsetWidth;
     this.canvas.style.transition = `filter ${ms}ms cubic-bezier(0.25, 0.6, 0.35, 1)`;

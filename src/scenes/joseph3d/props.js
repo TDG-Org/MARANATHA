@@ -302,14 +302,16 @@ export function makeTentInterior(x, z) {
   // the tent shell seen from inside — D11: ENLARGED (the coat two-shot's lens
   // could back out through the old 4.3-radius cone and catch the outside; the
   // beat also caps its shot distance — belt and braces)
+  // D13: bigger again (6.6 × 6.4) — the gift shot now sits higher to clear
+  // heads, and a higher camera needs more cone above it to stay indoors.
   const shell = new THREE.Mesh(
-    new THREE.ConeGeometry(5.8, 5.6, 8, 1, true),
+    new THREE.ConeGeometry(6.6, 6.4, 8, 1, true),
     toonMat(0x9a7550, { side: THREE.BackSide }),
   );
-  shell.position.set(x, 2.8, z);
+  shell.position.set(x, 3.2, z);
   group.add(shell);
   // floor rug layers
-  const rug = new THREE.Mesh(new THREE.CircleGeometry(4.0, 18), toonMat(0x7c4038));
+  const rug = new THREE.Mesh(new THREE.CircleGeometry(4.4, 18), toonMat(0x7c4038));
   rug.rotation.x = -Math.PI / 2;
   rug.position.set(x, 0.015, z);
   const rug2 = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.6), toonMat(0x4f6b8a));

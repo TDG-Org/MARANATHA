@@ -220,14 +220,23 @@ export function buildDreamField() {
   // (the wheat's whisper-sway, made literal), plus a sparser ring of bigger
   // ones drifting far beyond the border. Never the interactable sheaves.
   // ONE instanced draw; matrices re-written per frame like the sheep flock.
+  // D13 (Nate): NOTHING floats inside the field — the crop and the seven
+  // sheaves own that space. The stones hang AROUND it and FURTHER out, and
+  // there are FEW of them: a scattered halo past the border ring (r ≥ 17.5),
+  // bigger and higher the farther they drift, so the dream feels wide.
   const floatSpots = []; // [x, baseY, z, scale, phase, bobSpeed] — field-local
-  for (let i = 0; i < 26; i++) { // the inner drift — over the wheat, clear of the sheaf ring
-    const a = rnd() * Math.PI * 2, r = 8 + rnd() * 5;
-    floatSpots.push([Math.cos(a) * r, 1.0 + rnd() * 1.6, Math.sin(a) * r, 0.5 + rnd() * 0.9, rnd() * Math.PI * 2, 0.45 + rnd() * 0.5]);
-  }
-  for (let i = 0; i < 16; i++) { // the far ring — glimpsed past the border, fog-softened
-    const a = rnd() * Math.PI * 2, r = 17.5 + rnd() * 7.5;
-    floatSpots.push([Math.cos(a) * r, 1.8 + rnd() * 2.8, Math.sin(a) * r, 0.9 + rnd() * 1.4, rnd() * Math.PI * 2, 0.3 + rnd() * 0.4]);
+  for (let i = 0; i < 13; i++) {
+    const a = (i / 13) * Math.PI * 2 + rnd() * 0.42;   // spread all the way around
+    const r = 17.5 + rnd() * 11;                       // 17.5–28.5: outside the border
+    const far = (r - 17.5) / 11;
+    floatSpots.push([
+      Math.cos(a) * r,
+      2.0 + far * 3.4 + rnd() * 1.4,                   // higher the further out
+      Math.sin(a) * r,
+      0.95 + far * 1.5 + rnd() * 0.4,                  // and bigger, so they still read
+      rnd() * Math.PI * 2,
+      0.26 + rnd() * 0.34,                             // a slow, weightless bob
+    ]);
   }
   const floatGeo = new THREE.DodecahedronGeometry(0.34, 0);
   const floatRocks = new THREE.InstancedMesh(floatGeo, new THREE.MeshBasicMaterial({ color: 0x596390, fog: true }), floatSpots.length);

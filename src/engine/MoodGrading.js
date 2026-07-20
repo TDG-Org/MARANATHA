@@ -28,6 +28,18 @@ export const MOODS = {
   // D8: fog pushed back (18→36) + a stronger key so every figure reads
   // clearly; the drained "future" PostFX carries the gloom instead.
   pit: { skyTop: 0x3a3550, skyBottom: 0x6b5a63, fog: 0x6b6274, fogNear: 36, key: 0xa89dbc, keyI: 0.72, hemi: 0.46, hemiSky: 0x6b5a63, sun: [0, 12, 5], ridge: [0x8b8496, 0x776f84, 0x565064], tint: '#1c1830', tintA: 0.12 },
+  // D13 (Nate: the second cut of the cold open was WAY too gloomy — the FOG is
+  // right, the darkness wasn't): the betrayal EXCHANGE is lit to read faces —
+  // identical fog + fog distance to `pit`, but a brighter key/hemi, a lighter
+  // sky and only a whisper of tint. The gloom returns for the throw + the fall.
+  pitTalk: { skyTop: 0x4c4668, skyBottom: 0x8b7885, fog: 0x6b6274, fogNear: 36, key: 0xd6cbe6, keyI: 1.02, hemi: 0.62, hemiSky: 0x8b7885, sun: [0, 12, 5], ridge: [0x9d95a8, 0x8a8296, 0x6a6478], tint: '#1c1830', tintA: 0.05 },
+  // D13 (Nate: "it shows night when the brothers are talking… then day… THEN
+  // night"): DAYTIME TENSION. The envy scene, the telling and the close are
+  // broad daylight in the story — `ominous` is a NIGHT palette and reading it
+  // as nightfall was correct. This mood keeps the day (and the SAME sun
+  // direction as goldenHour, so the light never flips mid-scene) while turning
+  // the air cooler and harder: tense, not nocturnal.
+  tenseDay: { skyTop: 0x7f93b4, skyBottom: 0xe6d3ae, fog: 0xd3bd9d, fogNear: 40, key: 0xffe6c0, keyI: 0.92, hemi: 0.54, hemiSky: 0xe6d3ae, sun: [2, 9, -12], ridge: [0xb09a94, 0x998290, 0x655a74], tint: '#2b2b3d', tintA: 0.07 },
   // Jacob's tent interior: warm lamplight raking from one side.
   tentWarm: { skyTop: 0x4a4e8f, skyBottom: 0xe88d67, fog: 0x2e2118, fogNear: 11, key: 0xffc888, keyI: 1.0, hemi: 0.45, hemiSky: 0xe8a86a, sun: [-3.5, 5, 2.5], ridge: [0x8a6a7e, 0x74566e, 0x4e3a54], tint: '#2a1c10', tintA: 0.08 },
   // D8 deeper-mood push: dusk burns a touch deeper, ominous presses harder.

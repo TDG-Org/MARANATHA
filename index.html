@@ -20,8 +20,11 @@
        browser at native resolution, so it is ALWAYS crisp on any screen.
        Screens (home, stories) build their own DOM; these two are persistent. */
     #debug {
-      /* D8: lifted clear of the About/Support links (bottom-left, home screen) */
-      position: fixed; left: calc(8px + env(safe-area-inset-left)); bottom: calc(58px + env(safe-area-inset-bottom));
+      /* D8: lifted clear of the About/Support links (bottom-left, home screen).
+         D13: lifted again ABOVE the 11vh cinema letterbox bar, so the fps /
+         script·submit / draw stats stay readable during cutscenes (Nate). */
+      position: fixed; left: calc(8px + env(safe-area-inset-left));
+      bottom: calc(11vh + 18px + env(safe-area-inset-bottom));
       display: none; pointer-events: none;
       z-index: 30; font: 11px/1.5 ui-monospace, Consolas, monospace; color: #cfe8cf;
       background: rgba(10, 10, 18, 0.65); padding: 6px 9px; border-radius: 6px;

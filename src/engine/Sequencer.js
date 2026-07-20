@@ -84,7 +84,7 @@ export class Sequencer {
           if (s.awaitMs !== false) await wait(s.duration ?? 1400);
           break;
         case 'fade':
-          await c.cinema.fade(s.on !== false, s.ms ?? 600);
+          await c.cinema.fade(s.on !== false, s.ms ?? 600, s.pulse !== false);
           break;
         case 'camRelease':
           c.camera.release(s.ms ?? 1400);
