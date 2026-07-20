@@ -92,12 +92,13 @@ export class DebugHud {
     if (this.el) this.el.style.display = this.enabled ? 'block' : 'none';
   }
 
-  frame(dtMs, updMs = 0, subMs = 0) {
+  frame(dtMs, updMs = 0, subMs = 0, eco = false) {
     if (!this.enabled || !this.el) return;
     this.acc += dtMs;
     this.frames += 1;
     this.updAcc = (this.updAcc || 0) + updMs;
     this.subAcc = (this.subAcc || 0) + subMs;
+    if (eco) this.ecoFrames = (this.ecoFrames || 0) + 1;
     if (this.acc >= 500) {
       this.fps = Math.round((this.frames * 1000) / this.acc);
       this.ms = (this.acc / this.frames).toFixed(1);
@@ -105,13 +106,17 @@ export class DebugHud {
       // calls) — the REST of a slow frame lives in the compositor/GPU.
       const upd = (this.updAcc / this.frames).toFixed(1);
       const sub = (this.subAcc / this.frames).toFixed(1);
+      // D12: '· eco' = the power governor is intentionally pacing this idle
+      // moment at half rate — a 30 here is savings, not lag.
+      const eco2 = (this.ecoFrames || 0) > this.frames / 2 ? ' · eco' : '';
       this.acc = 0;
       this.frames = 0;
       this.updAcc = 0;
       this.subAcc = 0;
+      this.ecoFrames = 0;
       const info = this.renderer.info;
       this.el.textContent =
-        `fps ${this.fps}  (${this.ms} ms)\n` +
+        `fps ${this.fps}  (${this.ms} ms)${eco2}\n` +
         `script ${upd} ms · submit ${sub} ms\n` +
         `draw calls ${info.render.calls}  tris ${info.render.triangles}\n` +
         `pixelRatio ${this.renderer.getPixelRatio().toFixed(2)}`;

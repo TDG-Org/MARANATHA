@@ -74,6 +74,7 @@ export function createApp(container) {
   async function navigate(key, params) {
     if (busy) return;
     if (!screens.has(key)) { console.warn(`[app] no screen "${key}"`); return; }
+    navT = performance.now(); // scene-entry grace: reveals glide at full rate
     busy = true;
     const first = !current;
     if (!first) await veil.cover(460);
@@ -102,6 +103,32 @@ export function createApp(container) {
   let paused = false;      // true pause: update frozen
   let pausedPainted = false; // D6 energy rule: paint the frozen frame ONCE, then stop rendering
 
+  // ── D12 POWER GOVERNOR ─────────────────────────────────────────────────────
+  // Full 60fps whenever the moment can move fast: any input in the last ~1.6s,
+  // a fresh scene entry (reveal glides), or whatever the scene itself flags
+  // through instance.fullRate() (cutscenes, narration, dialogue, camera moves,
+  // player/scripted motion, fleeing sheep…). Pure ambient idle — a parked home
+  // screen, a player standing in the camp — renders at ECO 30: half the
+  // machine's per-second work, invisible on slow painterly motion, and the
+  // FIRST input snaps it back to 60 before the player's action even lands.
+  const POWER = { ecoFps: 30, activeMs: 1600, graceMs: 3000 };
+  let lastInput = performance.now();
+  let navT = performance.now();
+  let liveFps = 60; // what the loop actually ran this tick (for #debug honesty)
+  const noteActivity = () => { lastInput = performance.now(); };
+  window.addEventListener('pointerdown', noteActivity, { passive: true });
+  window.addEventListener('pointermove', noteActivity, { passive: true });
+  window.addEventListener('keydown', noteActivity, { passive: true });
+  window.addEventListener('wheel', noteActivity, { passive: true });
+  window.addEventListener('touchstart', noteActivity, { passive: true });
+  const targetFps = () => {
+    const now = performance.now();
+    if (now - lastInput < POWER.activeMs) return 60;
+    if (now - navT < POWER.graceMs) return 60;
+    if (current?.instance?.fullRate?.()) return 60;
+    return POWER.ecoFps;
+  };
+
   const app = {
     camera,
     renderer,
@@ -117,9 +144,11 @@ export function createApp(container) {
     // the preview tab runs hidden and rAF/screenshots are paused there).
     get scene() { return current?.scene; },
     get instance() { return current?.instance; },
+    get power() { return { fps: liveFps, eco: liveFps < 60 }; },
   };
 
-  startLoop((dt, now) => {
+  startLoop((dt, now, fps) => {
+    liveFps = fps;
     let updMs = 0, subMs = 0;
     if (current) {
       if (!paused) {
@@ -140,12 +169,16 @@ export function createApp(container) {
         pausedPainted = true;
       }
     }
-    if (!paused) quality.frame(dt);
+    // Adaptive quality reads REAL frame pressure only — an eco-governed 33ms
+    // frame is design, not a struggling device, and must never shed DPR.
+    if (!paused && fps >= 60) quality.frame(dt);
     // D9: the perf HUD splits SCRIPT time vs RENDER-SUBMIT time — if fps is
     // low while both are tiny, the cost lives in the compositor/GPU (filters,
     // resolution), not in the game code. That split diagnoses any device.
-    hud.frame(dt, updMs, subMs);
-  });
+    // D12: an eco-governed tick is LABELED so a 30fps reading is never
+    // mistaken for lag.
+    hud.frame(dt, updMs, subMs, fps < 60);
+  }, targetFps);
 
   return app;
 }

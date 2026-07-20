@@ -186,11 +186,15 @@ export function buildHome({ scene, camera, app }) {
   // stories float around him as smaller LOCKED nodes (🔒 + name), joined by a
   // slowly-shimmering dotted path. Everything drifts gently — the storefront
   // breathes. Pure DOM/CSS + one SVG; no per-frame JS.
+  // D12 power: the old pulse/glow keyframes animated BOX-SHADOW — a repaint of
+  // every node, every frame, forever, on the screen people park on. The pulse
+  // is now a ring pseudo-element animating transform+opacity only (composited,
+  // no rasterization), over a STATIC glow shadow.
   const mapStyle = document.createElement('style');
   mapStyle.textContent = `
     @keyframes mr-node-float { 0%,100% { transform: translate(-50%,-50%) translateY(0); } 50% { transform: translate(-50%,-50%) translateY(-5px); } }
-    @keyframes mr-node-pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(242,184,128,0.45), 0 0 26px 6px rgba(255,196,120,0.4), 0 6px 24px rgba(0,0,0,0.4); } 50% { box-shadow: 0 0 0 13px rgba(242,184,128,0), 0 0 38px 10px rgba(255,196,120,0.55), 0 6px 24px rgba(0,0,0,0.4); } }
-    @keyframes mr-seal-glow { 0%,100% { box-shadow: inset 0 0 14px rgba(0,0,0,0.45), 0 4px 14px rgba(0,0,0,0.3), 0 0 12px 2px rgba(242,184,128,0.12); } 50% { box-shadow: inset 0 0 14px rgba(0,0,0,0.45), 0 4px 14px rgba(0,0,0,0.3), 0 0 18px 4px rgba(242,184,128,0.22); } }
+    @keyframes mr-ring-pulse { 0% { transform: scale(0.92); opacity: 0.6; } 70% { transform: scale(1.32); opacity: 0; } 100% { transform: scale(1.32); opacity: 0; } }
+    @keyframes mr-seal-breathe { 0%,100% { opacity: 0.3; } 50% { opacity: 0.75; } }
     @keyframes mr-path-shimmer { to { stroke-dashoffset: -64; } }
   `;
   document.head.append(mapStyle);
@@ -294,12 +298,18 @@ export function buildHome({ scene, camera, app }) {
         `color:${big ? '#241f38' : 'rgba(253,246,227,0.75)'}`,
         `background:${big ? 'radial-gradient(circle at 34% 30%, #ffe9c9, #f2b880 62%, #d99a5e)' : 'radial-gradient(circle at 36% 32%, rgba(40,36,58,0.72), rgba(14,12,24,0.68))'}`,
         `border:2px solid ${big ? 'rgba(242,184,128,0.55)' : 'rgba(255,255,255,0.18)'}`,
-        `box-shadow:${big ? '0 6px 24px rgba(0,0,0,0.4)' : 'inset 0 0 14px rgba(0,0,0,0.45), 0 4px 14px rgba(0,0,0,0.3)'}`,
+        // static glow (the pulse ring animates separately, composited-only)
+        `box-shadow:${big ? '0 0 30px 7px rgba(255,196,120,0.45), 0 6px 24px rgba(0,0,0,0.4)' : 'inset 0 0 14px rgba(0,0,0,0.45), 0 4px 14px rgba(0,0,0,0.3), 0 0 14px 3px rgba(242,184,128,0.16)'}`,
         'backdrop-filter:blur(3px)',
-        `animation: mr-node-float ${5 + (x % 3)}s ease-in-out ${y % 4}s infinite, ${big ? 'mr-node-pulse 2.6s' : `mr-seal-glow ${3.4 + (x % 2)}s`} ease-in-out infinite`,
+        `animation: mr-node-float ${5 + (x % 3)}s ease-in-out ${y % 4}s infinite`,
         'transition:border-color 200ms ease, filter 160ms ease',
       ].join(';');
       node.textContent = built ? (status === 'done' ? '✔' : '▶') : '🔒';
+      const ring = document.createElement('span');
+      ring.style.cssText = big
+        ? 'position:absolute; inset:-5px; border-radius:50%; border:2px solid rgba(242,184,128,0.65); pointer-events:none; will-change:transform,opacity; animation: mr-ring-pulse 2.6s ease-out infinite;'
+        : `position:absolute; inset:-3px; border-radius:50%; border:1px solid rgba(242,184,128,0.4); pointer-events:none; will-change:opacity; animation: mr-seal-breathe ${3.4 + (x % 2)}s ease-in-out infinite;`;
+      node.append(ring);
       node.onmouseenter = () => { node.style.filter = 'brightness(1.12)'; };
       node.onmouseleave = () => { node.style.filter = 'none'; };
       node.onclick = () => { Audio.uiClick(); selectStory(story.id); };

@@ -96,7 +96,14 @@ export function buildPlayground({ scene, camera, renderer, app }) {
     factory.dispose();
   }
 
-  return { update, dispose, debug: { get hero() { return hero; }, get controller() { return controller; }, get tcam() { return tcam; }, factory } };
+  return {
+    update, dispose,
+    // D12 power governor hint (see app.js): full rate for motion/cinematics/
+    // narration; the parked bench idles at eco-30.
+    fullRate: () => !ready || Narrator.speaking || (tcam && tcam.poseK > 0)
+      || (controller && controller.vel.lengthSq() > 0.02),
+    debug: { get hero() { return hero; }, get controller() { return controller; }, get tcam() { return tcam; }, factory },
+  };
 }
 
 // A few low-poly pines as one instanced draw call (also camera pull-in colliders).

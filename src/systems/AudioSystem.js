@@ -389,9 +389,11 @@ class AudioSystem {
       src.start();
       return { filt, g };
     };
+    // D12 power: the old 'water' bed ran a noise source + filter + LFO for the
+    // ENTIRE session with no caller ever raising its gain — deleted. A future
+    // river scene re-adds it as data, not as an always-on drain.
     this.amb = {
       wind: mkNoiseBed('lowpass', 300, 0.6),
-      water: mkNoiseBed('bandpass', 480, 0.8),
     };
     const lfo = (rate, depth, target) => {
       const o = this.ctx.createOscillator();
@@ -402,7 +404,6 @@ class AudioSystem {
       o.start();
     };
     lfo(0.07, 70, this.amb.wind.filt.frequency);
-    lfo(0.13, 170, this.amb.water.filt.frequency);
     const pg = this.ctx.createGain();
     pg.gain.value = 0;
     [55, 82.5].forEach((f) => {
@@ -423,7 +424,7 @@ class AudioSystem {
     const t = this.ctx.currentTime;
     const set = (g, v) => g.gain.setTargetAtTime(v, t, fade / 3);
     if (levels.wind !== undefined) set(this.amb.wind.g, levels.wind * 0.05);
-    if (levels.water !== undefined) set(this.amb.water.g, levels.water * 0.045);
+    if (levels.water !== undefined && this.amb.water) set(this.amb.water.g, levels.water * 0.045);
     if (levels.night !== undefined) set(this.amb.night.g, levels.night * 0.045);
   }
 

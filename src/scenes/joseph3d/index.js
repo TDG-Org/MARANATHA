@@ -503,6 +503,19 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
 
   return {
     update, dispose,
+    // D12 power governor hint: TRUE whenever this scene can move fast — the
+    // app renders at full 60 then, and drops the pure ambient idle (standing
+    // in the camp, nothing scripted running) to eco-30. Broad on purpose:
+    // any cutscene machinery, narration, dialogue, camera move, scripted or
+    // player motion, or a fleeing lamb forces full rate.
+    fullRate: () =>
+      !ready
+      || Narrator.speaking
+      || dialogue.isOpen
+      || ctx.sequencer.running
+      || director.inCinematic || !!director._poseDriver || director.drift
+      || (controller && (!!controller._script || controller.vel.lengthSq() > 0.02))
+      || ctx.sheep.sheep.some((s) => s.state === 'flee'),
     // the loading screen holds for BOTH the rigs and the full narration —
     // every verse mp3 decodes up front, so the one voice can never drop to
     // TTS from a mid-scene network blip (D7).

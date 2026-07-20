@@ -89,7 +89,7 @@ export function openSettings({ onReset } = {}) {
       b.style.color = on ? '#241f38' : '#fdf6e3';
       b.style.fontWeight = on ? '700' : '500';
     });
-    gfxHint.textContent = Graphics.autoDetected ? 'auto-detected' : 'applies on next scene';
+    gfxHint.textContent = Graphics.autoDetected ? 'auto-detected' : 'fully applies after a reload';
   };
   Object.keys(GRAPHICS_PRESETS).forEach((key) => {
     const b = document.createElement('button');

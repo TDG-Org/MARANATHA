@@ -61,10 +61,14 @@ export function createNameTags() {
         tag.ly += (y - tag.ly) * k;
         tag.ls += (scale - tag.ls) * k;
       }
-      const wx = tag.lx, wy = tag.ly;
-      if (wx !== tag.wx || wy !== tag.wy || tag.ls !== tag.ws) {
-        tag.wx = wx; tag.wy = wy; tag.ws = tag.ls;
-        tag.el.style.transform = `translate3d(${wx.toFixed(2)}px, ${wy.toFixed(2)}px, 0) translate(-50%, -100%) scale(${tag.ls.toFixed(3)})`;
+      // D12 power: sub-perceptual writes are wasted compositor work — only
+      // touch the DOM once the smoothed value has drifted ≥0.05px (a 0.05px
+      // step is invisible; the glide stays butter while idle writes drop ~5×).
+      if (Math.abs(tag.lx - (tag.wx ?? -9)) > 0.05
+        || Math.abs(tag.ly - (tag.wy ?? -9)) > 0.05
+        || Math.abs(tag.ls - (tag.ws ?? -9)) > 0.002) {
+        tag.wx = tag.lx; tag.wy = tag.ly; tag.ws = tag.ls;
+        tag.el.style.transform = `translate3d(${tag.lx.toFixed(2)}px, ${tag.ly.toFixed(2)}px, 0) translate(-50%, -100%) scale(${tag.ls.toFixed(3)})`;
       }
       const op = dist > tag.maxDist * 0.85 ? '0.45' : '1';
       if (tag.lo !== op) { tag.el.style.opacity = op; tag.lo = op; }
