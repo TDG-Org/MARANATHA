@@ -31,10 +31,15 @@ export function createNameTags() {
     return tag;
   }
 
-  function update(camera) {
+  function update(camera, dt = 16.7) {
     const W = window.innerWidth, H = window.innerHeight;
     if (!scratch) scratch = new (camera.position.constructor)();
     const p = scratch;
+    // D11 (Nate: "the names are jittering"): the old 0.5px change-gate made
+    // tags SNAP in half-pixel steps as the camera breathed. Positions are now
+    // temporally SMOOTHED (frame-rate-safe damping) and written sub-pixel —
+    // still one composited transform, no layout.
+    const k = 1 - Math.exp(-dt * 0.028);
     for (const tag of tags) {
       const c = tag.character;
       p.copy(c.position);
@@ -43,15 +48,23 @@ export function createNameTags() {
       const dist = camera.position.distanceTo(c.position);
       if (p.z > 1 || dist > tag.maxDist) {
         if (tag.lo !== '0') { tag.el.style.opacity = '0'; tag.lo = '0'; }
+        tag.lx = -1; // re-appearing tags snap to place, never glide across
         continue;
       }
       const x = (p.x * 0.5 + 0.5) * W;
       const y = (-p.y * 0.5 + 0.5) * H;
       // Clamp on-screen scale so the tag is readable close AND far.
       const scale = clamp(1.15 - dist * 0.02, 0.62, 1.0);
-      if (Math.abs(x - tag.lx) > 0.5 || Math.abs(y - tag.ly) > 0.5 || Math.abs(scale - tag.ls) > 0.01) {
-        tag.lx = x; tag.ly = y; tag.ls = scale;
-        tag.el.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) translate(-50%, -100%) scale(${scale.toFixed(3)})`;
+      if (tag.lx === -1) { tag.lx = x; tag.ly = y; tag.ls = scale; } // (re)appear: snap
+      else {
+        tag.lx += (x - tag.lx) * k;
+        tag.ly += (y - tag.ly) * k;
+        tag.ls += (scale - tag.ls) * k;
+      }
+      const wx = tag.lx, wy = tag.ly;
+      if (wx !== tag.wx || wy !== tag.wy || tag.ls !== tag.ws) {
+        tag.wx = wx; tag.wy = wy; tag.ws = tag.ls;
+        tag.el.style.transform = `translate3d(${wx.toFixed(2)}px, ${wy.toFixed(2)}px, 0) translate(-50%, -100%) scale(${tag.ls.toFixed(3)})`;
       }
       const op = dist > tag.maxDist * 0.85 ? '0.45' : '1';
       if (tag.lo !== op) { tag.el.style.opacity = op; tag.lo = op; }

@@ -85,7 +85,7 @@ export function buildPlayground({ scene, camera, renderer, app }) {
     tcam.setTarget(hero.position);
     tcam.frame(dt, controller.moveVec.x, controller.moveVec.y);
     for (const c of chars) if (c !== hero) c.update(dt, camera);
-    nameTags.update(camera);
+    nameTags.update(camera, dt);
   }
 
   function dispose() {
