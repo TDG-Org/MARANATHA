@@ -324,19 +324,8 @@ export function buildHome({ scene, camera, app }) {
         'text-shadow:0 1px 6px rgba(15,12,26,0.8)', 'pointer-events:none',
       ].join(';');
       map.append(node, ord, label);
-      if (big) {
-        const pill = document.createElement('div');
-        pill.className = 'mr-node-label';
-        pill.textContent = '▶ PLAY NOW';
-        pill.style.cssText = [
-          'position:absolute', `left:${x}%`, `top:calc(${y}% + ${74}px)`, 'transform:translateX(-50%)',
-          'font:700 10.5px "Segoe UI",system-ui,sans-serif', 'letter-spacing:0.14em',
-          'color:#241f38', 'background:linear-gradient(180deg,#ffe9c9,#f2b880)',
-          'padding:4px 12px', 'border-radius:999px', 'pointer-events:none',
-          'box-shadow:0 3px 12px rgba(0,0,0,0.35), 0 0 16px rgba(242,184,128,0.35)',
-        ].join(';');
-        map.append(pill);
-      }
+      // (the old '▶ PLAY NOW' pill under this node is GONE — D11, Nate: two
+      // "start" affordances confused; the card's Start Story button is THE one)
     }
     if (selectedId) selectStory(selectedId);
   }
