@@ -24,7 +24,7 @@ import { openSettings } from '../../ui/settings.js';
 import { buildCamp, makeTentInterior } from './props.js';
 import { SheepFlock } from './sheep.js';
 import { buildNamed, buildGenericBrother, buildWorker, AmbientNPCs } from './cast.js';
-import { createBeats } from './beats.js';
+import { createBeats } from './beats/index.js';
 import { buildPitStage } from './pit.js';
 import { buildDreamField } from './dreamField.js';
 import { Narrator } from '../../systems/Narrator.js';
@@ -171,19 +171,36 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
 
   // --- audio: beds via manifest (real file OR fallback OR silence) ---
   Audio.unlock?.();
+  // D14: the camp's OWN ambience — its resting levels live here so a scene that
+  // happens somewhere else (the cold open, 60u away at the pit) can take it to
+  // silence and the morning can bring it back. `amb.camp_wind` carries
+  // BIRDSONG, so this is also what keeps birds out of the night wilderness.
+  const CAMP_BED_GAIN = { wind: 1, sheepPen: 0.5, chatter: 0.4 };
+  const startBeat = Math.min(getCheckpoint('joseph3d'), 6); // also picks the opening music below
+  const startsAtColdOpen = startBeat === 0;
+  const bedScale = startsAtColdOpen ? 0 : 1;
   const beds = {
-    wind: Audio.playLoop('amb.camp_wind'),
-    fire: Audio.playLoop('amb.fire_crackle', { gain: 0 }),
-    sheepPen: Audio.playLoop('amb.sheep_pen', { gain: 0.5 }),
-    chatter: Audio.playLoop('amb.camp_chatter', { gain: 0.4 }),
+    wind: Audio.playLoop('amb.camp_wind', { gain: CAMP_BED_GAIN.wind * bedScale }),
+    fire: Audio.playLoop('amb.fire_crackle', { gain: 0 }), // proximity-driven below
+    sheepPen: Audio.playLoop('amb.sheep_pen', { gain: CAMP_BED_GAIN.sheepPen * bedScale }),
+    chatter: Audio.playLoop('amb.camp_chatter', { gain: CAMP_BED_GAIN.chatter * bedScale }),
   };
+  // level 0..1 — the whole camp bed layer, faded as one.
+  const setCampAmbience = (level, fade = 2) => {
+    beds.wind.setGain(CAMP_BED_GAIN.wind * level, fade);
+    beds.sheepPen.setGain(CAMP_BED_GAIN.sheepPen * level, fade);
+    beds.chatter.setGain(CAMP_BED_GAIN.chatter * level, fade);
+    // The PROCEDURAL bird layer only exists when the real bed file is missing
+    // (the fallback path) — never double it on top of Nate's recording.
+    Audio.ambience({ birds: level > 0 && !Audio.samples['amb.camp_wind'] ? 0.18 : 0 });
+  };
+  if (startsAtColdOpen) setCampAmbience(0, 0.1); // silence before the first frame
   // MUSIC STATE MACHINE (D8): the score is beat-driven, crossfade-only, and
   // NEVER doubles. The cold open starts in silence (no warm camp theme under a
   // betrayal); a checkpoint resume opens on the emotional state of its beat
   // (tension holds from the envy scene until the dream — calm never sneaks
   // back in between). Same-key requests are no-ops, so a track can't restart
   // over itself.
-  const startBeat = Math.min(getCheckpoint('joseph3d'), 6);
   // D9: the cold open carries a low DREAD bed (Nate heard silence and missed
   // the tension — a real music/betrayal_dark.mp3 takes over when it lands)
   const MUSIC_BY_BEAT = { 0: 'music.betrayal_dark', 1: 'music.camp_warm', 2: 'music.camp_warm', 3: 'music.camp_warm', 4: 'music.ominous_turn', 5: null, 6: 'music.camp_warm' };
@@ -295,7 +312,7 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
     camera: director, sequencer: null, setInput,
     isPaused: () => app.paused,
     sound: (key, gain) => { if (!disposed) Audio.play(key, gain !== undefined ? { gain } : {}); },
-    setMusic, camp, dream, pit, tentInterior, bounds, futureVignette, sunSprite,
+    setMusic, setCampAmbience, camp, dream, pit, tentInterior, bounds, futureVignette, sunSprite,
     postFX: app.postFX, // named filter looks (dream/future) + blur transitions
     get joseph() { return joseph; },
     get cast() { return cast; },

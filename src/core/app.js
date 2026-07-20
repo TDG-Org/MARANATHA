@@ -171,7 +171,9 @@ export function createApp(container) {
     }
     // Adaptive quality reads REAL frame pressure only — an eco-governed 33ms
     // frame is design, not a struggling device, and must never shed DPR.
-    if (!paused && fps >= 60) quality.frame(dt);
+    // Same rule for the Graphics auto-tuner: it judges the machine on
+    // full-rate frames alone, and only while the preset is still auto.
+    if (!paused && fps >= 60) { quality.frame(dt); Graphics.sampleFrame(dt); }
     // D9: the perf HUD splits SCRIPT time vs RENDER-SUBMIT time — if fps is
     // low while both are tiny, the cost lives in the compositor/GPU (filters,
     // resolution), not in the game code. That split diagnoses any device.

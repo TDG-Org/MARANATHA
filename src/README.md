@@ -11,8 +11,14 @@ Where everything lives. One line per module; folders ordered by how often you'll
 
 - `index.js` — assembly + lifecycle: world, lights, audio beds + music state machine,
   cast loading, story runner, per-frame update, dispose, `debug.*` hooks
-- `beats.js` — the STORY as data/flow: 8 beats (cold open → herd → report → coat →
-  dusk → dream → tell → close) + checkpoint `applyState`; shot()/twoShot() dialogue cams
+- `beats/` — the STORY as data/flow, one file per ACT (each beat sets its own
+  presentation state, so any checkpoint can start fresh):
+  - `index.js` — `createBeats(ctx)`: the running order + checkpoint `applyState`
+  - `helpers.js` — shared sequencing + the dialogue-camera grammar (`shot`/`twoShot`)
+  - `coldOpen.js` — beat 0: the flash-forward to the pit
+  - `camp.js` — beats 1–4: herd · report to Jacob · the coat · the dusk fire
+  - `dream.js` — beat 5: the dream (its finale is signed off — do not restage)
+  - `telling.js` — beats 6–7: telling the brothers · the close
 - `props.js` — the camp prop kit + layout data (tents, fires, well, pen, clutter, borders)
 - `cast.js` — who's in the scene (colors/builds) + AmbientNPCs (wander/gesture/freeze)
 - `sheep.js` — the instanced flock + herding/routing/unstick

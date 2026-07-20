@@ -89,7 +89,11 @@ export function openSettings({ onReset } = {}) {
       b.style.color = on ? '#241f38' : '#fdf6e3';
       b.style.fontWeight = on ? '700' : '500';
     });
-    gfxHint.textContent = Graphics.autoDetected ? 'auto-detected' : 'fully applies after a reload';
+    // D14: say plainly whether the game is choosing (and that it self-corrects)
+    // or the player has taken over.
+    gfxHint.textContent = Graphics.autoDetected
+      ? `auto — set to ${Graphics.preset.label} for this device`
+      : 'your choice · fully applies after a reload';
   };
   Object.keys(GRAPHICS_PRESETS).forEach((key) => {
     const b = document.createElement('button');
