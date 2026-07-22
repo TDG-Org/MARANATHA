@@ -10,7 +10,14 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test:pacing": "node tools/test-frame-pacer.mjs"
+    "test:pacing": "node tools/test-frame-pacer.mjs",
+    "test:camera": "node tools/test-camera-continuity.mjs",
+    "test:lifetime": "node tools/test-lifetime.mjs",
+    "test:ui-lifetime": "node tools/test-ui-lifetime.mjs",
+    "test:beats": "node tools/test-beat-entry.mjs",
+    "test:layout": "node tools/test-scene-layout.mjs",
+    "test:models": "node tools/test-character-glb-optimizer.mjs",
+    "test:audio-power": "node tools/test-audio-power.mjs"
   },
   "devDependencies": {
     "msedge-tts": "^2.0.7",

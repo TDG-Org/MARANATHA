@@ -5,15 +5,19 @@ no log line → the asset doesn't ship.
 
 | File | Source asset | Author | License | Source URL | Downloaded | Modifications |
 |---|---|---|---|---|---|---|
-| `character-base.glb` | KayKit Adventurers Character Pack 1.0 — **Mage.glb** | Kay Lousberg (kaylousberg.com) | **CC0** (verified in repo `LICENSE.txt` at download time) | https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0 | 2026-07-16 | Loaded as-is; at runtime we hide fantasy accessories (hat, spellbook, wand), re-color parts to the Alto palette (flat toon, original texture unused), repurpose `Mage_Cape` as Joseph's coat and `2H_Staff` as Jacob's staff. |
-| `character-hooded.glb` | KayKit Adventurers Character Pack 1.0 — **Rogue_Hooded.glb** | Kay Lousberg (kaylousberg.com) | **CC0** (same `LICENSE.txt`) | https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0 | 2026-07-16 | Same treatment; weapons (knife, crossbows, throwable) hidden; hooded head kept for shepherd/brother variety. |
+| `character-base.glb` | KayKit Adventurers Character Pack 1.0 — **Mage.glb** | Kay Lousberg (kaylousberg.com) | **CC0** (verified in repo `LICENSE.txt` at download time) | https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0 | 2026-07-16 | Runtime hides fantasy accessories, recolors parts to the Alto palette, repurposes `Mage_Cape` as Joseph's coat and `2H_Staff` as Jacob's staff. On 2026-07-22 the GLB was losslessly repacked: all scene/mesh/material/image/skin bytes were retained exactly and the 76-clip source library was reduced to 17 runtime/staging clips. |
+| `character-hooded.glb` | KayKit Adventurers Character Pack 1.0 — **Rogue_Hooded.glb** | Kay Lousberg (kaylousberg.com) | **CC0** (same `LICENSE.txt`) | https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0 | 2026-07-16 | Same runtime treatment; weapons hidden and the hooded head retained for variety. On 2026-07-22 it received the same exact-byte animation-library repack (76 → 17 clips). |
 
-## Validation summary (glbcheck, 2026-07-16)
+## Validation summary (glbcheck + production GLTFLoader, 2026-07-22)
 
 | File | Size | Tris | Rig | Clips |
 |---|---|---|---|---|
-| character-base.glb | 3.4 MB | 5,683 (≤10k ✓) | 1 skin, 41 joints | 77 shared clips |
-| character-hooded.glb | 3.4 MB | 6,035 (≤10k ✓) | same rig | same library |
+| character-base.glb | 1.08 MiB | 5,683 (≤10k ✓) | 1 skin, 41 joints | 17 retained clips |
+| character-hooded.glb | 1.09 MiB | 6,035 (≤10k ✓) | same rig | same 17 clips |
+
+`tools/test-character-glb-optimizer.mjs` parses both files with Three.js's real
+`GLTFLoader`, compares scene signatures, exercises all five mapped game states,
+hash-checks retained buffer views, and proves deterministic/idempotent output.
 
 ### Clip mapping vs MODELS.md spec (gaps documented)
 
