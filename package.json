@@ -9,7 +9,8 @@
     "vo": "node tools/make-vo.mjs",
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:pacing": "node tools/test-frame-pacer.mjs"
   },
   "devDependencies": {
     "msedge-tts": "^2.0.7",

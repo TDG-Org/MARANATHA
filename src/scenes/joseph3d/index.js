@@ -462,7 +462,6 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
 
     if (!ready) return;
     controller.update(dt);
-    joseph.update(dt);
     director.setTarget(joseph.position);
     director.setLead(controller.vel.x, controller.vel.y);
     director.frame(dt);
