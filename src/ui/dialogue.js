@@ -1,4 +1,5 @@
 import { Audio } from '../systems/AudioSystem.js';
+import { abortReason, makeAbortError } from '../core/async.js';
 
 // Dialogue popups. Every line shows WHO is speaking (storyteller skill: the
 // player must always know who each person is). Text types on; the first
@@ -28,7 +29,7 @@ const SPEAKER_STYLES = {
 };
 const NEUTRAL_STYLE = { bg: 'rgba(16,14,26,0.9)', border: 'rgba(242,184,128,0.22)' };
 
-export function createDialogue() {
+export function createDialogue({ signal = null } = {}) {
   const box = document.createElement('div');
   box.className = 'mr-dialogue'; // D8: compact phone sizing lives in index.html
   box.style.cssText = [
@@ -84,6 +85,19 @@ export function createDialogue() {
   let onKey = null;
   let lastSpeaker = null; // D7: a NEW speaker re-enters the box; the same one doesn't
   const history = []; // {speaker, text, color} for the current conversation
+  let activeCancel = null;
+  let destroyed = false;
+  const pendingTimers = new Set();
+  const later = (fn, ms) => {
+    const id = setTimeout(() => { pendingTimers.delete(id); fn(); }, ms);
+    pendingTimers.add(id);
+    return id;
+  };
+  const clearLater = (id) => {
+    if (id == null) return;
+    clearTimeout(id);
+    pendingTimers.delete(id);
+  };
 
   const show = () => {
     open = true;
@@ -113,11 +127,12 @@ export function createDialogue() {
     box.style.borderColor = st.border;
     if (typewrite) return typeOn(entry.text);
     textEl.textContent = entry.text;
-    return Promise.resolve();
+    return null;
   }
 
   function typeOn(text) {
-    return new Promise((resolveType) => {
+    let skip = null;
+    const promise = new Promise((resolveType) => {
       let i = 0;
       textEl.textContent = '';
       let done = false;
@@ -128,11 +143,13 @@ export function createDialogue() {
         textEl.textContent = text.slice(0, i);
         if (i >= text.length) { clearInterval(timer); done = true; resolveType(); }
       }, 18);
-      typeOn._skip = () => { clearInterval(timer); if (!done) finish(); };
+      skip = () => { clearInterval(timer); if (!done) finish(); };
     });
+    return { promise, skip: () => skip?.() };
   }
 
   function say(speaker, text, { color = '#f2b880' } = {}) {
+    if (destroyed || signal?.aborted) return Promise.reject(signal?.aborted ? abortReason(signal) : makeAbortError('Dialogue destroyed'));
     choicesEl.style.display = 'none';
     choicesEl.textContent = '';
     hint.style.display = 'block';
@@ -148,19 +165,37 @@ export function createDialogue() {
     Audio.uiClick?.();
 
     let revealed = false;
-    const startLine = () => paint(history[liveIdx], { typewrite: true }).then(() => { revealed = true; });
+    let canceled = false;
+    let reveal = null;
+    let startTimer = null;
+    let restoreTimer = null;
+    const startLine = () => {
+      if (canceled || reveal || destroyed || signal?.aborted) return;
+      clearLater(startTimer);
+      startTimer = null;
+      reveal = paint(history[liveIdx], { typewrite: true });
+      reveal.promise.then(() => { if (!canceled) revealed = true; });
+    };
+    const enterLine = () => {
+      if (canceled || destroyed || signal?.aborted) return;
+      box.style.transition = 'opacity 170ms ease-out, transform 170ms ease-out, background-color 170ms ease, border-color 170ms ease';
+      box.style.opacity = '1';
+      box.style.transform = 'translateX(-50%) translateY(0) scale(1)';
+      startLine();
+      restoreTimer = later(() => {
+        restoreTimer = null;
+        if (!canceled && !destroyed) box.style.transition = 'opacity 220ms ease, transform 220ms ease, background-color 260ms ease, border-color 260ms ease';
+      }, 190);
+    };
     if (speakerChanged) {
       textEl.textContent = ''; // the old line leaves with the old speaker
       box.style.transition = 'opacity 130ms ease-in, transform 130ms ease-in';
       box.style.opacity = '0.12';
       box.style.transform = 'translateX(-50%) translateY(16px) scale(0.985)';
-      setTimeout(() => {
-        box.style.transition = 'opacity 170ms ease-out, transform 170ms ease-out, background-color 170ms ease, border-color 170ms ease';
-        box.style.opacity = '1';
-        box.style.transform = 'translateX(-50%) translateY(0) scale(1)';
-        startLine();
-        // restore the resting transition once the pulse lands
-        setTimeout(() => { box.style.transition = 'opacity 220ms ease, transform 220ms ease, background-color 260ms ease, border-color 260ms ease'; }, 190);
+      startTimer = later(() => {
+        startTimer = null;
+        if (canceled || destroyed || signal?.aborted) return;
+        enterLine();
       }, 140);
     } else {
       startLine();
@@ -169,11 +204,22 @@ export function createDialogue() {
     const updateBack = () => { backBtn.style.visibility = viewIdx > 0 ? 'visible' : 'hidden'; };
     updateBack();
 
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
+      const cancelThis = (error = null) => {
+        if (canceled) return;
+        canceled = true;
+        clearLater(startTimer);
+        clearLater(restoreTimer);
+        reveal?.skip();
+        cleanup();
+        if (error) reject(error); else resolve();
+      };
+      activeCancel = cancelThis;
       const back = () => {
         // stop the LIVE type-on first, or its next tick overwrites the re-read
         // text (nameplate says one speaker, body shows another).
-        if (!revealed && typeOn._skip) { typeOn._skip(); revealed = true; }
+        if (!reveal) enterLine();
+        if (!revealed) { reveal?.skip(); revealed = true; }
         if (viewIdx > 0) {
           viewIdx -= 1;
           paint(history[viewIdx]);      // instant re-read, no typewriter
@@ -182,6 +228,9 @@ export function createDialogue() {
         }
       };
       const advance = () => {
+        // A fast click during the 140ms speaker handoff starts THIS line now;
+        // it can never hit a stale global typewriter from the previous line.
+        if (!reveal) { enterLine(); reveal?.skip(); revealed = true; return; }
         if (viewIdx < liveIdx) {         // stepping forward through re-reads
           viewIdx += 1;
           paint(history[viewIdx]);
@@ -189,15 +238,18 @@ export function createDialogue() {
           updateBack();
           return;
         }
-        if (!revealed && typeOn._skip) { typeOn._skip(); revealed = true; return; }
+        if (!revealed) { reveal.skip(); revealed = true; return; }
         cleanup();
         resolve();
       };
       const cleanup = () => {
+        clearLater(startTimer);
+        clearLater(restoreTimer);
         box.removeEventListener('click', onBoxClick);
         backBtn.removeEventListener('click', onBackClick);
         window.removeEventListener('keydown', onKey);
         onKey = null;
+        if (activeCancel === cancelThis) activeCancel = null;
       };
       const onBoxClick = (e) => { if (e.target === backBtn) return; advance(); };
       const onBackClick = (e) => { e.stopPropagation(); Audio.uiClick?.(); back(); };
@@ -212,6 +264,7 @@ export function createDialogue() {
   }
 
   function choose(speaker, text, options, { color = '#f2b880' } = {}) {
+    if (destroyed || signal?.aborted) return Promise.reject(signal?.aborted ? abortReason(signal) : makeAbortError('Dialogue destroyed'));
     nameEl.textContent = speaker || '';
     nameEl.style.color = color;
     const st = SPEAKER_STYLES[speaker] || NEUTRAL_STYLE;
@@ -223,7 +276,12 @@ export function createDialogue() {
     show();
     choicesEl.style.display = 'flex';
     choicesEl.textContent = '';
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
+      const cancelThis = (error = null) => {
+        if (activeCancel === cancelThis) activeCancel = null;
+        if (error) reject(error); else resolve();
+      };
+      activeCancel = cancelThis;
       options.forEach((opt) => {
         const b = document.createElement('button');
         b.type = 'button';
@@ -236,17 +294,29 @@ export function createDialogue() {
         ].join(';');
         b.onmouseenter = () => { b.style.filter = 'brightness(1.12)'; };
         b.onmouseleave = () => { b.style.filter = 'none'; };
-        b.onclick = () => { Audio.uiClick?.(); resolve(opt.value); };
+        b.onclick = () => { Audio.uiClick?.(); if (activeCancel === cancelThis) activeCancel = null; resolve(opt.value); };
         choicesEl.append(b);
       });
     });
   }
+
+  const onAbort = () => activeCancel?.(abortReason(signal));
+  signal?.addEventListener('abort', onAbort, { once: true });
 
   return {
     say,
     choose,
     hide,
     get isOpen() { return open; },
-    destroy() { hide(); box.remove(); },
+    destroy() {
+      if (destroyed) return;
+      destroyed = true;
+      const error = signal ? (signal.aborted ? abortReason(signal) : makeAbortError('Dialogue destroyed')) : null;
+      activeCancel?.(error);
+      pendingTimers.forEach((id) => clearTimeout(id));
+      pendingTimers.clear();
+      signal?.removeEventListener('abort', onAbort);
+      hide(); box.remove();
+    },
   };
 }

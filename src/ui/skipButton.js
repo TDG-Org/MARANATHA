@@ -7,7 +7,7 @@ export function mountSkipButton() {
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.setAttribute('aria-label', 'Skip narration');
-  btn.textContent = 'Skip ⏭';
+  btn.textContent = 'Skip narration ⏭';
   btn.style.cssText = [
     'position:fixed',
     'right:calc(14px + env(safe-area-inset-right))',

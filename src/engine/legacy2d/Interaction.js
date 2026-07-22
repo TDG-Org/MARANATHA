@@ -1,4 +1,5 @@
 import { Audio } from '../../systems/AudioSystem.js';
+import { isAbortError } from '../../core/async.js';
 
 // NPC interaction: NPCs stand in the world; when the player comes near, a
 // "Talk to <name>" prompt appears above them (E key or tap), and on the very
@@ -60,7 +61,8 @@ export class Interaction {
     this.busy = true;
     this.prompt.style.display = 'none';
     Audio.uiClick();
-    try { await npc.onInteract?.(npc); } catch (e) { console.error('[interaction] onInteract', e); }
+    try { await npc.onInteract?.(npc); }
+    catch (e) { if (!isAbortError(e)) console.error('[interaction] onInteract', e); }
     this.busy = false;
   }
 

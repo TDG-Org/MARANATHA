@@ -34,9 +34,35 @@ export function buildPitStage(tex = {}) {
     if (Math.abs(da) < 0.55) continue; // keep the walk-off lane clear
     rspots.push([PIT.x + Math.cos(a) * r, PIT.z + Math.sin(a) * r]);
   }
+  // D15: a dry cistern needs a readable raised lip, not only a paper-flat
+  // ground ring. Low, irregular rim stones share the existing InstancedMesh,
+  // so the silhouette improves without adding a draw call or covering the hole.
+  const RIM_STONES = 18;
+  for (let i = 0; i < RIM_STONES; i++) {
+    const a = (i / RIM_STONES) * Math.PI * 2;
+    const r = 2.23 + (i % 3) * 0.035;
+    rspots.push([
+      PIT.x + Math.cos(a) * r,
+      PIT.z + Math.sin(a) * r,
+      0.68 + (i % 4) * 0.045,
+      0.42 + (i % 3) * 0.035,
+      0.6 + ((i + 2) % 4) * 0.045,
+      a + (i % 2 ? 0.16 : -0.12),
+    ]);
+  }
   const rocks = new THREE.InstancedMesh(rockGeo, new THREE.MeshBasicMaterial({ color: 0x796d55, fog: true }), rspots.length);
   const rd = new THREE.Object3D();
-  rspots.forEach((s, i) => { rd.position.set(s[0], 0, s[1]); rd.scale.setScalar(0.6 + rnd() * 1.3); rd.rotation.y = rnd() * 6; rd.updateMatrix(); rocks.setMatrixAt(i, rd.matrix); });
+  rspots.forEach((s, i) => {
+    rd.position.set(s[0], s.length > 2 ? 0.04 : 0, s[1]);
+    if (s.length > 2) {
+      rd.scale.set(s[2], s[3], s[4]);
+      rd.rotation.y = s[5];
+    } else {
+      rd.scale.setScalar(0.6 + rnd() * 1.3);
+      rd.rotation.y = rnd() * 6;
+    }
+    rd.updateMatrix(); rocks.setMatrixAt(i, rd.matrix);
+  });
   rocks.instanceMatrix.needsUpdate = true; group.add(rocks);
 
   // (D7: the old opaque "mouth" disc is GONE — the hole is real. Looking down

@@ -1,5 +1,6 @@
 import { WEB, NARRATION } from '../../../data/versesWEB.js';
 import { Narrator } from '../../../systems/Narrator.js';
+import { isAbortError } from '../../../core/async.js';
 
 // SCENE 1 — Joseph, Genesis 37:1–11. The story is DATA + gates; this act's
 // beats are plain async functions over the shared scene context (`ctx`) and the
@@ -9,7 +10,7 @@ import { Narrator } from '../../../systems/Narrator.js';
 // summit where the sky bows. NOTE: the finale descent is signed off by Nate
 // ("PERFECT! dont touch it more") — do not restage it.
 export function makeDreamBeat(ctx, h) {
-  const { seq, wait } = h;
+  const { seq, wait, gate } = h;
 
   // ---------- beat 5 · 💤 THE DREAM ----------
   async function dream() {
@@ -53,7 +54,8 @@ export function makeDreamBeat(ctx, h) {
       // where the telling actually happens.)
       { t: 'fn', fn: async () => {
         ctx.hud.emote('Joseph is dreaming');
-        const line = Narrator.speak(NARRATION.dream_begins.text, NARRATION.dream_begins.vo);
+        const line = Narrator.speak(NARRATION.dream_begins.text, NARRATION.dream_begins.vo, { signal: ctx.signal });
+        line.catch((e) => { if (!isAbortError(e)) console.error('[dream narration]', e); });
         await ctx.cinema.titleCard({ heading: 'That night', sub: 'Joseph began to dream', holdMs: 2400 });
         await line;
       } },
@@ -64,7 +66,7 @@ export function makeDreamBeat(ctx, h) {
 
     // each sheaf bows as Joseph draws near
     let bowed = 0;
-    const allBowed = new Promise((resolve) => {
+    const allBowed = gate(() => new Promise((resolve) => {
       D.outer.forEach((s, i) => {
         ctx.interactables.addTrigger({
           id: `sheaf${i}`, x: s.position.x, z: s.position.z, r: 2.1, once: true,
@@ -78,7 +80,7 @@ export function makeDreamBeat(ctx, h) {
           },
         });
       });
-    });
+    }));
     ctx.guide.setTargetXZ(D.outer[0].position.x, D.outer[0].position.z);
     await allBowed;
     ctx.guide.setTarget(null);
@@ -96,9 +98,9 @@ export function makeDreamBeat(ctx, h) {
     const base = { x: D.FIELD.x, z: D.FIELD.z - 11.5 };
     ctx.guide.setTargetXZ(base.x, base.z);
     ctx.setInput(true);
-    await new Promise((resolve) => {
+    await gate(() => new Promise((resolve) => {
       ctx.interactables.addTrigger({ id: 'summit-reach', x: base.x, z: base.z, r: 2.8, once: true, onEnter: resolve });
-    });
+    }));
     ctx.guide.setTarget(null);
     ctx.setInput(false);
 
@@ -137,8 +139,7 @@ export function makeDreamBeat(ctx, h) {
       { t: 'fade', on: false, ms: 1100 },
       { t: 'fn', fn: async () => {
         ctx.sound('stinger.dream_enter');
-        let k = 0;
-        while (k < 1) { await wait(50); k = Math.min(1, k + 50 / 1900); D.showSky(k); }
+        await ctx.motion.tween(1900, (k) => D.showSky(k));
         await wait(1200);
       } },
       // the descent — the camera AND the gaze come down WITH the lights,

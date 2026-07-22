@@ -1,5 +1,6 @@
 import { Narrator } from '../systems/Narrator.js';
 import { VERSES } from '../data/verses.js';
+import { abortReason, makeAbortError } from '../core/async.js';
 
 // LEGACY (2D era): used only by #legacy-joseph — the live 3D scenes use
 // ui/verseCard.js + data/versesWEB.js. Retires with engine/legacy2d/.
@@ -7,7 +8,7 @@ import { VERSES } from '../data/verses.js';
 // legible (≥4.5:1), narrated fully before the beat advances, tap-to-skip after
 // a moment (scripture-accuracy + game-scene skills). One source of truth for
 // verse text is src/data/verses.js — pass a key or an explicit { ref, text }.
-export function createVerseDisplay() {
+export function createVerseDisplay({ signal = null } = {}) {
   const panel = document.createElement('div');
   panel.style.cssText = [
     'position:fixed', 'left:50%', 'top:11%', 'transform:translateX(-50%) translateY(-8px)',
@@ -31,8 +32,12 @@ export function createVerseDisplay() {
 
   panel.append(textEl, refEl);
   document.body.append(panel);
+  let destroyed = false;
+  let cancelActive = null;
 
   function show(verse, { narrate = true } = {}) {
+    if (destroyed) return Promise.reject(makeAbortError('Verse display destroyed'));
+    if (signal?.aborted) return Promise.reject(abortReason(signal));
     const v = typeof verse === 'string' ? VERSES[verse] : verse;
     if (!v) { console.warn('[verse] unknown verse', verse); return Promise.resolve(); }
     textEl.textContent = `“${v.text}”`;
@@ -42,18 +47,38 @@ export function createVerseDisplay() {
 
     if (!narrate) return Promise.resolve();
 
-    return new Promise((done) => {
+    cancelActive?.(makeAbortError('Verse superseded'));
+    return new Promise((resolve, reject) => {
       let finished = false;
       let skipEnabled = false;
-      const finish = () => {
+      let skipTimer = 0;
+      const finish = (error = null) => {
         if (finished) return;
         finished = true;
+        clearTimeout(skipTimer);
         window.removeEventListener('pointerdown', onTap);
-        done();
+        signal?.removeEventListener('abort', onAbort);
+        if (cancelActive === cancel) cancelActive = null;
+        if (error) reject(error); else resolve();
       };
       const onTap = () => { if (skipEnabled) { Narrator.skip(); finish(); } };
-      setTimeout(() => { skipEnabled = true; window.addEventListener('pointerdown', onTap); }, 1200);
-      Narrator.speak(v.text).then(finish);
+      const onAbort = () => finish(abortReason(signal));
+      const cancel = (error = makeAbortError('Verse cancelled')) => {
+        Narrator.stop('verse-cancelled');
+        finish(error);
+      };
+      cancelActive = cancel;
+      signal?.addEventListener('abort', onAbort, { once: true });
+      skipTimer = setTimeout(() => {
+        skipTimer = 0;
+        if (finished) return;
+        skipEnabled = true;
+        window.addEventListener('pointerdown', onTap);
+      }, 1200);
+      Narrator.speak(v.text, null, { signal }).then(
+        () => finish(),
+        (error) => finish(error),
+      );
     });
   }
 
@@ -62,5 +87,16 @@ export function createVerseDisplay() {
     panel.style.transform = 'translateX(-50%) translateY(-8px)';
   }
 
-  return { show, hide, destroy() { hide(); panel.remove(); }, el: panel };
+  return {
+    show,
+    hide,
+    destroy() {
+      if (destroyed) return;
+      destroyed = true;
+      cancelActive?.(signal?.aborted ? abortReason(signal) : makeAbortError('Verse display destroyed'));
+      hide();
+      panel.remove();
+    },
+    el: panel,
+  };
 }

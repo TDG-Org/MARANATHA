@@ -8,12 +8,13 @@ import { PlayerController3D } from '../engine/PlayerController3D.js';
 import { createNameTags } from '../ui/nameTags.js';
 import { openSettings } from '../ui/settings.js';
 import { CHARACTER_STATES } from '../engine/Character3D.js';
+import { isAbortError } from '../core/async.js';
 
 // PLAYGROUND (#playground) — NOT a story scene. A flat world to exercise the
 // Phase D1 foundation: 3D characters (TEMP capsules until a GLB exists), the
 // 5 animation states, the 3rd-person camera + a dramatic beat, and the narrator
 // live-slider / skip demo. FPS HUD is on (Settings default).
-export function buildPlayground({ scene, camera, renderer, app }) {
+export function buildPlayground({ scene, camera, renderer, app, signal = null }) {
   scene.fog = new THREE.Fog(0xffdfba, 46, 260);
   scene.add(makeSky({ top: 0xf2b880, bottom: 0xffe9c9 }).mesh);
   const ground = makeGround({ flatCore: 26, falloff: 40 });
@@ -29,43 +30,66 @@ export function buildPlayground({ scene, camera, renderer, app }) {
   key.position.set(-6, 10, 5);
   scene.add(key, new THREE.HemisphereLight(0xffe9c9, 0x4c4066, 0.6));
 
-  Audio.play('amb.camp');
-  Audio.play('music.warm_camp');
+  Audio.unlock();
+  const ambience = Audio.playLoop('amb.camp');
+  const score = Audio.playLoop('music.warm_camp');
 
   const factory = new CharacterFactory();
   const nameTags = createNameTags();
   const chars = [];
   let hero = null, controller = null, tcam = null, ready = false;
+  let disposed = false;
+  let beatTimer = 0;
 
   const ui = buildUI({
     onState: (s) => hero?.play(s),
     onBeat: () => {
-      if (!tcam || !hero) return;
+      if (disposed || signal?.aborted || !tcam || !hero) return;
+      clearTimeout(beatTimer);
       tcam.cinematicMoveTo({ angle: Math.PI * 0.28, target: hero.position, distance: 3.4, height: 1.3, duration: 1200 });
       hero.play('talk');
-      setTimeout(() => { tcam.release(1500); hero.play('idle'); }, 2600);
+      beatTimer = setTimeout(() => {
+        beatTimer = 0;
+        if (disposed || signal?.aborted || !tcam || !hero) return;
+        tcam.release(1500);
+        hero.play('idle');
+      }, 2600);
     },
     onNarrate: () => {
+      if (disposed || signal?.aborted) return;
       Audio.unlock();
       // Real path first (audio/vo/playground/demo/line-1); missing → a clearly
       // labeled placeholder buffer on the VOICE BUS so live sliders + skip are
       // demonstrable (TTS can't change volume mid-line).
-      Narrator._loadVO('playground/demo/line-1').then((buf) => {
-        Narrator._playFile(buf || Audio.voicePlaceholderBuffer(6));
+      Narrator.speak(
+        'In the beginning, God created the heavens and the earth.',
+        'playground/demo/line-1',
+        { signal },
+      ).catch((error) => {
+        if (!isAbortError(error)) console.error('[playground] narration failed', error);
       });
     },
     onSettings: () => openSettings({}),
     onHome: () => app.navigate('home'),
   });
 
-  (async () => {
+  const whenReady = (async () => {
     const loadedGLB = await factory.loadBase(); // false while /models is empty → capsules
+    if (disposed || signal?.aborted) {
+      factory.dispose();
+      return false;
+    }
     hero = factory.create({ name: 'Joseph', scale: 1, colors: { robe: 0xcdbf9e, skin: 0xcf9a63, hair: 0x2f2620, coat: [0xb5643c, 0xcf9a4e, 0x6f8256, 0x8a5a72, 0x3f7a86] } }).setPosition(0, 1).addTo(scene);
     const jacob = factory.create({ name: 'Jacob', colors: { robe: 0x8a5a3c, skin: 0xb98a55, hair: 0xc3bdb0 } }).setPosition(-3.2, -2).addTo(scene);
     const reuben = factory.create({ name: 'Reuben', colors: { robe: 0x5a6b86, skin: 0xc98d5a, hair: 0x3a2c22 } }).setPosition(3.2, -2).addTo(scene);
     chars.push(hero, jacob, reuben);
 
-    controller = new PlayerController3D({ camera, character: hero, bounds: { minX: -24, maxX: 24, minZ: -24, maxZ: 20 } });
+    controller = new PlayerController3D({
+      camera,
+      character: hero,
+      bounds: { minX: -24, maxX: 24, minZ: -24, maxZ: 20 },
+      signal,
+    });
     tcam = new ThirdPersonCamera(camera);
     tcam.setTarget(hero.position);
     tcam.setColliders([trees]); // pull-in vs trees (flat ground here; a hilly scene would add it)
@@ -77,6 +101,7 @@ export function buildPlayground({ scene, camera, renderer, app }) {
     nameTags.add(reuben, 'Reuben');
     ui.note.textContent = loadedGLB ? 'GLB rig loaded.' : 'TEMP capsule stand-ins — drop a rig in /models to see real toon characters.';
     ready = true;
+    return true;
   })();
 
   function update(dt) {
@@ -89,6 +114,13 @@ export function buildPlayground({ scene, camera, renderer, app }) {
   }
 
   function dispose() {
+    if (disposed) return;
+    disposed = true;
+    ready = false;
+    clearTimeout(beatTimer);
+    beatTimer = 0;
+    ambience.stop();
+    score.stop();
     ui.destroy();
     nameTags.destroy();
     controller?.dispose();
@@ -97,7 +129,7 @@ export function buildPlayground({ scene, camera, renderer, app }) {
   }
 
   return {
-    update, dispose,
+    update, dispose, whenReady,
     // D12 power governor hint (see app.js): full rate for motion/cinematics/
     // narration; the parked bench idles at eco-30.
     fullRate: () => !ready || Narrator.speaking || (tcam && tcam.poseK > 0)
@@ -155,7 +187,7 @@ function buildUI({ onState, onBeat, onNarrate, onSettings, onHome }) {
   // Action row.
   const actions = document.createElement('div');
   actions.style.cssText = 'position:fixed; left:50%; transform:translateX(-50%); bottom:calc(28px + env(safe-area-inset-bottom)); display:flex; gap:8px; flex-wrap:wrap; justify-content:center; max-width:96vw;';
-  actions.append(mkBtn('▶ Dramatic beat', onBeat), mkBtn('▶ Narrator test (VO placeholder)', onNarrate));
+  actions.append(mkBtn('▶ Dramatic beat', onBeat), mkBtn('▶ Narrator test', onNarrate));
 
   root.append(title, note, home, gear, row, actions);
   document.body.append(root);
@@ -173,7 +205,7 @@ function buildUI({ onState, onBeat, onNarrate, onSettings, onHome }) {
       'pointer-events:auto', 'font:600 clamp(12px,1.5vw,13.5px) "Segoe UI",system-ui,sans-serif',
       'padding:9px 14px', 'border-radius:10px', 'cursor:pointer', 'color:#fdf6e3',
       'background:rgba(16,14,26,0.6)', 'border:1px solid rgba(242,184,128,0.28)',
-      'backdrop-filter:blur(3px)', 'transition:filter 150ms ease',
+      'transition:filter 150ms ease',
     ].join(';');
     b.onmouseenter = () => { b.style.filter = 'brightness(1.15)'; };
     b.onmouseleave = () => { b.style.filter = 'none'; };

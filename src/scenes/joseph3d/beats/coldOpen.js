@@ -1,5 +1,6 @@
 import { WEB } from '../../../data/versesWEB.js';
 import { Audio } from '../../../systems/AudioSystem.js';
+import { isAbortError } from '../../../core/async.js';
 
 // SCENE 1 — Joseph, Genesis 37:1–11. The story is DATA + gates; this act's
 // beats are plain async functions over the shared scene context (`ctx`) and the
@@ -24,12 +25,22 @@ export function makeColdOpen(ctx, h) {
     // NOBODY may ever stand over the hole (D8: Reuben's old "ahead" slot put
     // him ON AIR over the shaft) — every brother placement is clamped radially
     // out past the rim. Joseph is moved via jRoot directly and is exempt.
-    const RIM = 2.5;
+    // Manual cutscene placement bypasses ColliderWorld. Keep each actor's
+    // centre beyond the raised lip (~2.57u outer edge) plus its 0.4u capsule.
+    const RIM = 3.0;
+    const safeBrotherPoint = (x, z) => {
+      const dx = x - P.PIT.x, dz = z - P.PIT.z;
+      const d = Math.hypot(dx, dz);
+      if (d < RIM) { const s = RIM / (d || 1); x = P.PIT.x + dx * s; z = P.PIT.z + dz * s; }
+      return { x, z };
+    };
     const put = (n, x, z) => {
       const dx = x - P.PIT.x, dz = z - P.PIT.z;
       const d = Math.hypot(dx, dz);
       if (d < RIM) { const s = RIM / (d || 1); x = P.PIT.x + dx * s; z = P.PIT.z + dz * s; }
       n.pos.x = x; n.pos.z = z; n.char.setPosition(x, z);
+      if (n.circle) { n.circle.x = x; n.circle.z = z; }
+      return { x, z };
     };
     // interior shots dive below ground — lift the camera's ground-clip for the
     // duration of the open, restore it with the morning (shot 7 reset).
@@ -71,16 +82,18 @@ export function makeColdOpen(ctx, h) {
       { n: B[3], dx: 1.6, dz: 0.55 },    // levi close behind — no turning back
     ];
     const AWAY = [[2.6, 1.2], [3.4, 0.2], [3.0, -1.0], [4.2, 0.8]]; // walk-off spread
-    const place = (k) => {
-      const px = from.x + dir.x * k, pz = from.z + dir.z * k;
-      ESCORT.forEach(({ n, dx, dz }) => { put(n, px + dx, pz + dz); n.char.turnToward(dir.x, dir.z); });
-      ctx.joseph.setPosition(px, pz);
-      ctx.joseph.turnToward(dir.x, dir.z);
-    };
-    place(0);
+    const smooth = (v) => { v = Math.max(0, Math.min(1, v)); return v * v * (3 - 2 * v); };
+    const escortTargets = ESCORT.map(({ dx, dz }) => safeBrotherPoint(to.x + dx, to.z + dz));
+    ESCORT.forEach(({ n, dx, dz }) => {
+      put(n, from.x + dx, from.z + dz);
+      n.char.turnToward(dir.x, dir.z);
+    });
+    ctx.joseph.setPosition(from.x, from.z);
+    ctx.joseph.turnToward(dir.x, dir.z);
     ctx.joseph.play('walk');
     B.forEach((n) => n.char.play('walk'));
-    let march = null; // the march drives CONCURRENTLY — the group is already
+    let march = null;
+    let walkStarts = null; // the march drives CONCURRENTLY — the group is already
     // moving when the black lifts (walk cycles must never tread in place)
     await seq([
       { t: 'fade', on: true, ms: 0 },
@@ -92,19 +105,36 @@ export function makeColdOpen(ctx, h) {
         march = (async () => {
           // five men on dry ground (🔴 slot — silent until Nate's file lands)
           const marchBed = Audio.playLoop('sfx.march_loop', { gain: 0.5 });
-          const D = 8600; let e = 0; // a slow, heavy dead-march
-          while (e < D) { await wait(50); e += 50; place(Math.min(1, e / D)); }
-          marchBed.stop(1.4);
-          B.forEach((n) => n.char.play('idle'));
-          ctx.joseph.play('idle');
+          // D15: the controller owns Joseph's real velocity + walk cycle, and
+          // AmbientNPCs owns the brothers. The former 50ms teleport loop made
+          // the controller see zero movement and force Joseph back to idle.
+          B.forEach((n) => ctx.npcs.freeze(n, false));
+          try {
+            await Promise.all([
+              ctx.controller.scriptMoveTo(to.x, to.z, 0.82),
+              ...B.map((n, i) => ctx.npcs.sendTo(n, escortTargets[i].x, escortTargets[i].z, { speed: 0.82 })),
+            ]);
+          } finally {
+            ctx.controller.cancelScriptMove();
+            ctx.controller.vel.set(0, 0);
+            marchBed.stop(1.4);
+            if (!ctx.signal?.aborted) {
+              B.forEach((n) => { ctx.npcs.freeze(n, true); n.char.play('idle'); });
+              ctx.joseph.play('idle');
+            }
+          }
         })();
+        // This starts under the opening fade and is joined several steps
+        // later. Observe an early lifetime rejection now so leaving during the
+        // title card never creates an unhandled background rejection.
+        march.catch((e) => { if (!isAbortError(e)) console.error('[cold-open march]', e); });
       } },
       { t: 'wait', ms: 450 },
       { t: 'fade', on: false, ms: 1500 },
       // D9 clarity: this is a glimpse of what is COMING — say so plainly, and
       // HOLD it (D11, Nate's brother was still confused: clearer sub + ~2x the
       // time on screen; the golden morning answers it with 'Present day')
-      { t: 'title', heading: 'In the days to come', sub: 'What lies ahead · Genesis 37', holdMs: 4800 },
+      { t: 'title', heading: 'In the days to come', sub: 'Genesis 37', holdMs: 4800 },
       // …the frame widens as the march closes on the pit
       { t: 'cam', angle: Math.PI * 0.52, target: { x: to.x + 0.6, z: to.z }, distance: 5.0, height: 1.7, lookHeight: 0.95, duration: 5400, awaitMs: false },
       { t: 'fn', fn: () => march }, // hold until the march lands at the rim
@@ -168,7 +198,24 @@ export function makeColdOpen(ctx, h) {
       { t: 'fn', fn: async () => {
         ctx.sound('stinger.hatred');
         P.setSkyLight(1); // NOW the mouth of the pit opens above him (D14)
-        B[1].char.play('talk'); B[2].char.play('talk'); // the two who seize him
+        // Judah and Simeon visibly CLOSE the gap before the lift. Their normal
+        // movers provide real walk velocity/foot cycles instead of teleporting.
+        const jx = jRoot.position.x, jz = jRoot.position.z;
+        const grabs = [
+          safeBrotherPoint(jx + 0.18, jz + 0.58),
+          safeBrotherPoint(jx + 0.18, jz - 0.58),
+        ];
+        ctx.joseph.play('talk');
+        B[1].char.turnToward(jx - B[1].pos.x, jz - B[1].pos.z);
+        B[2].char.turnToward(jx - B[2].pos.x, jz - B[2].pos.z);
+        ctx.npcs.freeze(B[1], false); ctx.npcs.freeze(B[2], false);
+        await Promise.all([
+          ctx.npcs.sendTo(B[1], grabs[0].x, grabs[0].z, { speed: 1.15 }),
+          ctx.npcs.sendTo(B[2], grabs[1].x, grabs[1].z, { speed: 1.15 }),
+        ]);
+        ctx.npcs.freeze(B[1], true); ctx.npcs.freeze(B[2], true);
+        B[1].char.play('talk'); B[2].char.play('talk');
+        ctx.controller.vel.set(0, 0);
         if (ctx.joseph.shadowMesh) ctx.joseph.shadowMesh.visible = false;
         ctx.joseph.setAnimPaused(true); // seized — the body goes LIMP and still
         // D11 deterministic FACE-UP landing: move his yaw from the facing child
@@ -181,35 +228,73 @@ export function makeColdOpen(ctx, h) {
         jRoot.rotation.y = yaw0;
         ctx.joseph.facing.rotation.y = 0;
         ctx.joseph._yaw = 0; ctx.joseph._targetYaw = 0;
-        const jx = jRoot.position.x, jz = jRoot.position.z;
-        const H = 340; let e = 0;
-        while (e < H) { await wait(40); e += 40; const k = Math.min(1, e / H);
-          jRoot.position.y = k * 0.6;
-          jRoot.position.x = jx + (P.PIT.x - jx) * k * 0.25;
-          jRoot.position.z = jz + (P.PIT.z - jz) * k * 0.25;
-        }
-        B[1].char.play('idle'); B[2].char.play('idle');
+        const bStarts = B.map((n) => ({ x: n.pos.x, z: n.pos.z }));
+        const heaveGoals = [
+          safeBrotherPoint(P.PIT.x + 2.35, P.PIT.z + 0.76),
+          safeBrotherPoint(P.PIT.x + 2.35, P.PIT.z - 0.76),
+        ];
+        // Brace/lift, lunge over the rim, then release. All positions are
+        // driven by the live scene clock, never a timer-polled loop.
+        await ctx.motion.tween(1250, (_eased, raw) => {
+          const lift = smooth(raw / 0.52);
+          const heave = smooth((raw - 0.36) / 0.64);
+          jRoot.position.y = 0.82 * lift - 0.08 * heave;
+          jRoot.position.x = jx + (P.PIT.x + 1.62 - jx) * heave;
+          jRoot.position.z = jz + (P.PIT.z + 0.04 - jz) * heave;
+          put(B[1], bStarts[1].x + (heaveGoals[0].x - bStarts[1].x) * heave,
+            bStarts[1].z + (heaveGoals[0].z - bStarts[1].z) * heave);
+          put(B[2], bStarts[2].x + (heaveGoals[1].x - bStarts[2].x) * heave,
+            bStarts[2].z + (heaveGoals[1].z - bStarts[2].z) * heave);
+          put(B[0], bStarts[0].x + 0.22 * heave, bStarts[0].z - 0.12 * heave);
+          put(B[3], bStarts[3].x + 0.22 * heave, bStarts[3].z + 0.12 * heave);
+          P.coatProp.position.set(B[1].pos.x + 0.35, 0.85, B[1].pos.z);
+        });
       } },
       // SHOT 4 — CUT: the slow-motion fall. Camera CLOSE ON JOSEPH — it falls
       // and slowly circles WITH him (never the pit edge) as he turns flat onto
       // his back and the ring of daylight shrinks away above. Alone. Sad.
       { t: 'fn', fn: async () => {
-        const D = 4600; let e = 0; // D8: slower than the old 3s fall
+        const D = 4600; // D8: slower than the old 3s fall
         ctx.sound('sfx.fall_whoosh'); // soft air rush under the slow-mo
         const x0 = jRoot.position.x, z0 = jRoot.position.z, y0 = jRoot.position.y;
         const a0 = Math.PI * 0.3;
-        while (e < D) { await wait(40); e += 40; const k = Math.min(1, e / D);
+        const recoilStarts = [
+          { x: B[1].pos.x, z: B[1].pos.z },
+          { x: B[2].pos.x, z: B[2].pos.z },
+        ];
+        let fallK = 0;
+        let followThroughDone = false;
+        ctx.camera.cinematicMoveTo({
+          angle: a0,
+          target: { x: x0, y: y0, z: z0 },
+          distance: 2.1, height: 0.55, lookHeight: 0.18, duration: 1,
+        });
+        ctx.camera.setPoseDriver((pose) => {
+          const a = a0 + fallK * 0.55;
+          pose.pos.set(
+            jRoot.position.x - Math.sin(a) * 2.1,
+            jRoot.position.y + 0.55,
+            jRoot.position.z - Math.cos(a) * 2.1,
+          );
+          pose.look.set(jRoot.position.x, jRoot.position.y + 0.18, jRoot.position.z);
+        });
+        await ctx.motion.tween(D, (k, raw) => {
+          fallK = k;
           jRoot.position.y = y0 - k * (y0 + 3.8);              // → -3.8 (pit floor)
           jRoot.position.x = x0 + (P.PIT.x - x0) * k;
           jRoot.position.z = z0 + (P.PIT.z - z0) * k;
           jRoot.rotation.x = k * (-Math.PI / 2);               // back-first → FACE UP (yaw lives on root.y now)
           P.shrinkSkyLight(k);                                 // daylight closes over him
-          ctx.camera.cinematicMoveTo({
-            angle: a0 + k * 0.55,                              // a slow drift around the boy
-            target: { x: jRoot.position.x, y: jRoot.position.y, z: jRoot.position.z },
-            distance: 2.1, height: 0.55, lookHeight: 0.18, duration: 1,
-          });
-        }
+          const recoil = smooth(raw / 0.2);
+          put(B[1], recoilStarts[0].x + 0.5 * recoil, recoilStarts[0].z + 0.15 * recoil);
+          put(B[2], recoilStarts[1].x + 0.5 * recoil, recoilStarts[1].z - 0.15 * recoil);
+          P.coatProp.position.set(B[1].pos.x + 0.35, 0.85, B[1].pos.z);
+          if (!followThroughDone && raw >= 0.2) {
+            followThroughDone = true;
+            B[1].char.play('idle'); B[2].char.play('idle');
+          }
+        });
+        ctx.camera.setPoseDriver(null);
         ctx.sound('sfx.pit_impact'); // the dull earth landing
       } },
       { t: 'wait', ms: 1500 },
@@ -221,6 +306,7 @@ export function makeColdOpen(ctx, h) {
         ctx.grading.set('ominous');
         P.setCampGlow(1);
         B.forEach((n, i) => { put(n, P.PIT.x + AWAY[i][0], P.PIT.z + AWAY[i][1]); n.char.turnToward(0.95, -0.32); n.char.play('walk'); });
+        walkStarts = B.map((n) => ({ x: n.pos.x, z: n.pos.z }));
       } },
       { t: 'cam', angle: 1.9, target: { x: P.PIT.x + 6, z: P.PIT.z - 1 }, distance: 7.2, height: 2.2, lookHeight: 1.1, duration: 1, awaitMs: false },
       { t: 'fade', on: false, ms: 700 },
@@ -229,13 +315,18 @@ export function makeColdOpen(ctx, h) {
         // through the hold and INTO the fade — the old version finished its
         // travel loop and then stood there moon-walking for 900ms. Nobody
         // stops; the black takes them.
-        const D = 6100; let e = 0, fading = false; // slow — no one hurries, no one looks back
-        while (e < D) { await wait(50); e += 50; const k = e / D;
-          B.forEach((n, i) => put(n, P.PIT.x + AWAY[i][0] + k * 7.6, P.PIT.z + AWAY[i][1] - k * 2.6));
+        const D = 6100; let fading = false; let exitFade = null; // slow — no one hurries, no one looks back
+        await ctx.motion.tween(D, (k, raw) => {
+          B.forEach((n, i) => put(n, walkStarts[i].x + k * 7.6, walkStarts[i].z - k * 2.6));
           P.coatProp.position.set(B[1].pos.x + 0.35, 0.85, B[1].pos.z); // Judah carries it off
           // the black starts falling WHILE they are still walking (not after)
-          if (!fading && e > D - 700) { fading = true; ctx.cinema.fade(true, 700); }
-        }
+          if (!fading && raw > 1 - 700 / D) {
+            fading = true;
+            exitFade = ctx.cinema.fade(true, 700);
+            exitFade.catch((e) => { if (!isAbortError(e)) console.error('[cold-open exit fade]', e); });
+          }
+        });
+        if (exitFade) await exitFade; // observe abort; never leave a rejected fade behind
       } },
       // SHOT 6 — CUT: back down into the dark. The boy has pulled himself up
       // to sitting — head bowed into his knees, shoulders shaking. The verse

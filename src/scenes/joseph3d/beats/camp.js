@@ -1,4 +1,5 @@
 import { WEB } from '../../../data/versesWEB.js';
+import { isAbortError } from '../../../core/async.js';
 
 // SCENE 1 — Joseph, Genesis 37:1–11. The story is DATA + gates; this act's
 // beats are plain async functions over the shared scene context (`ctx`) and the
@@ -7,15 +8,15 @@ import { WEB } from '../../../data/versesWEB.js';
 // ACT 1 — life in the camp: herd the strays, report to father, receive the
 // coat (Gen 37:3–4), and the dusk fire that ends with him sent to bed.
 export function makeCampBeats(ctx, h) {
-  const { seq, wait, J, shot, twoShot, pointToGate } = h;
+  const { seq, wait, gate, J, shot, twoShot, pointToGate } = h;
 
   // ---------- beat 1 · 🐑 herd the strays ----------
   async function herd() {
     ctx.setInput(true);
     ctx.grading.grade('goldenHour', 800);
     ctx.hud.setObjective('Bring 3 stray sheep back to the pen.', 'Walk up behind a sheep — it runs ahead of you.');
-    const gate = pointToGate(ctx.camp.pen);
-    ctx.guide.setTargetXZ(gate.x, gate.z);
+    const penGate = pointToGate(ctx.camp.pen);
+    ctx.guide.setTargetXZ(penGate.x, penGate.z);
 
     // brothers sneer as you pass the fire (once) — speakers gesture and face
     // him. GATED to this beat (a stale trigger firing during the beat-4 gather
@@ -51,11 +52,12 @@ export function makeCampBeats(ctx, h) {
           ctx.npcs.freeze(lev, false);
           if (herdActive) ctx.setInput(true); // never re-arm input inside a later beat
         })();
+        return sneerBusy; // Interactables observes async trigger failures/abort
       },
     });
 
     let done;
-    const all = new Promise((r) => { done = r; });
+    const all = gate(() => new Promise((r) => { done = r; }));
     ctx.onStrayPenned = (n) => {
       ctx.hud.flashCount('🐑', n, 3);
       if (n < 3) {
@@ -89,7 +91,7 @@ export function makeCampBeats(ctx, h) {
     ctx.guide.setTargetXZ(jac.pos.x, jac.pos.z);
 
     let spoken = false;
-    await new Promise((resolve) => {
+    await gate(() => new Promise((resolve) => {
       ctx.interactables.addPrompt({
         id: 'jacob-report', label: 'Talk to Jacob',
         getPos: () => jac.pos, r: 3.0, lift: 2.0,
@@ -112,7 +114,7 @@ export function makeCampBeats(ctx, h) {
           resolve();
         },
       });
-    });
+    }));
   }
 
   // ---------- beat 3 · 🧥 THE COAT (inside Jacob's lamplit tent) ----------
@@ -122,6 +124,17 @@ export function makeCampBeats(ctx, h) {
     ctx.setInput(false);
     ctx.npcs.freeze(jac, true);
     const jacHome = { x: jac.pos.x, z: jac.pos.z };
+    const coatFrame = (towardB) => ({
+      t: 'fn',
+      fn: async () => {
+        jac.char.play('talk');
+        twoShot('jacob', 'joseph', {
+          ms: 950, distMin: 3.2, distMax: 3.35,
+          height: 1.9, look: 1.18, towardB,
+        });
+        await wait(570);
+      },
+    });
     await seq([
       { t: 'letterbox', on: true },
       // step inside with father — dip to black, come up in lamplight
@@ -136,15 +149,14 @@ export function makeCampBeats(ctx, h) {
         ctx.joseph.setPosition(T.POS.x + 1.0, T.POS.z + 0.9);
         jac.char.turnToward(ctx.joseph.position.x - jac.pos.x, ctx.joseph.position.z - jac.pos.z);
         ctx.joseph.turnToward(jac.pos.x - ctx.joseph.position.x, jac.pos.z - ctx.joseph.position.z);
-        ctx.camera.cinematicMoveTo({ angle: -Math.PI * 0.3, target: { x: T.POS.x, z: T.POS.z }, distance: 3.3, height: 1.5, lookHeight: 1.15, duration: 1 });
+        ctx.camera.cinematicMoveTo({ angle: -Math.PI * 0.3, target: { x: T.POS.x, z: T.POS.z }, distance: 3.3, height: 1.9, lookHeight: 1.15, duration: 1 });
       } },
       { t: 'fade', on: false, ms: 1000 },
-      { t: 'fn', fn: () => { jac.char.play('talk'); } },
-      shot('jacob', 'joseph', { side: 0.42, dist: 2.6 }),
+      coatFrame(0.32),
       { t: 'say', who: 'Jacob', text: 'Joseph. Come, stand in the lamplight.', color: J.Jacob },
-      shot('jacob', 'joseph', { side: -0.4, dist: 2.4 }),
+      coatFrame(0.44),
       { t: 'say', who: 'Jacob', text: 'You came to me in my old age, my son — a gift I did not look for.', color: J.Jacob },
-      shot('jacob', 'joseph', { side: 0.38, dist: 2.3 }),
+      coatFrame(0.36),
       { t: 'say', who: 'Jacob', text: 'I had this made for you. Let all of Hebron see it.', color: J.Jacob },
       { t: 'dialogueHide' },
       // THE GIFT (D9 framing law): a SIDE two-shot from LIVE positions —
@@ -178,11 +190,10 @@ export function makeCampBeats(ctx, h) {
         await wait(700);
         // Joseph turns slowly in place — wearing it, showing every side
         const j0 = Math.atan2(jac.pos.x - jp.x, jac.pos.z - jp.z);
-        const T2 = 2100; let e = 0;
-        while (e < T2) { await wait(50); e += 50;
-          const a = j0 + (e / T2) * Math.PI * 2;
+        await ctx.motion.tween(2100, (k) => {
+          const a = j0 + k * Math.PI * 2;
           ctx.joseph.turnToward(Math.sin(a), Math.cos(a));
-        }
+        });
         await wait(500);
       } },
       // …then the cut BEHIND him: the banded diamonds held clear on the BACK.
@@ -260,11 +271,14 @@ export function makeCampBeats(ctx, h) {
     const ring = [['judah', 3.5], ['reuben', 4.2], ['simeon', 5.15], ['levi', 5.9]];
     ring.forEach(([k, a]) => {
       const n = ctx.cast[k];
-      ctx.npcs.sendTo(n, Math.cos(a) * 1.8, -6 + Math.sin(a) * 1.8, { speed: 1.4 }).then(() => {
-        ctx.npcs.freeze(n, true);
-        n.char.turnToward(0 - n.pos.x, -6 - n.pos.z);
-        n.char.play('kneel'); // Sit_Floor_Idle — seated by the firelight
-      });
+      ctx.npcs.sendTo(n, Math.cos(a) * 1.8, -6 + Math.sin(a) * 1.8, { speed: 1.4 })
+        .then((arrived) => {
+          if (!arrived || ctx.signal?.aborted) return;
+          ctx.npcs.freeze(n, true);
+          n.char.turnToward(0 - n.pos.x, -6 - n.pos.z);
+          n.char.play('kneel'); // Sit_Floor_Idle — seated by the firelight
+        })
+        .catch((e) => { if (!isAbortError(e)) console.error('[dusk gather]', e); });
     });
 
     // the campfire beat's ONE action: the player chooses to sit down too. The
@@ -272,7 +286,7 @@ export function makeCampBeats(ctx, h) {
     // and an ungated sit-fire prompt re-fired in beat 6 when the player walked
     // back through the fire (a softlock).
     let sat = false;
-    await new Promise((resolve) => {
+    await gate(() => new Promise((resolve) => {
       ctx.interactables.addPrompt({
         id: 'sit-fire', label: 'Sit by the fire',
         getPos: () => ({ x: 0.6, z: -4.4 }), r: 2.6, lift: 0.7,
@@ -293,7 +307,7 @@ export function makeCampBeats(ctx, h) {
           resolve();
         },
       });
-    });
+    }));
 
     // slow-burn hatred, envy moment 3: even in the quiet, they can't let him
     // warm himself in peace — a low mock and a shared laugh (Nate's men_laughing
@@ -340,7 +354,7 @@ export function makeCampBeats(ctx, h) {
     ctx.guide.setTargetXZ(rest.x, rest.z);
     ctx.camera.release(1);
     ctx.setInput(true);
-    await new Promise((resolve) => {
+    await gate(() => new Promise((resolve) => {
       ctx.interactables.addPrompt({
         id: 'rest-night', label: 'Rest for the night',
         getPos: () => rest, r: 2.3, lift: 1.4,
@@ -363,7 +377,7 @@ export function makeCampBeats(ctx, h) {
           resolve();
         },
       });
-    });
+    }));
     // (faded to black, letterbox up — the dream rises straight out of sleep)
   }
 

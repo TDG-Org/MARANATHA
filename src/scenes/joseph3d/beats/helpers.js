@@ -1,5 +1,6 @@
 import { pausableWait } from '../../../engine/Sequencer.js';
 import { NAME_COLOR } from '../cast.js';
+import { withAbort } from '../../../core/async.js';
 
 // The shared vocabulary every act speaks: sequencing, the fire ring, and the
 // dialogue-camera grammar (dialogue-cinematography skill). Built once per
@@ -7,7 +8,8 @@ import { NAME_COLOR } from '../cast.js';
 export function makeHelpers(ctx) {
   const J = NAME_COLOR;
   const seq = (steps) => ctx.sequencer.run(steps);
-  const wait = (ms) => pausableWait(ms, ctx.isPaused); // honours the pause menu
+  const wait = (ms) => pausableWait(ms, ctx.isPaused, ctx.signal); // honours pause + scene lifetime
+  const gate = (work) => withAbort(work, ctx.signal); // gameplay prompts/triggers also die with the scene
 
   // the morning fire the brothers CIRCLE around for the telling. One source of
   // truth so beat 6 (gather), beat 7 (close) and checkpoint-resume agree.
@@ -36,10 +38,12 @@ export function makeHelpers(ctx) {
       charOf(speaker).play('talk');
       charOf(listener).turnToward(sp.x - li.x, sp.z - li.z);
       const a = Math.atan2(sp.x - li.x, sp.z - li.z) + side;
+      const safeDist = Math.max(3.2, dist);
+      const safeHeight = Math.max(1.85, height);
       ctx.camera.cinematicMoveTo({
         angle: a,
         target: { x: sp.x * 0.72 + li.x * 0.28, z: sp.z * 0.72 + li.z * 0.28 },
-        distance: dist, height, lookHeight: look, duration: ms,
+        distance: safeDist, height: safeHeight, lookHeight: look, duration: ms,
       });
       await wait(ms * 0.6); // the cut lands as the line starts
     },
@@ -70,5 +74,5 @@ export function makeHelpers(ctx) {
 
   const pointToGate = (pen) => ({ x: pen.minX + 0.6, z: (pen.gate.z0 + pen.gate.z1) / 2 });
 
-  return { seq, wait, J, FIRE, TELL_RING, ringXZ, posOf, charOf, shot, twoShot, pointToGate };
+  return { seq, wait, gate, J, FIRE, TELL_RING, ringXZ, posOf, charOf, shot, twoShot, pointToGate };
 }

@@ -74,6 +74,13 @@ export class CameraDirector {
     this.drift = false;
     this._driftT = 0;
     this._poseRot = new THREE.Vector3();
+    this._poseFromPos = new THREE.Vector3();
+    this._poseFromLook = new THREE.Vector3();
+    this._poseOutPos = new THREE.Vector3();
+    this._poseOutLook = new THREE.Vector3();
+    this._renderLook = new THREE.Vector3();
+    this._poseMoveK = 1;
+    this._poseMoveSpeed = 0;
   }
 
   setDrift(on) { this.drift = !!on; }
@@ -199,6 +206,9 @@ export class CameraDirector {
 
     // 5) cinematic pose blend
     if (this.pose && this._poseDriver) this._poseDriver(this.pose, dt);
+    if (this._poseMoveK < 1) {
+      this._poseMoveK = clamp(this._poseMoveK + this._poseMoveSpeed * dt, 0, 1);
+    }
     if (this._poseDir !== 0) {
       this.poseK = clamp(this.poseK + this._poseDir * this._poseSpeed * dt, 0, 1);
       if (this.poseK === 0 && this._poseDir < 0) { this._poseDir = 0; this.pose = null; }
@@ -207,15 +217,22 @@ export class CameraDirector {
     const breath = this.still ? 0 : Math.sin(this._t * 0.0009) * 0.045;
     if (this.pose && this.poseK > 0) {
       const kk = easeInOut(this.poseK);
+      const moveK = easeInOut(this._poseMoveK);
+      const posePos = this._poseMoveK < 1
+        ? this._poseOutPos.lerpVectors(this._poseFromPos, this.pose.pos, moveK)
+        : this.pose.pos;
+      const poseLook = this._poseMoveK < 1
+        ? this._poseOutLook.lerpVectors(this._poseFromLook, this.pose.look, moveK)
+        : this.pose.look;
       // pose drift: orbit the held shot around its look target (~0.03 rad/s)
       // + a slow rise — felt, never seen (cutscene-director NEVER-STATIC).
-      let px = this.pose.pos.x, py = this.pose.pos.y, pz = this.pose.pos.z;
+      let px = posePos.x, py = posePos.y, pz = posePos.z;
       if (this.drift) {
         const a = this._driftT * 0.00003;
-        const ox = px - this.pose.look.x, oz = pz - this.pose.look.z;
+        const ox = px - poseLook.x, oz = pz - poseLook.z;
         const ca = Math.cos(a), sa = Math.sin(a);
-        px = this.pose.look.x + ox * ca - oz * sa;
-        pz = this.pose.look.z + ox * sa + oz * ca;
+        px = poseLook.x + ox * ca - oz * sa;
+        pz = poseLook.z + ox * sa + oz * ca;
         py += Math.sin(this._driftT * 0.00012) * 0.12;
       }
       this.camera.position.set(
@@ -225,15 +242,17 @@ export class CameraDirector {
       );
       if (this.camera.position.y < this.minGroundY) this.camera.position.y = this.minGroundY;
       this._blend.set(
-        lerp(this._look.x, this.pose.look.x, kk),
-        lerp(this._look.y, this.pose.look.y, kk),
-        lerp(this._look.z, this.pose.look.z, kk),
+        lerp(this._look.x, poseLook.x, kk),
+        lerp(this._look.y, poseLook.y, kk),
+        lerp(this._look.z, poseLook.z, kk),
       );
       this.camera.lookAt(this._blend);
+      this._renderLook.copy(this._blend);
     } else {
       this.camera.position.set(this._pos.x, this._pos.y + breath, this._pos.z);
       if (this.camera.position.y < this.minGroundY) this.camera.position.y = this.minGroundY;
       this.camera.lookAt(this._look);
+      this._renderLook.copy(this._look);
     }
   }
 
@@ -241,16 +260,31 @@ export class CameraDirector {
   cinematicMoveTo({ angle = 0, target = this.target, distance = 4, height = 1.6, lookHeight = 1.3, duration = 1400 } = {}) {
     this.still = false; // any new shot wakes the camera from a held still
     this._poseDriver = null; // a new authored shot supersedes any driver
-    const t = target.isVector3 ? target.clone() : new THREE.Vector3(target.x, target.y || 0, target.z);
+    const replacing = !!this.pose && this.poseK > 0.001;
+    if (replacing) {
+      // Continue from the pixels that were actually rendered. Previously the
+      // pose was replaced while poseK stayed at 1, causing multi-unit jumps.
+      this._poseFromPos.copy(this.camera.position);
+      this._poseFromLook.copy(this._renderLook);
+      this._poseMoveK = 0;
+      this._poseMoveSpeed = 1 / Math.max(1, duration);
+      this.poseK = 1;
+      this._poseDir = 0;
+    } else {
+      this._poseMoveK = 1;
+    }
+    const t = target.isVector3 ? target.clone() : new THREE.Vector3(target.x, target.y ?? 0, target.z);
     const pos = new THREE.Vector3(t.x - Math.sin(angle) * distance, t.y + height, t.z - Math.cos(angle) * distance);
     const look = new THREE.Vector3(t.x, t.y + lookHeight, t.z);
     this.pose = { pos, look };
-    this._poseDir = 1;
-    this._poseSpeed = 1 / Math.max(1, duration);
+    if (!replacing) {
+      this._poseDir = 1;
+      this._poseSpeed = 1 / Math.max(1, duration);
+    }
     this._driftT = 0; // each shot's drift arc starts from ITS authored frame
   }
 
-  release(duration = 1400) { this.still = false; this._poseDriver = null; this._poseDir = -1; this._poseSpeed = 1 / Math.max(1, duration); }
+  release(duration = 1400) { this.still = false; this._poseDriver = null; this._poseMoveK = 1; this._poseDir = -1; this._poseSpeed = 1 / Math.max(1, duration); }
   get inCinematic() { return this.poseK > 0.001 || this._poseDir > 0; }
 
   snap() { this._init = false; this.frame(0); }

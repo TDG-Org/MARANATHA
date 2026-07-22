@@ -76,8 +76,7 @@ export class PlayerController {
     base.style.cssText = [
       'position:fixed', 'left:20px', 'bottom:22px', 'z-index:35',
       'width:120px', 'height:120px', 'border-radius:50%', 'touch-action:none',
-      'background:rgba(16,14,26,0.28)', 'border:1px solid rgba(255,255,255,0.16)',
-      'backdrop-filter:blur(2px)',
+      'background:rgba(16,14,26,0.48)', 'border:1px solid rgba(255,255,255,0.16)',
     ].join(';');
     const thumb = document.createElement('div');
     thumb.style.cssText = [

@@ -7,6 +7,7 @@ import { createLoader } from '../ui/loader.js';
 import { Settings } from '../systems/Settings.js';
 import { Graphics } from '../systems/Graphics.js';
 import { PostFX } from '../engine/PostFX.js';
+import { makeAbortError } from './async.js';
 
 // The app shell: owns the renderer, camera, loop, adaptive quality, and the
 // always-on perf HUD, and manages screens (home, joseph, …). Each screen is a
@@ -36,7 +37,7 @@ export function createApp(container) {
   // D6: ONE PostFX owns the canvas grade + named filters for every scene.
   const postFX = new PostFX(renderer.domElement);
   const screens = new Map(); // key -> builder
-  let current = null;        // { key, scene, instance }
+  let current = null;        // { key, scene, instance, lifetime }
   let busy = false;
   let updateErrors = 0;
 
@@ -61,14 +62,15 @@ export function createApp(container) {
   function build(key, params) {
     const builder = screens.get(key);
     const scene = new THREE.Scene();
+    const lifetime = new AbortController();
     let instance;
     try {
-      instance = builder({ scene, camera, renderer, app, params }) || {};
+      instance = builder({ scene, camera, renderer, app, params, signal: lifetime.signal }) || {};
     } catch (e) {
       console.error(`[app] screen "${key}" failed to build`, e);
       instance = {};
     }
-    current = { key, scene, instance };
+    current = { key, scene, instance, lifetime };
   }
 
   async function navigate(key, params) {
@@ -76,28 +78,35 @@ export function createApp(container) {
     if (!screens.has(key)) { console.warn(`[app] no screen "${key}"`); return; }
     navT = performance.now(); // scene-entry grace: reveals glide at full rate
     busy = true;
-    const first = !current;
-    if (!first) await veil.cover(460);
-    if (current) {
-      try { current.instance.dispose?.(); } catch (e) { console.error('[app] dispose error', e); }
-      disposeDeep(current.scene);
-      postFX.reset(); // a scene's filter never leaks into the next
+    try {
+      const first = !current;
+      // Abort first: scene-owned waits, motion, narration, and camera work all
+      // stand down while the veil covers instead of running behind the exit.
+      current?.lifetime.abort(makeAbortError(`Leaving screen "${current.key}"`));
+      if (!first) await veil.cover(460);
+      if (current) {
+        try { current.instance.dispose?.(); } catch (e) { console.error('[app] dispose error', e); }
+        disposeDeep(current.scene);
+        postFX.reset(); // a scene's filter never leaks into the next
+      }
+      updateErrors = 0;
+      build(key, params);
+      // LOADING SCREEN (D6): if the scene streams assets (rigs, textures), it
+      // returns `whenReady` — hold the animated loader over the veil until it
+      // resolves, so the player NEVER sees a half-built world. 12s hang-guard:
+      // a stuck download degrades to the old reveal, never a black screen.
+      const ready = current.instance.whenReady;
+      if (ready?.then) {
+        loader.show();
+        await Promise.race([ready, new Promise((r) => setTimeout(r, 12000))]);
+        await loader.hide();
+      }
+      renderer.render(current.scene, camera); // paint one frame before revealing
+      await veil.reveal(first ? 900 : 620);
+    } finally {
+      // A decode/build exception must never leave navigation permanently busy.
+      busy = false;
     }
-    updateErrors = 0;
-    build(key, params);
-    // LOADING SCREEN (D6): if the scene streams assets (rigs, textures), it
-    // returns `whenReady` — hold the animated loader over the veil until it
-    // resolves, so the player NEVER sees a half-built world. 12s hang-guard:
-    // a stuck download degrades to the old reveal, never a black screen.
-    const ready = current.instance.whenReady;
-    if (ready?.then) {
-      loader.show();
-      await Promise.race([ready, new Promise((r) => setTimeout(r, 12000))]);
-      await loader.hide();
-    }
-    renderer.render(current.scene, camera); // paint one frame before revealing
-    await veil.reveal(first ? 900 : 620);
-    busy = false;
   }
 
   let paused = false;      // true pause: update frozen

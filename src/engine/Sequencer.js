@@ -1,3 +1,5 @@
+import { abortReason, throwIfAborted, withAbort } from '../core/async.js';
+
 // Data-driven cutscene sequencer (cutscene-director skill). A sequence is an
 // array of plain step objects executed in order; gameplay gates live BETWEEN
 // sequences as awaited promises. The scene wires the systems once (ctx), and
@@ -25,15 +27,26 @@
 // cutscenes advance behind the pause overlay (checkpoints saving, the close
 // beat dumping a paused player to the home screen). Poll in small steps and
 // simply don't count time while isPaused() is true.
-export const pausableWait = (ms, isPaused = null) => new Promise((resolve) => {
+export const pausableWait = (ms, isPaused = null, signal = null) => new Promise((resolve, reject) => {
+  if (signal?.aborted) { reject(abortReason(signal)); return; }
   if (!ms || ms <= 0) { resolve(); return; }
   let left = ms;
   const step = 50;
+  let settled = false;
+  const finish = (error = null) => {
+    if (settled) return;
+    settled = true;
+    clearInterval(id);
+    signal?.removeEventListener('abort', onAbort);
+    if (error) reject(error); else resolve();
+  };
+  const onAbort = () => finish(abortReason(signal));
   const id = setInterval(() => {
     if (isPaused && isPaused()) return;
     left -= step;
-    if (left <= 0) { clearInterval(id); resolve(); }
+    if (left <= 0) finish();
   }, step);
+  signal?.addEventListener('abort', onAbort, { once: true });
 });
 
 export class Sequencer {
@@ -41,6 +54,7 @@ export class Sequencer {
   //        setInput(on), sound(key), isPaused() }
   constructor(ctx) {
     this.ctx = ctx;
+    this.signal = ctx.signal || null;
     this.running = false;
   }
 
@@ -52,28 +66,31 @@ export class Sequencer {
     // overlapping runs can't flicker it.
     this._depth = (this._depth || 0) + 1;
     if (this._depth === 1) c.hud?.setCutscene?.(true);
-    const wait = (ms) => pausableWait(ms, c.isPaused);
+    const signal = this.signal;
+    const wait = (ms) => pausableWait(ms, c.isPaused, signal);
+    const awaitWork = (work) => withAbort(work, signal);
     try {
     for (const s of steps) {
+      throwIfAborted(signal);
       switch (s.t) {
         case 'letterbox':
           c.setInput?.(!s.on);
           // NEVER-STATIC default (cutscene-director): while the bars are up,
           // the camera is always on a slow authored drift.
           c.camera.setDrift?.(!!s.on);
-          await c.cinema.letterbox(s.on);
+          await awaitWork(() => c.cinema.letterbox(s.on));
           break;
         case 'title':
-          await c.cinema.titleCard(s);
+          await awaitWork(() => c.cinema.titleCard(s));
           break;
         case 'verse':
-          await c.verseCard.show(s.verse);
+          await awaitWork(() => c.verseCard.show(s.verse));
           break;
         case 'verseHide':
           c.verseCard.hide();
           break;
         case 'say':
-          await c.dialogue.say(s.who, s.text, { color: s.color });
+          await awaitWork(() => c.dialogue.say(s.who, s.text, { color: s.color }));
           break;
         case 'dialogueHide':
           c.dialogue.hide();
@@ -84,7 +101,7 @@ export class Sequencer {
           if (s.awaitMs !== false) await wait(s.duration ?? 1400);
           break;
         case 'fade':
-          await c.cinema.fade(s.on !== false, s.ms ?? 600, s.pulse !== false);
+          await awaitWork(() => c.cinema.fade(s.on !== false, s.ms ?? 600, s.pulse !== false));
           break;
         case 'camRelease':
           c.camera.release(s.ms ?? 1400);
@@ -96,7 +113,7 @@ export class Sequencer {
           s.char?.setCoat(s.on !== false);
           break;
         case 'grade':
-          await c.grading.grade(s.mood, s.ms ?? 2400);
+          await awaitWork(() => c.grading.grade(s.mood, s.ms ?? 2400));
           break;
         case 'objective':
           c.hud?.setObjective(s.text ?? '');
@@ -114,11 +131,12 @@ export class Sequencer {
           await wait(s.ms ?? 500);
           break;
         case 'fn':
-          await s.fn?.(c);
+          await awaitWork(() => s.fn?.(c));
           break;
         default:
           console.warn('[sequencer] unknown step', s.t);
       }
+      throwIfAborted(signal);
     }
     } finally {
       // a throwing step must never leave the quest banner stuck hidden

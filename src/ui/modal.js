@@ -19,7 +19,7 @@ export function confirmModal({
     backdrop.style.cssText = [
       'position:fixed', 'inset:0', 'z-index:70', 'display:flex',
       'align-items:center', 'justify-content:center',
-      'background:rgba(8,7,14,0.55)', 'backdrop-filter:blur(2px)',
+      'background:rgba(8,7,14,0.72)',
       'opacity:0', 'transition:opacity 220ms ease',
       'font-family:Georgia, "Times New Roman", serif',
     ].join(';');

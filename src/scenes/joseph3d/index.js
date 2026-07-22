@@ -29,6 +29,8 @@ import { buildPitStage } from './pit.js';
 import { buildDreamField } from './dreamField.js';
 import { Narrator } from '../../systems/Narrator.js';
 import { WEB, NARRATION } from '../../data/versesWEB.js';
+import { CutsceneMotion } from '../../engine/CutsceneMotion.js';
+import { isAbortError, makeAbortError } from '../../core/async.js';
 
 // JOSEPH — SCENE 1 in full 3D (Genesis 37:1–11): the GOLD TEMPLATE. A living
 // golden-hour camp near Hebron, real rigged characters, authored camera,
@@ -36,7 +38,7 @@ import { WEB, NARRATION } from '../../data/versesWEB.js';
 // (game-architecture: this file assembles; systems live in engine/, story in
 // beats.js, set in props.js, cast in cast.js, sheep in sheep.js, and the two
 // off-camp stages in pit.js + dreamField.js.)
-export function buildJoseph3D({ scene, camera, renderer, app }) {
+export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
   // --- world (Alto look, D3 grade: warmer, more saturated, earthier ground).
   // Base palette comes straight from MOODS.goldenHour — one source of truth.
   const gh = MOODS.goldenHour;
@@ -79,7 +81,10 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
       // the SHAFT itself craters the terrain (D7: the hole is real — the
       // heightfield used to run right under the rim and read as a lawn lid).
       // Sized to catch the ~3.3–4.3u vertex grid; the r10 ring hides the dent.
-      { x: -62, z: 6, flatCore: 2.6, falloff: 3.2, sink: 5 },
+      // Clear the whole 1.95u cistern floor plus its wall shoulder. A smaller
+      // sink let the continuous terrain rise through the black floor at its
+      // edge as grass-covered wedges.
+      { x: -62, z: 6, flatCore: 4.5, falloff: 3.2, sink: 5 },
       { x: -62, z: -34, flatCore: 8, falloff: 14 },  // Jacob's tent interior
     ],
   });
@@ -135,6 +140,7 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
   let disposed = false; // set on dispose(); async init + the story loop check it
   const cinema = createCinema({
     isPaused: () => app.paused,
+    signal,
     // beat fades ride a soft blur swell (smooth cross-transitions — D6)
     onFade: (toBlack, ms) => app.postFX.blurPulse(Math.min(ms * 1.3, 1400)),
   });
@@ -149,8 +155,8 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
   // lives in PostFX and scales with the Graphics preset.
   const futureVignette = (on) => app.postFX.setFilter(on ? 'future' : 'none');
 
-  const verseCard = createVerseCard();
-  const dialogue = createDialogue();
+  const verseCard = createVerseCard({ signal, isPaused: () => app.paused });
+  const dialogue = createDialogue({ signal });
   const nameTags = createNameTags();
   const guide = new Guidance(scene);
   const grading = new MoodGrading({ sky, fog: scene.fog, keyLight, hemiLight, cinema, ridges: ridges.userData.materials });
@@ -190,9 +196,8 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
     beds.wind.setGain(CAMP_BED_GAIN.wind * level, fade);
     beds.sheepPen.setGain(CAMP_BED_GAIN.sheepPen * level, fade);
     beds.chatter.setGain(CAMP_BED_GAIN.chatter * level, fade);
-    // The PROCEDURAL bird layer only exists when the real bed file is missing
-    // (the fallback path) — never double it on top of Nate's recording.
-    Audio.ambience({ birds: level > 0 && !Audio.samples['amb.camp_wind'] ? 0.18 : 0 });
+    // The wind handle owns its file-or-procedural fallback, including birds.
+    // Callers never inspect decode state, so a slow stream cannot double beds.
   };
   if (startsAtColdOpen) setCampAmbience(0, 0.1); // silence before the first frame
   // MUSIC STATE MACHINE (D8): the score is beat-driven, crossfade-only, and
@@ -208,7 +213,6 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
   // `??` would silently coalesce back into the warm theme)
   let musicKey = startBeat in MUSIC_BY_BEAT ? MUSIC_BY_BEAT[startBeat] : 'music.camp_warm';
   let music = musicKey ? Audio.playLoop(musicKey) : { stop() {}, setGain() {} };
-  let musicHealT = 0;
   const setMusic = (key) => {
     if (disposed) return; // a zombie beat must never restart music after exit
     if (key === musicKey) return; // already the playing state — no restart blip
@@ -216,22 +220,9 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
     music.stop(1.4);
     music = Audio.playLoop(key);
   };
-  // Heal: if the requested track's file decodes AFTER the request (samples
-  // stream in post-unlock), upgrade the silent/fallback handle to the real
-  // loop — the state machine's correctness can't depend on decode timing.
-  const healMusic = (dt) => {
-    musicHealT += dt;
-    if (musicHealT < 1000) return;
-    musicHealT = 0;
-    if (musicKey && !music.real && Audio.samples[musicKey]) {
-      music.stop(0.4);
-      music = Audio.playLoop(musicKey);
-    }
-  };
-
   // --- cast (async GLB load; world plays while it streams) ---
   const factory = new CharacterFactory();
-  const npcs = new AmbientNPCs(colliders);
+  const npcs = new AmbientNPCs(colliders, { signal });
   const cast = {};
   let joseph = null;
   let controller = null;
@@ -244,18 +235,19 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
   });
 
   const hud = createStoryHud({
+    signal,
     onHome: async () => {
       // freeze ALL input surfaces while the confirm is up (controller AND
       // interactables — E must not start a dialogue behind the modal)
       const wasOn = inputOn;
       setInput(false);
       const leave = await askLeave();
-      if (leave) app.navigate('home');
+      if (leave) await app.navigate('home');
       else setInput(wasOn);
     },
   });
 
-  const interactables = new Interactables({ camera, dom: renderer.domElement, getPlayerPos: () => joseph?.position || { x: 0, z: 0 } });
+  const interactables = new Interactables({ camera, dom: renderer.domElement, signal, getPlayerPos: () => joseph?.position || { x: 0, z: 0 } });
 
   // Right-click does nothing in-game (no camera use) — swallow the browser
   // context menu on the canvas so it never pops over the scene.
@@ -268,6 +260,7 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
     if (ready) controller.setEnabled(on);
     interactables.setEnabled(on);
   };
+  signal?.addEventListener('abort', () => setInput(false), { once: true });
 
   // Esc / ⏸ — true pause: loop frozen, audio suspended, zero input bleed.
   const pause = createPauseMenu({
@@ -280,7 +273,7 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
     onSettings: () => openSettings({}),
     onHome: async () => {
       const leave = await askLeave();
-      if (leave) app.navigate('home');
+      if (leave) await app.navigate('home');
       return leave;
     },
   });
@@ -297,7 +290,7 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
 
   // --- Jacob's tent interior (lamplit stage; the coat is given HERE) ---
   const TENT_I = { x: -62, z: -34 };
-  const tentInterior = makeTentInterior(TENT_I.x, TENT_I.z);
+  const tentInterior = makeTentInterior(TENT_I.x, TENT_I.z, worldTextures);
   tentInterior.group = tentInterior.mesh; // stage contract
   tentInterior.POS = TENT_I;
   tentInterior.mesh.visible = false;
@@ -307,12 +300,15 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
   // bounds sit JUST BEHIND the visible tree/rock border so any stop reads as
   // "blocked by the trees/rocks," never an invisible wall in open ground.
   const bounds = { minX: -18.3, maxX: 18.3, minZ: -16, maxZ: 16.4 };
+  const motion = new CutsceneMotion();
+  const onLifetimeAbort = () => motion.cancel(makeAbortError('Scene lifetime ended'));
+  signal?.addEventListener('abort', onLifetimeAbort, { once: true });
   const ctx = {
-    scene, app, cinema, verseCard, dialogue, hud, guide, grading, interactables,
+    scene, app, cinema, verseCard, dialogue, hud, guide, grading, interactables, signal,
     camera: director, sequencer: null, setInput,
     isPaused: () => app.paused,
     sound: (key, gain) => { if (!disposed) Audio.play(key, gain !== undefined ? { gain } : {}); },
-    setMusic, setCampAmbience, camp, dream, pit, tentInterior, bounds, futureVignette, sunSprite,
+    setMusic, setCampAmbience, camp, dream, pit, tentInterior, bounds, motion, futureVignette, sunSprite,
     postFX: app.postFX, // named filter looks (dream/future) + blur transitions
     get joseph() { return joseph; },
     get cast() { return cast; },
@@ -346,7 +342,12 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
 
   const castReady = (async () => {
     await factory.loadBase();
-    if (disposed) return; // scene was exited during the GLB load — stand down
+    if (disposed || signal?.aborted) {
+      // `loadBase()` can finish after the earlier scene dispose. Release the
+      // bases it just populated instead of leaving their GLB textures alive.
+      factory.dispose();
+      return false;
+    }
     joseph = buildNamed(factory, 'joseph').addTo(scene);
     joseph.setPosition(0, 15);
     cast.jacob = npcs.add(buildNamed(factory, 'jacob').addTo(scene), { x: -9.8, z: -5.2, wanderR: 0, gestureEvery: 14000, speed: 0.7 });
@@ -377,7 +378,7 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
     }
 
     controller = new PlayerController3D({
-      camera, character: joseph, bounds, colliders, radius: 0.42,
+      camera, character: joseph, bounds, colliders, radius: 0.42, signal,
     });
     controller.dynamics = [...ctx.sheep.dynamics, ...npcs.dynamics];
     controller.onFootstep = (pos) => {
@@ -422,16 +423,16 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
     try {
       // a checkpoint resume starts behind the D8 pre-black — apply the state,
       // then lift gently (the intro beat manages its own fades from black).
-      if (from > 0) { beats.applyState(from, ctx); cinema.fade(false, 800); }
+      if (from > 0) { beats.applyState(from, ctx); await cinema.fade(false, 800); }
       for (let i = from; i < beats.list.length; i++) {
-        if (disposed) return; // exited mid-story: no more beats, no checkpoint writes
+        if (disposed || signal?.aborted) return; // exited mid-story: no more beats/checkpoints
         setCheckpoint('joseph3d', i);
         await beats.list[i](ctx);
       }
-      if (disposed) return;
+      if (disposed || signal?.aborted) return;
       storyDone = true;
     } catch (e) {
-      console.error('[joseph3d] story error', e);
+      if (!isAbortError(e)) console.error('[joseph3d] story error', e);
     }
   }
 
@@ -442,7 +443,6 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
     clock.t = t;
     sky.update(dt);
     grading.update(dt);
-    healMusic(dt);
     motes.update(dt, t);
     smoke.update(dt, t);
     embers.update(dt, t);
@@ -462,11 +462,12 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
 
     if (!ready) return;
     controller.update(dt);
+    npcs.update(dt, joseph.position);
+    motion.update(dt);
     director.setTarget(joseph.position);
     director.setLead(controller.vel.x, controller.vel.y);
     director.frame(dt);
     ctx.sheep.update(dt, joseph.position, t);
-    npcs.update(dt, joseph.position);
     interactables.update();
     guide.update(dt, camera);
     nameTags.update(camera, dt);
@@ -485,6 +486,12 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
 
   function dispose() {
     disposed = true; // stops the story loop, zombie async init, sound/finish
+    const abortError = signal?.reason instanceof Error ? signal.reason : makeAbortError('Joseph scene disposed');
+    director.setPoseDriver(null);
+    controller?.cancelScriptMove?.();
+    motion.cancel(abortError);
+    signal?.removeEventListener('abort', onLifetimeAbort);
+    Narrator.stop('aborted');
     // (D11: scripted camera moves all ride CameraDirector's per-frame pose
     // driver now — no timer loops exist to outlive the scene)
     // (canvas filter/vignette live in app.postFX now — app resets on navigate)
@@ -517,6 +524,7 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
   const audit = () => auditLayout({
     colliderWorld: colliders,
     ground,
+    decorations: camp.decorations,
     zones: [
       ...interactables.triggers.map((t) => ({ x: t.x, z: t.z, label: t.id })),
       ...interactables.prompts.map((p) => {
@@ -548,6 +556,7 @@ export function buildJoseph3D({ scene, camera, renderer, app }) {
       || Narrator.speaking
       || dialogue.isOpen
       || ctx.sequencer.running
+      || motion.active
       || director.inCinematic || !!director._poseDriver || director.drift
       || (controller && (!!controller._script || controller.vel.lengthSq() > 0.02))
       || ctx.sheep.sheep.some((s) => s.state === 'flee'),

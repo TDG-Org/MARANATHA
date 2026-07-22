@@ -6,7 +6,7 @@ import { WEB } from '../../../data/versesWEB.js';
 // the story is its own file — see ./index.js for the running order.
 // ACT 3 — the TELLING and the CLOSE (Gen 37:5, 37:8, 37:10, 37:11).
 export function makeTellingBeats(ctx, h) {
-  const { seq, wait, J, shot, FIRE, TELL_RING, ringXZ } = h;
+  const { seq, wait, gate, J, shot, FIRE, TELL_RING, ringXZ } = h;
 
   // ---------- beat 6 · 😠 tell the brothers ----------
   async function tell() {
@@ -18,9 +18,9 @@ export function makeTellingBeats(ctx, h) {
       ctx.hud.setObjective('Go and tell your brothers your dream.', 'Walk to your brothers by the fire.');
       ctx.guide.setTargetXZ(0.8, -6.6);
     }
-    await new Promise((resolve) => {
+    await gate(() => new Promise((resolve) => {
       ctx.interactables.addTrigger({ id: 'reach-brothers', x: 0.8, z: -6.4, r: 3.2, once: true, onEnter: resolve });
-    });
+    }));
     ctx.guide.setTarget(null);
     ctx.setInput(false);
     ctx.grading.grade('goldenHour', 500); // the morning after the dream

@@ -38,8 +38,14 @@ function inst(geo, color, spots, { yBase = 0, seedRot = 5, map = null, tints = n
 
 export function makeTents(spots) {
   const geo = new THREE.ConeGeometry(1.7, 2.2, 6);
-  const mesh = inst(geo, C.tent, spots.map((s) => [s.x, s.z, s.scale ?? 1, 1.1, s.rot]));
-  const colliders = spots.map((s) => ({ type: 'circle', x: s.x, z: s.z, r: 1.55 * (s.scale ?? 1), group: 'tents' }));
+  const mesh = inst(geo, C.tent, spots.map((s) => {
+    const scale = s.scale ?? 1;
+    return [s.x, s.z, scale, 1.1 * scale, s.rot];
+  }));
+  const colliders = spots.map((s) => ({
+    type: 'circle', x: s.x, z: s.z,
+    r: 1.55 * (s.scale ?? 1), visualR: 1.7 * (s.scale ?? 1), group: 'tents',
+  }));
   // NB: tents are ONE InstancedMesh, so they can't be a camera occluder — the
   // fade mutates the shared material and would ghost ALL tents at once. The
   // raised authored camera behind the hero makes tent occlusion rare anyway.
@@ -125,7 +131,7 @@ export function makeWell(x, z, rockTex = null) {
   sheen.rotation.x = -Math.PI / 2;
   sheen.position.set(x - 0.25, 0.73, z + 0.2);
   group.add(ring, posts, roof, rig, water, sheen);
-  return { mesh: group, colliders: [{ type: 'circle', x, z, r: 1.7, group: 'well' }], blockers: [ring, roof] };
+  return { mesh: group, colliders: [{ type: 'circle', x, z, r: 1.7, visualR: 1.8, group: 'well' }], blockers: [ring, roof] };
 }
 
 export function makeLaundry(x1, z1, x2, z2) {
@@ -166,8 +172,16 @@ export function makeCrates(spots) {
 export function makePots(spots) {
   const geo = new THREE.SphereGeometry(0.24, 8, 6);
   geo.scale(1, 1.15, 1);
-  const mesh = inst(geo, C.pot, spots.map((s) => [s.x, s.z, s.scale ?? 1, 0.26]), { seedRot: 42 });
-  return { mesh, colliders: [] };
+  const mesh = inst(geo, C.pot, spots.map((s) => {
+    const scale = s.scale ?? 1;
+    return [s.x, s.z, scale, 0.276 * scale];
+  }), { seedRot: 42 });
+  return {
+    mesh, colliders: [],
+    decorations: spots.map((s) => ({
+      type: 'circle', x: s.x, z: s.z, r: 0.28 * (s.scale ?? 1), label: 'pot',
+    })),
+  };
 }
 
 export function makeRugs(spots) {
@@ -297,19 +311,26 @@ export function makeBoulders(spots, colliderWorld = null, rockTex = null) {
 
 // JACOB'S TENT INTERIOR — a lamplit stage far off-camp (the report/coat beats
 // play inside). Warm wool, rugs, a low lamp; fog near ~11 closes the air in.
-export function makeTentInterior(x, z) {
+export function makeTentInterior(x, z, tex = {}) {
   const group = new THREE.Group();
-  // the tent shell seen from inside — D11: ENLARGED (the coat two-shot's lens
-  // could back out through the old 4.3-radius cone and catch the outside; the
-  // beat also caps its shot distance — belt and braces)
-  // D13: bigger again (6.6 × 6.4) — the gift shot now sits higher to clear
-  // heads, and a higher camera needs more cone above it to stay indoors.
+  // An intimate cloth room with enough headroom for the elevated two-shot;
+  // camera distance is capped in the beat so the lens remains inside.
   const shell = new THREE.Mesh(
-    new THREE.ConeGeometry(6.6, 6.4, 8, 1, true),
+    new THREE.ConeGeometry(6.0, 6.0, 8, 1, true),
     toonMat(0x9a7550, { side: THREE.BackSide }),
   );
-  shell.position.set(x, 3.2, z);
+  shell.position.set(x, 3.0, z);
   group.add(shell);
+  // An explicit packed-earth floor covers the outdoor grass beneath the set.
+  // The shell is a room, not a mask over the camp terrain.
+  const floor = new THREE.Mesh(
+    // Slightly overlap the cloth footprint so no grass annulus can peek
+    // through at the wall/floor seam on oblique interior cameras.
+    new THREE.CircleGeometry(6.05, 24),
+    toonMat(0xb59a72, tex.dirt ? { map: tex.dirt } : {}),
+  );
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.set(x, 0.008, z);
   // floor rug layers
   const rug = new THREE.Mesh(new THREE.CircleGeometry(4.4, 18), toonMat(0x7c4038));
   rug.rotation.x = -Math.PI / 2;
@@ -318,7 +339,7 @@ export function makeTentInterior(x, z) {
   rug2.rotation.x = -Math.PI / 2;
   rug2.rotation.z = 0.5;
   rug2.position.set(x + 0.4, 0.03, z + 0.4);
-  group.add(rug, rug2);
+  group.add(floor, rug, rug2);
   // the lamp: a small pot with a warm glow (no real lights — art-style rule)
   const lampPot = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), toonMat(0x54381f));
   lampPot.position.set(x - 1.1, 0.45, z - 0.7);
@@ -421,6 +442,7 @@ export function makePen(rect) {
 export function makeCampClutter(spots) {
   const parts = [];
   const colliders = [];
+  const decorations = [];
   const add = (geo, color, x, z, rotY = 0, s = 1) => {
     dyeGeometry(geo, color);
     geo.scale(s, s, s);
@@ -443,6 +465,7 @@ export function makeCampClutter(spots) {
       const rim = new THREE.TorusGeometry(0.26, 0.028, 5, 10);
       rim.rotateX(Math.PI / 2); rim.translate(0, 0.34, 0);
       add(rim, 0x8a6a3a, x, z, rot, scale);
+      decorations.push({ type: 'circle', x, z, r: 0.32 * scale, label: 'basket' });
     } else if (kind === 'skin') {
       // a plump water skin leaning on its side
       const g = new THREE.SphereGeometry(0.2, 7, 6);
@@ -451,6 +474,7 @@ export function makeCampClutter(spots) {
       const neck = new THREE.CylinderGeometry(0.045, 0.06, 0.12, 5);
       neck.rotateZ(0.7); neck.translate(0.16, 0.3, 0.16);
       add(neck, 0x54381f, x, z, rot, scale);
+      decorations.push({ type: 'circle', x, z, r: 0.28 * scale, label: 'water-skin' });
     } else if (kind === 'stool') {
       const seat = new THREE.CylinderGeometry(0.21, 0.21, 0.07, 8);
       seat.translate(0, 0.3, 0);
@@ -467,11 +491,12 @@ export function makeCampClutter(spots) {
       const g = new THREE.TorusGeometry(0.19, 0.05, 5, 12);
       g.rotateX(Math.PI / 2); g.translate(0, 0.05, 0);
       add(g, 0xc9b285, x, z, rot, scale);
+      decorations.push({ type: 'circle', x, z, r: 0.25 * scale, label: 'rope' });
     }
   }
   const mesh = new THREE.Mesh(mergeGeometries(parts), toonMat(0xffffff, { vertexColors: true }));
   mesh.geometry.computeVertexNormals(); // merged geometry must never render black
-  return { mesh, colliders };
+  return { mesh, colliders, decorations };
 }
 
 // --- the Scene 1 camp layout (data) -----------------------------------------
@@ -480,6 +505,7 @@ export function buildCamp(colliderWorld, tex = {}) {
   const group = new THREE.Group();
   const fireEmitters = [];
   const sway = [];
+  const decorations = [];
   const cameraBlockers = []; // ONLY big props block the camera (level-layout law 4)
   const addAll = (made) => {
     group.add(made.mesh);
@@ -487,6 +513,7 @@ export function buildCamp(colliderWorld, tex = {}) {
     made.emitters?.forEach((e) => fireEmitters.push(e));
     made.sway?.forEach((s) => sway.push(s));
     made.blockers?.forEach((b) => cameraBlockers.push(b));
+    made.decorations?.forEach((d) => decorations.push(d));
   };
 
   addAll(makeTents([
@@ -498,9 +525,9 @@ export function buildCamp(colliderWorld, tex = {}) {
   addAll(makeFires([{ x: 0, z: -6 }, { x: -8.5, z: 4 }]));
   addAll(makeWell(4.5, -1, tex.rock)); // D6: a real landmark now
   addAll(makeLaundry(-3, 8.5, 2, 9.5));
-  addAll(makeCrates([{ x: 7.6, z: -6.2 }, { x: 8.4, z: -5.6, scale: 0.85 }, { x: 7.9, z: -5.3, scale: 0.7 }, { x: -12.6, z: -4.9, scale: 0.9 }]));
+  addAll(makeCrates([{ x: 7.6, z: -6.2 }, { x: 8.4, z: -5.6, scale: 0.85 }, { x: 7.9, z: -5.3, scale: 0.7 }, { x: -14.2, z: -5.0, scale: 0.9 }]));
   addAll(makePots([
-    { x: 5.5, z: -2.1 }, { x: 3.6, z: -0.2 }, { x: -10.2, z: -5.8 }, { x: -2.6, z: 8.9 },
+    { x: 6.6, z: -2.2 }, { x: 2.4, z: -0.2 }, { x: -8.8, z: -5.0 }, { x: -2.6, z: 8.9 },
     // lived-in fill along the paths (world-density: clustered, never sprinkled)
     { x: 2.8, z: 2.2 }, { x: 9.4, z: 6.6, scale: 0.85 }, { x: -5.8, z: -3.4, scale: 0.9 },
   ]));
@@ -523,15 +550,15 @@ export function buildCamp(colliderWorld, tex = {}) {
     // the west fire
     { kind: 'firewood', x: -9.9, z: 5.2, rot: 1.8 }, { kind: 'stool', x: -7.2, z: 4.7 },
     // the well gathering: water skins + a rope for the bucket
-    { kind: 'skin', x: 3.1, z: -2.4, rot: 0.7 }, { kind: 'skin', x: 6.1, z: -2.3, rot: 2.4 },
-    { kind: 'rope', x: 6.3, z: -0.3 },
+    { kind: 'skin', x: 2.8, z: -2.5, rot: 0.7 }, { kind: 'skin', x: 6.7, z: -0.5, rot: 2.4 },
+    { kind: 'rope', x: 6.6, z: 0.1 },
     // Jacob's tent door: baskets + a skin
-    { kind: 'basket', x: -9.6, z: -8.6 }, { kind: 'basket', x: -12.5, z: -8.7, scale: 0.85 },
-    { kind: 'skin', x: -9.0, z: -6.3, rot: 4.1 },
+    { kind: 'basket', x: -8.5, z: -8.8 }, { kind: 'basket', x: -13.4, z: -9.0, scale: 0.85 },
+    { kind: 'skin', x: -8.5, z: -6.2, rot: 4.1 },
     // the other tents, lived-in
-    { kind: 'basket', x: 8.0, z: -8.7, scale: 0.9 }, { kind: 'firewood', x: 10.7, z: -8.9, rot: 2.6, scale: 0.9 },
-    { kind: 'basket', x: -12.9, z: 2.0 }, { kind: 'skin', x: -13.5, z: 4.7, rot: 1.2 },
-    { kind: 'basket', x: 12.5, z: 4.6, scale: 0.9 },
+    { kind: 'basket', x: 7.7, z: -8.4, scale: 0.9 }, { kind: 'firewood', x: 11.1, z: -8.5, rot: 2.6, scale: 0.9 },
+    { kind: 'basket', x: -11.9, z: 1.6 }, { kind: 'skin', x: -13.2, z: 5.2, rot: 1.2 },
+    { kind: 'basket', x: 11.2, z: 4.4, scale: 0.9 },
     // laundry corner
     { kind: 'basket', x: 0.7, z: 8.3, scale: 1.1 },
   ]));
@@ -589,5 +616,5 @@ export function buildCamp(colliderWorld, tex = {}) {
   ], colliderWorld, tex.rock));
   addAll(makeGrass(180, 42, colliderWorld));
 
-  return { group, fireEmitters, sway, pen, cameraBlockers };
+  return { group, fireEmitters, sway, pen, cameraBlockers, decorations };
 }

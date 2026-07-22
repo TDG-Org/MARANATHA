@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Audio } from '../systems/AudioSystem.js';
+import { isAbortError } from '../core/async.js';
 
 // Interaction vocabulary for 3D scenes (interaction-design + ui-clarity):
 //  • proximity PROMPTS — one speech BUBBLE above the nearest eligible
@@ -9,7 +10,7 @@ import { Audio } from '../systems/AudioSystem.js';
 // Prompts/triggers are data; availability is a callback so beats gate them.
 // A prompt may carry `object` (a THREE root) to enable click-the-character.
 export class Interactables {
-  constructor({ camera, getPlayerPos, dom = null }) {
+  constructor({ camera, getPlayerPos, dom = null, signal = null }) {
     this.camera = camera;
     this.getPlayerPos = getPlayerPos;
     this.dom = dom; // renderer canvas (click-the-character + cursor)
@@ -17,6 +18,8 @@ export class Interactables {
     this.triggers = []; // {id,x,z,r,once,fired,when(),onEnter}
     this.enabled = true;
     this.busy = false;
+    this.signal = signal;
+    this.disposed = false;
     this._active = null;
     this._v = null;
     this._touch = window.matchMedia?.('(pointer: coarse)')?.matches ?? false;
@@ -77,10 +80,12 @@ export class Interactables {
       this.dom.addEventListener('pointerdown', this._onDown);
       if (!this._touch) this.dom.addEventListener('pointermove', this._onMove);
     }
+    this._onAbort = () => this.setEnabled(false);
+    signal?.addEventListener('abort', this._onAbort, { once: true });
   }
 
-  addPrompt(p) { this.prompts.push({ r: 2.8, when: () => true, ...p }); return p; }
-  addTrigger(t) { this.triggers.push({ r: 2.5, once: true, fired: false, when: () => true, ...t }); return t; }
+  addPrompt(p) { if (!this.disposed && !this.signal?.aborted) this.prompts.push({ r: 2.8, when: () => true, ...p }); return p; }
+  addTrigger(t) { if (!this.disposed && !this.signal?.aborted) this.triggers.push({ r: 2.5, once: true, fired: false, when: () => true, ...t }); return t; }
   rearmTrigger(id) { const t = this.triggers.find((x) => x.id === id); if (t) t.fired = false; }
 
   setEnabled(on) {
@@ -93,16 +98,18 @@ export class Interactables {
   }
 
   async _interact() {
-    if (this.busy || !this._active || !this.enabled) return;
+    if (this.disposed || this.signal?.aborted || this.busy || !this._active || !this.enabled) return;
     const p = this._active;
     this.busy = true;
     this.pill.style.display = 'none';
     Audio.uiClick();
-    try { await p.onInteract?.(p); } catch (e) { console.error('[interactables]', e); }
-    this.busy = false;
+    try { await p.onInteract?.(p); }
+    catch (e) { if (!isAbortError(e)) console.error('[interactables]', e); }
+    if (!this.disposed) this.busy = false;
   }
 
   update() {
+    if (this.disposed || this.signal?.aborted) return;
     const pp = this.getPlayerPos();
 
     // triggers
@@ -111,7 +118,10 @@ export class Interactables {
       const dx = pp.x - t.x, dz = pp.z - t.z;
       if (dx * dx + dz * dz <= t.r * t.r) {
         t.fired = true;
-        try { t.onEnter?.(t); } catch (e) { console.error('[trigger]', e); }
+        try {
+          const work = t.onEnter?.(t);
+          work?.catch?.((e) => { if (!isAbortError(e)) console.error('[trigger]', e); });
+        } catch (e) { if (!isAbortError(e)) console.error('[trigger]', e); }
       }
     }
 
@@ -146,6 +156,12 @@ export class Interactables {
   }
 
   dispose() {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.setEnabled(false);
+    this.prompts.length = 0;
+    this.triggers.length = 0;
+    this.signal?.removeEventListener('abort', this._onAbort);
     window.removeEventListener('keydown', this._onKey);
     if (this.dom) {
       this.dom.removeEventListener('pointerdown', this._onDown);

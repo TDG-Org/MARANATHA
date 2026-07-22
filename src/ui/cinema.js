@@ -5,8 +5,8 @@ import { pausableWait } from '../engine/Sequencer.js';
 // whisper-alpha mood tint the grading system drives. Pure DOM; one instance
 // per scene; dispose removes everything. All holds honour the pause menu
 // (isPaused) — a paused player never loses a title card or a fade.
-export function createCinema({ isPaused = null, onFade = null } = {}) {
-  const hold = (ms) => pausableWait(ms, isPaused);
+export function createCinema({ isPaused = null, onFade = null, signal = null } = {}) {
+  const hold = (ms) => pausableWait(ms, isPaused, signal);
   const mk = (css) => {
     const el = document.createElement('div');
     el.style.cssText = css;
@@ -40,11 +40,15 @@ export function createCinema({ isPaused = null, onFade = null } = {}) {
   return {
     get letterboxOn() { return letterboxOn; },
 
-    letterbox(on) {
-      letterboxOn = !!on;
-      top.style.transform = on ? 'translateY(0)' : 'translateY(-100%)';
-      bottom.style.transform = on ? 'translateY(0)' : 'translateY(100%)';
-      return hold(580);
+    async letterbox(on) {
+      const next = !!on;
+      if (next === letterboxOn) return;
+      letterboxOn = next;
+      if (next) document.body.classList.add('mr-letterbox-on');
+      top.style.transform = next ? 'translateY(0)' : 'translateY(-100%)';
+      bottom.style.transform = next ? 'translateY(0)' : 'translateY(100%)';
+      await hold(580);
+      if (!next && !letterboxOn) document.body.classList.remove('mr-letterbox-on');
     },
 
     // fade(true, ms) dips to black; fade(false, ms) lifts. ms 0 = instant.
@@ -67,9 +71,12 @@ export function createCinema({ isPaused = null, onFade = null } = {}) {
         (sub ? `<div style="font-size:clamp(13px,1.9vw,18px);letter-spacing:0.3em;opacity:0.75;margin-top:8px;text-transform:uppercase;">${sub}</div>` : '');
       title.style.opacity = '1';
       title.style.transform = 'translateY(0)';
-      await hold(holdMs);
-      title.style.opacity = '0';
-      title.style.transform = 'translateY(6px)';
+      try {
+        await hold(holdMs);
+      } finally {
+        title.style.opacity = '0';
+        title.style.transform = 'translateY(6px)';
+      }
       await hold(900);
     },
 
@@ -79,6 +86,10 @@ export function createCinema({ isPaused = null, onFade = null } = {}) {
       tint.style.opacity = String(Math.min(0.14, Math.max(0, alpha)));
     },
 
-    destroy() { top.remove(); bottom.remove(); tint.remove(); title.remove(); fadeEl.remove(); },
+    destroy() {
+      letterboxOn = false;
+      document.body.classList.remove('mr-letterbox-on');
+      top.remove(); bottom.remove(); tint.remove(); title.remove(); fadeEl.remove();
+    },
   };
 }

@@ -39,9 +39,9 @@ export const AUDIO_MANIFEST = [
   { key: 'amb.night_crickets', bus: 'sfx', loop: true, seconds: 40, fallback: 'ambientNightBed', available: false, purpose: 'dusk/night crickets bed', scene: 'joseph3d-1' },
 
   // --- Scene 1 (3D) — music (loop, crossfaded by mood) ---------------------
-  { key: 'music.camp_warm', bus: 'music', loop: true, seconds: 90, file: 'music/camp_warm', fallback: 'musicWarmBed', available: true, purpose: 'golden-hour belonging theme', scene: 'joseph3d-1' },
+  { key: 'music.camp_warm', bus: 'music', loop: true, seconds: 90, file: 'music/camp_warm', format: 'mp3', fallback: 'musicWarmBed', available: true, purpose: 'golden-hour belonging theme', scene: 'joseph3d-1' },
   { key: 'music.dusk_calm', bus: 'music', loop: true, seconds: 70, file: 'music/dusk_calm', fallback: 'musicWonderBed', available: true, purpose: 'dusk quieting-down theme', scene: 'joseph3d-1' },
-  { key: 'music.dream_wonder', bus: 'music', loop: true, seconds: 70, file: 'music/dream_wonder', fallback: 'musicWonderBed', available: true, purpose: 'dream sequence — hushed awe', scene: 'joseph3d-1' },
+  { key: 'music.dream_wonder', bus: 'music', loop: true, seconds: 70, file: 'music/dream_wonder', format: 'mp3', fallback: 'musicWonderBed', available: true, purpose: 'dream sequence — hushed awe', scene: 'joseph3d-1' },
   { key: 'music.ominous_turn', bus: 'music', loop: true, seconds: 60, file: 'music/ominous_turn', fallback: null, available: true, purpose: 'the brothers’ hatred — warm → ominous shift', scene: 'joseph3d-1' },
   { key: 'music.sad_night', bus: 'music', loop: true, seconds: 60, file: 'music/sad_night', fallback: 'musicSadBed', available: false, purpose: 'SAD — the lonely walk to his tent after the jeer (procedural minor pad until a real file lands; D9 louder)', scene: 'joseph3d-1' },
   { key: 'music.betrayal_dark', bus: 'music', loop: true, seconds: 60, file: 'music/betrayal_dark', fallback: 'musicDreadBed', available: false, purpose: 'DREAD — the cold-open betrayal march + throw (D9: a low uneasy procedural cluster until a real dark tension track lands — 🔴 NATE.md)', scene: 'joseph3d-1' },

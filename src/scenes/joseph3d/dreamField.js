@@ -235,26 +235,50 @@ export function buildDreamField() {
       Math.sin(a) * r,
       0.95 + far * 1.5 + rnd() * 0.4,                  // and bigger, so they still read
       rnd() * Math.PI * 2,
-      0.26 + rnd() * 0.34,                             // a slow, weightless bob
+      0.45 + rnd() * 0.3,                              // visible but calm, unsynced bob
     ]);
   }
   const floatGeo = new THREE.DodecahedronGeometry(0.34, 0);
   const floatRocks = new THREE.InstancedMesh(floatGeo, new THREE.MeshBasicMaterial({ color: 0x596390, fog: true }), floatSpots.length);
   floatRocks.position.set(FIELD.x, 0, FIELD.z); // field-local (the D6 sway lesson)
   floatRocks.frustumCulled = false; // instances span past the geometry bounds
+  const floatGlowTex = (() => {
+    const c = document.createElement('canvas'); c.width = c.height = 64;
+    const g = c.getContext('2d');
+    const r = g.createRadialGradient(32, 32, 2, 32, 32, 30);
+    r.addColorStop(0, 'rgba(180,198,255,0.72)');
+    r.addColorStop(0.35, 'rgba(125,145,235,0.24)');
+    r.addColorStop(1, 'rgba(90,110,220,0)');
+    g.fillStyle = r; g.fillRect(0, 0, 64, 64);
+    return new THREE.CanvasTexture(c);
+  })();
+  const floatGlowGeo = new THREE.BufferGeometry();
+  const floatGlowPos = new THREE.BufferAttribute(new Float32Array(floatSpots.length * 3), 3);
+  floatGlowGeo.setAttribute('position', floatGlowPos);
+  const floatHalos = new THREE.Points(floatGlowGeo, new THREE.PointsMaterial({
+    map: floatGlowTex, color: 0x8fa4ff, size: 2.0, sizeAttenuation: true,
+    transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending,
+    depthWrite: false, fog: true,
+  }));
+  floatHalos.position.set(FIELD.x, 0, FIELD.z);
+  floatHalos.frustumCulled = false;
   const frd = new THREE.Object3D();
   const writeFloatRocks = (t) => {
     floatSpots.forEach((s, i) => {
-      frd.position.set(s[0], s[1] + Math.sin(t * s[5] + s[4]) * 0.22, s[2]);
+      const bob = Math.sin(t * s[5] + s[4]) * 0.4;
+      frd.position.set(s[0], s[1] + bob, s[2]);
       frd.scale.setScalar(s[3]);
+      frd.rotation.x = Math.sin(t * 0.18 + s[4]) * 0.08;
       frd.rotation.y = s[4] + t * 0.05; // the slowest turn — weightless
       frd.updateMatrix();
       floatRocks.setMatrixAt(i, frd.matrix);
+      floatGlowPos.setXYZ(i, s[0], s[1] + bob, s[2]);
     });
     floatRocks.instanceMatrix.needsUpdate = true;
+    floatGlowPos.needsUpdate = true;
   };
   writeFloatRocks(0);
-  group.add(floatRocks);
+  group.add(floatRocks, floatHalos);
 
   // fog banks — big soft planes standing behind the field (dream haze)
   const softTex = (rgb) => {
@@ -450,7 +474,7 @@ export function buildDreamField() {
   group.add(summitGroup);
 
   // field elements that HIDE when we cut to the summit (they were dream 1)
-  const fieldEls = [disc, wheat, center, ...outer, ...fogBanks, ...groundMist, beam, moonDisc, mountainGroup, cairns, fireflyPts, motes, borderBush, borderRock, floatRocks];
+  const fieldEls = [disc, wheat, center, ...outer, ...fogBanks, ...groundMist, beam, moonDisc, mountainGroup, cairns, fireflyPts, motes, borderBush, borderRock, floatRocks, floatHalos];
   const setSummit = (on) => { summitGroup.visible = on; fieldEls.forEach((e) => { e.visible = !on; }); };
 
   let skyState = 0; // 0 idle · 1 descending (→mid) · 2 bowing (→low)
@@ -502,6 +526,7 @@ export function buildDreamField() {
       wheat.rotation.x = Math.cos(t * 0.4) * 0.004;
       // the floating rocks bob on their own slow phases (D11)
       writeFloatRocks(t);
+      floatHalos.material.opacity = 0.18 + Math.sin(t * 0.7) * 0.035;
       // low ground mist breathes
       groundMist.forEach((m) => { m.material.opacity = 0.24 + Math.sin(t * 0.25 + m.userData.phase) * 0.08; });
       // dream fireflies: slow drift + soft per-point blink
@@ -527,14 +552,16 @@ export function buildDreamField() {
       }
       pos.needsUpdate = true;
       // outer sheaves ease into their bow
+      let bowedCount = 0;
       for (const s of outer) {
         const target = s.userData.bowed ? 1 : 0;
+        if (s.userData.bowed) bowedCount += 1;
         s.userData.bowK += (target - s.userData.bowK) * Math.min(dt * 0.004, 1);
         const k = s.userData.bowK;
         s.rotation.x = Math.sin(s.userData.toCenter) * k * 0.85;
         s.rotation.z = -Math.cos(s.userData.toCenter) * k * 0.85;
       }
-      const rise = outer.filter((s) => s.userData.bowed).length / outer.length;
+      const rise = bowedCount / outer.length;
       center.scale.setScalar(1.25 + rise * 0.35);
       // celestial bodies: twinkle + descend/bow toward their target
       bodies.forEach((b) => {
@@ -546,7 +573,7 @@ export function buildDreamField() {
       });
     },
     dispose() {
-      glowTex.dispose(); fogTex.dispose(); beamTex.dispose();
+      glowTex.dispose(); fogTex.dispose(); beamTex.dispose(); floatGlowTex.dispose();
       mistTex.dispose(); moonDiscTex.dispose(); cloudTex.dispose();
       tilledTex.dispose(); wheatCardTex.dispose(); sheafCardTex.dispose();
       group.traverse((o) => {

@@ -2,12 +2,13 @@ import * as THREE from 'three';
 import { clamp } from './world.js';
 import { Joystick } from '../ui/joystick.js';
 import { Audio } from '../systems/AudioSystem.js';
+import { abortReason } from '../core/async.js';
 
 // Moves a Character3D relative to the camera (WASD / arrows + touch joystick),
 // eased. The character turns toward its move direction and picks idle/walk/run.
 // Exposes moveVec so the 3rd-person camera can trail the movement.
 export class PlayerController3D {
-  constructor({ camera, character, bounds, walkSpeed = 3.4, runSpeed = 6.6, colliders = null, radius = 0.42 }) {
+  constructor({ camera, character, bounds, walkSpeed = 3.4, runSpeed = 6.6, colliders = null, radius = 0.42, signal = null }) {
     this.camera = camera;
     this.character = character;
     this.walkSpeed = walkSpeed;
@@ -17,6 +18,7 @@ export class PlayerController3D {
     this.dynamics = null;       // array of {x,z,r} live circles (NPCs/sheep)
     this.radius = radius;
     this.enabled = true;
+    this.signal = signal;
 
     this.vel = new THREE.Vector2(0, 0);   // world (x, z)
     this.moveVec = new THREE.Vector2(0, 0); // normalized move dir for the camera
@@ -49,6 +51,8 @@ export class PlayerController3D {
     window.addEventListener('blur', this._onBlur);
     document.addEventListener('visibilitychange', this._onVisibility);
     window.addEventListener('contextmenu', this._onContextMenu);
+    this._onAbort = () => this.cancelScriptMove(abortReason(signal));
+    signal?.addEventListener('abort', this._onAbort, { once: true });
   }
 
   setEnabled(on) { this.enabled = on; if (!on) this._clearInput(); }
@@ -59,11 +63,16 @@ export class PlayerController3D {
   // integration + collision + real-velocity animation instead. Resolves on
   // arrival. Input is ignored while a script move is active.
   scriptMoveTo(x, z, speed = 1.6) {
-    this._script?.resolve?.(); // a newer order supersedes an unfinished one
-    return new Promise((resolve) => { this._script = { x, z, speed, resolve }; });
+    if (this.signal?.aborted) return Promise.reject(abortReason(this.signal));
+    this._script?.resolve?.(false); // a newer order supersedes an unfinished one
+    return new Promise((resolve, reject) => { this._script = { x, z, speed, resolve, reject }; });
   }
 
-  cancelScriptMove() { this._script?.resolve?.(); this._script = null; }
+  cancelScriptMove(error = null) {
+    const op = this._script;
+    this._script = null;
+    if (error) op?.reject?.(error); else op?.resolve?.(false);
+  }
 
   _cameraBasis() {
     this.camera.getWorldDirection(this._fwd);
@@ -93,7 +102,7 @@ export class PlayerController3D {
       if (lp) { lp.x = pos.x; lp.z = pos.z; }
       else s._lp = { x: pos.x, z: pos.z };
       if (d < 0.16 || (s._stall || 0) > 1300) {
-        s.resolve();
+        s.resolve(true);
         this._script = null;
       } else {
         this._moveDir.set(dx / d, 0, dz / d);
@@ -171,6 +180,8 @@ export class PlayerController3D {
   }
 
   dispose() {
+    this.cancelScriptMove(this.signal?.aborted ? abortReason(this.signal) : null);
+    this.signal?.removeEventListener('abort', this._onAbort);
     window.removeEventListener('keydown', this._onKeyDown);
     window.removeEventListener('keyup', this._onKeyUp);
     window.removeEventListener('blur', this._onBlur);

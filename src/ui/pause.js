@@ -14,6 +14,7 @@ import { isModalOpen } from './modal.js';
 export function createPauseMenu({ app, isInputOn, setInput, onSettings, onHome }) {
   let open = false;
   let subOpen = false; // a settings/confirm layer sits above us — ignore Esc
+  let frozen = false;  // global audio/narration ownership outlives overlay state
 
   // --- the ⏸ button (top-right, below the volume control; ≥44px target) ----
   const btn = document.createElement('button');
@@ -89,7 +90,9 @@ export function createPauseMenu({ app, isInputOn, setInput, onSettings, onHome }
   document.body.append(btn, overlay);
 
   // --- true pause ------------------------------------------------------------
-  function freeze(on) {
+  function freeze(on, { restoreInput = true } = {}) {
+    if (on === frozen) return;
+    frozen = on;
     app.setPaused?.(on);
     if (on) {
       setInput?.(false);
@@ -104,7 +107,7 @@ export function createPauseMenu({ app, isInputOn, setInput, onSettings, onHome }
       Narrator.resume?.();
       // restore the SCENE's current truth — a cutscene may have legally
       // changed input state while we were paused (real-time steps)
-      setInput?.(isInputOn ? isInputOn() : true);
+      if (restoreInput) setInput?.(isInputOn ? isInputOn() : true);
     }
   }
 
@@ -122,8 +125,7 @@ export function createPauseMenu({ app, isInputOn, setInput, onSettings, onHome }
     open = false;
     overlay.style.opacity = '0';
     overlay.style.display = 'none';
-    if (!navigating) freeze(false);
-    else app.setPaused?.(false); // leaving the scene: unfreeze the loop only
+    freeze(false, { restoreInput: !navigating });
   }
 
   function toggle() { if (open) close(); else show(); }
@@ -157,7 +159,7 @@ export function createPauseMenu({ app, isInputOn, setInput, onSettings, onHome }
     open: show,
     close,
     destroy() {
-      if (open) freeze(false);
+      if (frozen) freeze(false, { restoreInput: false });
       window.removeEventListener('keydown', onKey, true);
       window.removeEventListener('pointerdown', onPointer, true);
       btn.remove();

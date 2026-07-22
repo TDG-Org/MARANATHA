@@ -157,8 +157,8 @@ export function buildHome({ scene, camera, app }) {
   card.style.cssText = [
     'pointer-events:auto', 'width:min(90vw,440px)', 'margin:0 20px 3.5vh', 'box-sizing:border-box',
     'padding:18px 22px', 'text-align:center',
-    'background:rgba(16,14,26,0.42)', 'border:1px solid rgba(242,184,128,0.16)',
-    'border-radius:16px', 'backdrop-filter:blur(4px)',
+    'background:rgba(16,14,26,0.72)', 'border:1px solid rgba(242,184,128,0.16)',
+    'border-radius:16px',
     'box-shadow:0 10px 34px rgba(0,0,0,0.3)', 'transition:opacity 300ms ease',
   ].join(';');
 
@@ -300,7 +300,6 @@ export function buildHome({ scene, camera, app }) {
         `border:2px solid ${big ? 'rgba(242,184,128,0.55)' : 'rgba(255,255,255,0.18)'}`,
         // static glow (the pulse ring animates separately, composited-only)
         `box-shadow:${big ? '0 0 30px 7px rgba(255,196,120,0.45), 0 6px 24px rgba(0,0,0,0.4)' : 'inset 0 0 14px rgba(0,0,0,0.45), 0 4px 14px rgba(0,0,0,0.3), 0 0 14px 3px rgba(242,184,128,0.16)'}`,
-        'backdrop-filter:blur(3px)',
         `animation: mr-node-float ${5 + (x % 3)}s ease-in-out ${y % 4}s infinite`,
         'transition:border-color 200ms ease, filter 160ms ease',
       ].join(';');
@@ -355,12 +354,12 @@ export function buildHome({ scene, camera, app }) {
   gear.style.cssText = [
     'position:fixed', 'right:calc(14px + env(safe-area-inset-right))', 'bottom:calc(14px + env(safe-area-inset-bottom))', 'z-index:22', 'pointer-events:auto',
     'width:44px', 'height:44px', 'border-radius:12px', 'cursor:pointer',
-    'font-size:20px', 'color:#fdf6e3', 'background:rgba(16,14,26,0.5)',
-    'border:1px solid rgba(255,255,255,0.14)', 'backdrop-filter:blur(3px)',
+    'font-size:20px', 'color:#fdf6e3', 'background:rgba(16,14,26,0.72)',
+    'border:1px solid rgba(255,255,255,0.14)',
     'transition:background 150ms ease',
   ].join(';');
   gear.onmouseenter = () => { gear.style.background = 'rgba(30,26,44,0.7)'; };
-  gear.onmouseleave = () => { gear.style.background = 'rgba(16,14,26,0.5)'; };
+  gear.onmouseleave = () => { gear.style.background = 'rgba(16,14,26,0.72)'; };
   gear.onclick = () => { Audio.uiClick(); openSettings({ onReset: renderNodes }); };
 
   // Small tasteful About · Support links (bottom-left, clear of the gear).

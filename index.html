@@ -24,11 +24,15 @@
          D13: lifted again ABOVE the 11vh cinema letterbox bar, so the fps /
          script·submit / draw stats stay readable during cutscenes (Nate). */
       position: fixed; left: calc(8px + env(safe-area-inset-left));
-      bottom: calc(11vh + 18px + env(safe-area-inset-bottom));
+      bottom: calc(58px + env(safe-area-inset-bottom));
+      transition: bottom 560ms cubic-bezier(0.4,0,0.2,1);
       display: none; pointer-events: none;
       z-index: 30; font: 11px/1.5 ui-monospace, Consolas, monospace; color: #cfe8cf;
       background: rgba(10, 10, 18, 0.65); padding: 6px 9px; border-radius: 6px;
       white-space: pre;
+    }
+    body.mr-letterbox-on #debug {
+      bottom: calc(11vh + 18px + env(safe-area-inset-bottom));
     }
 
     /* D8 phone pass: the dialogue + verse boxes shrink to compact sizes on

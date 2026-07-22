@@ -11,6 +11,8 @@ import { PlayerController } from '../../engine/legacy2d/PlayerController.js';
 import { FollowCamera } from '../../engine/legacy2d/FollowCamera.js';
 import { Guidance } from '../../engine/Guidance.js';
 import { Interaction } from '../../engine/legacy2d/Interaction.js';
+import { Narrator } from '../../systems/Narrator.js';
+import { abortReason, isAbortError, makeAbortError } from '../../core/async.js';
 
 // JOSEPH — SCENE 1: The Coat & the Dreams (Genesis 37:1-11).
 // The player walks the warm camp, receives the robe of many colors from Jacob,
@@ -26,7 +28,7 @@ const NAME = { jacob: '#e0b877', joseph: '#ecd9a4', reuben: '#93a8cc', judah: '#
 const DAY = { top: 0xf2b880, bottom: 0xffe9c9, fog: 0xffdfba };
 const NIGHT = { top: 0x0b1026, bottom: 0x2b3a67, fog: 0x1b2340 };
 
-export function buildJoseph({ scene, camera, renderer, app }) {
+export function buildJoseph({ scene, camera, renderer, app, signal = null }) {
   scene.fog = new THREE.Fog(DAY.fog, 44, 250);
   const sky = makeSky({ top: DAY.top, bottom: DAY.bottom });
   scene.add(sky.mesh);
@@ -37,8 +39,8 @@ export function buildJoseph({ scene, camera, renderer, app }) {
   scene.add(motes.points);
   scene.add(makeTents());
 
-  Audio.play('amb.camp');
-  Audio.play('music.warm_camp');
+  let ambience = Audio.playLoop('amb.camp');
+  let score = Audio.playLoop('music.warm_camp');
 
   // --- cast --------------------------------------------------------------
   const joseph = makeJoseph().placeAt(4, 6).addTo(scene);
@@ -62,8 +64,8 @@ export function buildJoseph({ scene, camera, renderer, app }) {
   follow.frame(0);
 
   const guide = new Guidance(scene);
-  const dialogue = createDialogue();
-  const verse = createVerseDisplay();
+  const dialogue = createDialogue({ signal });
+  const verse = createVerseDisplay({ signal });
 
   const hud = createStoryHud({
     onHome: async () => {
@@ -75,14 +77,27 @@ export function buildJoseph({ scene, camera, renderer, app }) {
       });
       if (leave) app.navigate('home'); else if (!storyOver) controller.setEnabled(true);
     },
+    signal,
   });
 
   const interaction = new Interaction({ camera, getPlayerPos: () => joseph.position });
 
   // --- tween helpers (frame-driven so they pause with the tab) -----------
   const tweens = new Set();
-  const tween = (dur, onUpdate, ease = easeInOut) => new Promise((res) => tweens.add({ t: 0, dur, onUpdate, ease, res }));
+  const tween = (dur, onUpdate, ease = easeInOut) => {
+    if (signal?.aborted) return Promise.reject(abortReason(signal));
+    return new Promise((res, reject) => tweens.add({ t: 0, dur, onUpdate, ease, res, reject }));
+  };
   const sleep = (ms) => tween(ms, () => {});
+  const observe = (promise) => promise.catch((error) => {
+    if (!isAbortError(error)) console.error('[legacy-joseph] detached tween failed', error);
+  });
+  const cancelTweens = (error) => {
+    for (const tw of tweens) tw.reject(error);
+    tweens.clear();
+  };
+  const onAbort = () => cancelTweens(abortReason(signal));
+  signal?.addEventListener('abort', onAbort, { once: true });
   function tickTweens(dt) {
     for (const tw of tweens) {
       tw.t += dt;
@@ -165,10 +180,12 @@ export function buildJoseph({ scene, camera, renderer, app }) {
     guide.setTarget(null);
     // Ease into night.
     sky.setColors(NIGHT.top, NIGHT.bottom, 2600);
-    fogTo(24, 150, 2600);
-    tween(2600, (k) => { scene.fog.color.lerpColors(new THREE.Color(DAY.fog), new THREE.Color(NIGHT.fog), k); });
-    Audio.play('amb.night');
-    Audio.play('music.wonder');
+    observe(fogTo(24, 150, 2600));
+    observe(tween(2600, (k) => { scene.fog.color.lerpColors(new THREE.Color(DAY.fog), new THREE.Color(NIGHT.fog), k); }));
+    ambience.stop();
+    score.stop();
+    ambience = Audio.playLoop('amb.night');
+    score = Audio.playLoop('music.wonder');
     Audio.play('stinger.dream');
     await sleep(2200);
     hud.setObjective('');
@@ -255,10 +272,12 @@ export function buildJoseph({ scene, camera, renderer, app }) {
   // --- BEAT 5: morning — Joseph tells the dream; anger (Gen 37:8, 37:11) --
   async function morningBeat() {
     sky.setColors(DAY.top, DAY.bottom, 2600);
-    fogTo(44, 250, 2600);
-    tween(2600, (k) => { scene.fog.color.lerpColors(new THREE.Color(NIGHT.fog), new THREE.Color(DAY.fog), k); });
-    Audio.play('amb.camp');
-    Audio.play('music.warm_camp');
+    observe(fogTo(44, 250, 2600));
+    observe(tween(2600, (k) => { scene.fog.color.lerpColors(new THREE.Color(NIGHT.fog), new THREE.Color(DAY.fog), k); }));
+    ambience.stop();
+    score.stop();
+    ambience = Audio.playLoop('amb.camp');
+    score = Audio.playLoop('music.warm_camp');
     await sleep(2000);
 
     await dialogue.say('Joseph', 'Brothers — hear the dream I had.', { color: NAME.joseph });
@@ -308,7 +327,15 @@ export function buildJoseph({ scene, camera, renderer, app }) {
   }
   let idle = 0;
 
+  let disposed = false;
   function dispose() {
+    if (disposed) return;
+    disposed = true;
+    signal?.removeEventListener('abort', onAbort);
+    cancelTweens(signal?.aborted ? abortReason(signal) : makeAbortError('Legacy Joseph disposed'));
+    Narrator.stop('scene-exit');
+    ambience.stop();
+    score.stop();
     hud.destroy();
     dialogue.destroy();
     verse.destroy();
@@ -321,7 +348,21 @@ export function buildJoseph({ scene, camera, renderer, app }) {
     document.getElementById('joseph-endcard')?.remove();
   }
 
-  return { update, dispose, debug: { joseph, jacob, judah, reuben, controller, follow, guide, interaction, coatBeat, brothersBeat } };
+  return {
+    update,
+    dispose,
+    // The legacy route still contains authored camera/tween/dialogue motion.
+    // Keep those moments at 60 fps; only its truly parked ambient state may
+    // use the app-wide eco cadence.
+    fullRate: () => tweens.size > 0
+      || controller.vel.lengthSq() > 0.01
+      || interaction.busy
+      || dialogue.isOpen
+      || verse.el.style.opacity === '1'
+      || follow.poseK > 0
+      || follow._poseDir !== 0,
+    debug: { joseph, jacob, judah, reuben, controller, follow, guide, interaction, coatBeat, brothersBeat },
+  };
 }
 
 // A few simple tents so the camp reads as a place. One instanced draw call.
@@ -351,7 +392,7 @@ function showEndCard(app, { title, passage, note }) {
   wrap.id = 'joseph-endcard';
   wrap.style.cssText = [
     'position:fixed', 'inset:0', 'z-index:55', 'display:flex', 'align-items:center', 'justify-content:center',
-    'background:rgba(8,7,14,0.5)', 'backdrop-filter:blur(2px)', 'opacity:0', 'transition:opacity 600ms ease',
+    'background:rgba(8,7,14,0.72)', 'opacity:0', 'transition:opacity 600ms ease',
     'font-family:"Segoe UI",system-ui,sans-serif', 'color:#fdf6e3', 'pointer-events:auto',
   ].join(';');
   const card = document.createElement('div');

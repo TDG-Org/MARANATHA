@@ -1,33 +1,22 @@
 import { Audio } from './AudioSystem.js';
+import { abortReason, throwIfAborted, withAbort } from '../core/async.js';
 
-// Verse / line narrator. FILE-FIRST (D6: this is now THE voice): every
-// narrator line ships as a baked mp3 in audio/vo/ — one identical neural
-// storyteller voice (en-US-AndrewNeural, regenerate with `npm run vo`) on
-// every device, played through the voice bus (Master + Narrator sliders live
-// mid-line). speechSynthesis is an EMERGENCY fallback only, for a missing
-// file — pinned to one explicit voice, never auto-picked. speak() resolves
-// when the line finishes so story beats can await it.
-//
-// Only two things stop a line: skip() (the Skip button) or a full mute.
-// Changing any volume must NEVER cancel narration.
-
-// The pinned emergency-fallback TTS voice: Edge's local name for the SAME
-// Andrew the baked files use. If it isn't installed, the utterance keeps
-// lang 'en-US' and the platform's own en-US default reads it — deterministic
-// per device, zero picking logic.
+// File-first narrator. Every line has one session owner and one synchronous
+// settlement path: natural end, Skip, mute, failure, or scene-lifetime abort.
+// Skip always means the CURRENT narrated line, never the whole cutscene.
 const FALLBACK_VOICE = 'Microsoft Andrew Online (Natural) - English (United States)';
 
 class NarratorSystem {
   constructor() {
     this.supported = typeof window !== 'undefined' && 'speechSynthesis' in window;
-    // D6 cleanup: the old voice-picker persisted its choice here. Gone.
     try { localStorage.removeItem('maranatha-voice'); } catch { /* ignore */ }
     this.speaking = false;
-    this.onSpeaking = null;   // hook: the Skip button watches this
-    this._stopCurrent = null; // stops the in-flight line (file source or TTS)
-    // A FULL mute silences immediately (mute is one of the two things that stop
-    // a line). A non-mute volume change does NOT fire this, so it won't cancel.
-    Audio.onMuted = () => this.stop();
+    this.onSpeaking = null;
+    this._stopCurrent = null;
+    this._activeToken = 0;
+    this._paused = false;
+    Audio.onMuted = () => this.stop('muted');
+    Audio.onVoiceMuted = () => this.stop('muted');
   }
 
   estimateMs(text) {
@@ -35,29 +24,40 @@ class NarratorSystem {
     return Math.max(2400, words * 345);
   }
 
-  _setSpeaking(on) {
+  _setSpeaking(on, token = this._activeToken) {
+    if (!on && token !== this._activeToken) return;
     this.speaking = on;
     if (!on) this._stopCurrent = null;
     this.onSpeaking?.(on);
   }
 
-  // Resolve when the line finishes (or the fallback time passes). Pass a lineId
-  // to enable the file-first VO path (e.g. 'joseph/1/jacob-coat-1').
-  async speak(text, lineId = null) {
+  _newSession() {
+    this.stop('superseded');
+    this._activeToken += 1;
+    return this._activeToken;
+  }
+
+  async speak(text, lineId = null, { signal = null } = {}) {
     const clean = text.replace(/[“”]/g, '"').replace(/…/g, '.').replace(/\bLORD\b/g, 'Lord');
+    const token = this._newSession();
+    throwIfAborted(signal);
 
-    // Muted → no audio, but still give the player time to read it.
-    if (!Audio.enabled) return new Promise((r) => setTimeout(r, this.estimateMs(clean) * 0.75));
-
-    // FILE-FIRST: try a real VO recording routed through the live voice bus.
-    if (lineId) {
-      Audio.unlock();
-      const buf = await this._loadVO(lineId);
-      if (buf) return this._playFile(buf);
+    if (!Audio.enabled || Audio.channels.voice <= 0.004) {
+      // Preserve the authored reading hold without decoding/starting silent
+      // VO or forcing the renderer to full-rate for inaudible narration.
+      return this._waitReading(this.estimateMs(clean) * 0.75, { signal, token, announce: false });
     }
 
-    // FALLBACK: browser speech synthesis.
-    return this._speakTTS(clean);
+    if (lineId) {
+      Audio.unlock();
+      const buf = await withAbort(() => this._loadVO(lineId), signal);
+      throwIfAborted(signal);
+      if (token !== this._activeToken) return { status: 'superseded' };
+      if (!Audio.enabled || Audio.channels.voice <= 0.004) return { status: 'muted' };
+      if (buf) return this._playFile(buf, { signal, token });
+    }
+
+    return this._speakTTS(clean, { signal, token });
   }
 
   async _loadVO(lineId) {
@@ -68,22 +68,62 @@ class NarratorSystem {
     return null;
   }
 
-  // D7: decode a whole scene's narration UP FRONT (behind the loading screen)
-  // — zero mid-scene fetches, so the baked voice can never drop to TTS from a
-  // network blip halfway through the story.
   preload(lineIds = []) {
     return Promise.all(lineIds.map((id) => this._loadVO(id).catch(() => null)));
   }
 
-  _playFile(buffer) {
-    return new Promise((resolve) => {
-      const src = Audio.playVO(buffer);
-      this._setSpeaking(true);
+  _waitReading(ms, { signal = null, token = null, announce = true } = {}) {
+    if (token == null) token = this._newSession();
+    return new Promise((resolve, reject) => {
+      let left = Math.max(0, ms);
       let done = false;
-      const finish = () => { if (done) return; done = true; this._setSpeaking(false); resolve(); };
-      // skip()/mute stop the source → onended fires → finish.
-      this._stopCurrent = () => { try { src.stop(); } catch { /* already stopped */ } };
-      src.onended = finish;
+      const finish = (status = 'ended', error = null) => {
+        if (done) return;
+        done = true;
+        clearInterval(timer);
+        signal?.removeEventListener('abort', onAbort);
+        if (announce) this._setSpeaking(false, token);
+        if (error) reject(error); else resolve({ status });
+      };
+      const onAbort = () => finish('aborted', abortReason(signal));
+      const timer = setInterval(() => {
+        if (this._paused) return;
+        left -= 50;
+        if (left <= 0) finish();
+      }, 50);
+      if (announce) this._setSpeaking(true, token);
+      this._stopCurrent = (status = 'skipped') => finish(status);
+      signal?.addEventListener('abort', onAbort, { once: true });
+    });
+  }
+
+  _playFile(buffer, { signal = null, token = null } = {}) {
+    if (token == null) token = this._newSession();
+    if (signal?.aborted) return Promise.reject(abortReason(signal));
+    return new Promise((resolve, reject) => {
+      const src = Audio.playVO(buffer);
+      let done = false;
+      const finish = (status = 'ended', error = null) => {
+        if (done) return;
+        done = true;
+        src.onended = null;
+        try { src.disconnect(); } catch { /* already disconnected */ }
+        signal?.removeEventListener('abort', onAbort);
+        this._setSpeaking(false, token);
+        if (error) reject(error); else resolve({ status });
+      };
+      const stopTransport = (status, error = null) => {
+        src.onended = null;
+        try { src.stop(); } catch { /* already stopped */ }
+        // Never wait for WebAudio onended: suspended/interrupted contexts may
+        // delay it indefinitely. Settlement is synchronous and idempotent.
+        finish(status, error);
+      };
+      const onAbort = () => stopTransport('aborted', abortReason(signal));
+      this._setSpeaking(true, token);
+      this._stopCurrent = (status = 'skipped') => stopTransport(status);
+      src.onended = () => finish('ended');
+      signal?.addEventListener('abort', onAbort, { once: true });
     });
   }
 
@@ -91,57 +131,56 @@ class NarratorSystem {
     try { window.speechSynthesis.cancel(); window.speechSynthesis.resume(); } catch { /* ignore */ }
   }
 
-  _speakTTS(clean) {
+  _speakTTS(clean, { signal = null, token = null } = {}) {
+    if (token == null) token = this._newSession();
     const est = this.estimateMs(clean);
-    if (!this.supported) return new Promise((r) => setTimeout(r, est * 0.75));
-    return new Promise((resolve) => {
+    if (!this.supported) return this._waitReading(est * 0.75, { signal, token });
+    if (signal?.aborted) return Promise.reject(abortReason(signal));
+
+    return new Promise((resolve, reject) => {
       let done = false;
-      const finish = () => { if (!done) { done = true; this._setSpeaking(false); resolve(); } };
+      let capLeft = est * 2.2;
+      const finish = (status = 'ended', error = null) => {
+        if (done) return;
+        done = true;
+        clearInterval(capTimer);
+        signal?.removeEventListener('abort', onAbort);
+        this._setSpeaking(false, token);
+        if (error) reject(error); else resolve({ status });
+      };
+      const stopTransport = (status, error = null) => {
+        try { window.speechSynthesis.cancel(); } catch { /* ignore */ }
+        finish(status, error);
+      };
+      const onAbort = () => stopTransport('aborted', abortReason(signal));
+      const capTimer = setInterval(() => {
+        if (this._paused) return;
+        capLeft -= 250;
+        if (capLeft <= 0) finish('timeout');
+      }, 250);
+
+      this._setSpeaking(true, token);
+      this._stopCurrent = (status = 'skipped') => stopTransport(status);
+      signal?.addEventListener('abort', onAbort, { once: true });
+
       try {
         this.nudge();
-        const u = new SpeechSynthesisUtterance(clean);
-        // Pinned fallback voice — exact-name match ONLY (no scoring, no
-        // auto-pick). Absent → lang-default en-US.
-        u.lang = 'en-US';
+        const utterance = new SpeechSynthesisUtterance(clean);
+        utterance.lang = 'en-US';
         const pinned = window.speechSynthesis.getVoices().find((v) => v.name === FALLBACK_VOICE);
-        if (pinned) u.voice = pinned;
-        u.rate = 1.0;   // a touch quicker than the old 0.88 — still calm
-        u.pitch = 0.82; // deeper, calm
-        // Baked at start (speechSynthesis can't change volume mid-line — that's
-        // why file VO exists). A later volume change won't cancel it.
-        u.volume = Math.min(1, Math.max(0, Audio.voiceLevel));
-        u.onend = finish;
-        u.onerror = finish;
-        this._setSpeaking(true);
-        // Skip / mute must resolve the awaited promise NOW and clear speaking
-        // state — not rely on the engine firing onend after cancel() (some don't,
-        // which stalled the beat until the est×2.2 backstop). finish() is idempotent.
-        this._stopCurrent = () => { try { window.speechSynthesis.cancel(); } catch { /* ignore */ } finish(); };
-        window.speechSynthesis.speak(u);
-        // Robustness: if speech never starts, fall back to reading-time pacing.
-        // (Never while game-paused — resuming here would defeat the pause.)
-        setTimeout(() => {
-          if (!done && !this._paused && !window.speechSynthesis.speaking) {
-            try { window.speechSynthesis.resume(); } catch { /* ignore */ }
-            setTimeout(() => { if (!done && !this._paused && !window.speechSynthesis.speaking) setTimeout(finish, est * 0.6); }, 400);
-          }
-        }, 700);
-        // absolute cap — deferred while paused so a held line can't time out
-        const cap = () => {
-          if (done) return;
-          if (this._paused) { setTimeout(cap, 500); return; }
-          finish();
-        };
-        setTimeout(cap, est * 2.2);
+        if (pinned) utterance.voice = pinned;
+        utterance.rate = 1.0;
+        utterance.pitch = 0.82;
+        utterance.volume = Math.min(1, Math.max(0, Audio.voiceLevel));
+        utterance.onend = () => finish('ended');
+        utterance.onerror = () => finish('error');
+        window.speechSynthesis.speak(utterance);
       } catch {
-        setTimeout(finish, est * 0.75);
+        capLeft = est * 0.75;
       }
     });
   }
 
-  // Game pause: hold the current TTS line mid-word (file VO rides the
-  // suspended AudioContext, so it pauses on the audio side). resume() picks
-  // the line back up. Neither resolves or cancels anything.
   pause() {
     this._paused = true;
     if (this.supported) { try { window.speechSynthesis.pause(); } catch { /* ignore */ } }
@@ -152,22 +191,24 @@ class NarratorSystem {
     if (this.supported) { try { window.speechSynthesis.resume(); } catch { /* ignore */ } }
   }
 
-  // Skip the CURRENT line only (the Skip button). Resolves the in-flight speak().
   skip() {
-    if (this._stopCurrent) this._stopCurrent();
-    else this.cancel();
+    this._stopCurrent?.('skipped');
   }
 
-  // Full stop (mute). Stops whatever is playing and clears speaking state.
-  stop() {
-    if (this._stopCurrent) this._stopCurrent();
+  stop(status = 'stopped') {
+    const stopCurrent = this._stopCurrent;
+    if (stopCurrent) stopCurrent(status);
     this.cancel();
     this._setSpeaking(false);
+    // Also cancels a line that is still fetching/decoding and therefore has
+    // no transport owner yet. A later decode can never revive after Skip,
+    // master mute, narrator mute, supersession, or scene exit.
+    this._activeToken += 1;
   }
 
   cancel() {
     if (this.supported) {
-      try { window.speechSynthesis.cancel(); window.speechSynthesis.resume(); } catch { /* ignore */ }
+      try { window.speechSynthesis.cancel(); } catch { /* ignore */ }
     }
   }
 }

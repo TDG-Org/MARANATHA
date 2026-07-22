@@ -1,4 +1,5 @@
 import { Narrator } from '../systems/Narrator.js';
+import { pausableWait } from '../engine/Sequencer.js';
 
 // The scripture surface for 3D scenes (core game pillar): translation-exact
 // verse text + reference, gently faded in, narrated (file-first VO via lineId),
@@ -10,7 +11,7 @@ import { Narrator } from '../systems/Narrator.js';
 // Position: clamped into the letterbox SAFE ZONE — the top edge always clears
 // the 11vh cinema bar (whichever is lower: 10% or bar + gap), and max-height
 // keeps the card off the bottom bar on short viewports.
-export function createVerseCard() {
+export function createVerseCard({ signal = null, isPaused = null } = {}) {
   const panel = document.createElement('div');
   panel.className = 'mr-versecard'; // D8: compact phone sizing lives in index.html
   panel.style.cssText = [
@@ -46,11 +47,11 @@ export function createVerseCard() {
     panel.style.opacity = '1';
     panel.style.transform = 'translateX(-50%) translateY(0)';
 
-    if (!narrate) return holdMs ? new Promise((r) => setTimeout(r, holdMs)) : Promise.resolve();
+    if (!narrate) return pausableWait(holdMs, isPaused, signal);
 
     // The awaited line ends when narration ends — or when the Skip BUTTON
     // resolves it through Narrator.skip(). No other input can end it.
-    return Narrator.speak(verse.text, verse.vo || null);
+    return Narrator.speak(verse.text, verse.vo || null, { signal });
   }
 
   function hide() {

@@ -8,14 +8,15 @@ import * as THREE from 'three';
 //     colliderWorld,          // ColliderWorld (statics carry optional .group tags)
 //     ground,                 // the ground Mesh (flatness raycasts)
 //     zones: [{x,z,label}],   // trigger/prompt centers that must be standable
-//     stages: [{x,z,r,label}] // story stages whose floor ring must be flat
+//     stages: [{x,z,r,label}],// story stages whose floor ring must be flat
+//     decorations: [{type:'circle',x,z,r,label}] // visual-only ground props
 //   }) -> findings[]          // [] = clean
 //
 // Same-.group collider pairs are allowed to touch (a crate PILE, a fence run's
 // corner posts) — different groups must keep clear air (level-layout law 2).
 const EPS = 0.05;
 
-export function auditLayout({ colliderWorld, ground, zones = [], stages = [] } = {}) {
+export function auditLayout({ colliderWorld, ground, zones = [], stages = [], decorations = [] } = {}) {
   const findings = [];
   const statics = colliderWorld?.statics || [];
 
@@ -29,6 +30,30 @@ export function auditLayout({ colliderWorld, ground, zones = [], stages = [] } =
         findings.push({
           type: 'collider-overlap', depth: round(depth),
           a: describe(a), b: describe(b),
+        });
+      } else {
+        // Gameplay colliders may sit slightly inside the visible mesh for a
+        // forgiving feel. visualR retains that silhouette for prop-layout QA.
+        const visualDepth = overlapDepth(a, b, true);
+        if (visualDepth > EPS) {
+          findings.push({
+            type: 'visual-overlap', depth: round(visualDepth),
+            a: describe(a), b: describe(b),
+          });
+        }
+      }
+    }
+  }
+
+  // Visual-only dressing (pots/baskets/skins/rope) must not disappear into a
+  // solid prop merely because it intentionally has no gameplay collider.
+  for (const d of decorations) {
+    for (const c of statics) {
+      const depth = overlapDepth(d, c, true);
+      if (depth > EPS) {
+        findings.push({
+          type: 'decoration-overlap', depth: round(depth),
+          decoration: describe(d), solid: describe(c),
         });
       }
     }
@@ -51,6 +76,12 @@ export function auditLayout({ colliderWorld, ground, zones = [], stages = [] } =
       const h = heightAt(cx, cz);
       if (h !== null && Math.abs(h) > 0.06) {
         findings.push({ type: 'prop-on-slope', height: round(h), at: describe(c) });
+      }
+    }
+    for (const d of decorations) {
+      const h = heightAt(d.x, d.z);
+      if (h !== null && Math.abs(h) > 0.06) {
+        findings.push({ type: 'decoration-on-slope', height: round(h), at: describe(d) });
       }
     }
     for (const s of stages) {
@@ -77,10 +108,12 @@ export function auditLayout({ colliderWorld, ground, zones = [], stages = [] } =
   return findings;
 }
 
-function overlapDepth(a, b) {
+function overlapDepth(a, b, visual = false) {
   if (a.type === 'circle' && b.type === 'circle') {
     const d = Math.hypot(a.x - b.x, a.z - b.z);
-    return a.r + b.r - d;
+    const ar = visual ? (a.visualR ?? a.r) : a.r;
+    const br = visual ? (b.visualR ?? b.r) : b.r;
+    return ar + br - d;
   }
   if (a.type === 'aabb' && b.type === 'aabb') {
     const ox = Math.min(a.maxX, b.maxX) - Math.max(a.minX, b.minX);
@@ -91,12 +124,12 @@ function overlapDepth(a, b) {
   const r = a.type === 'circle' ? b : a;
   const px = Math.max(r.minX, Math.min(c.x, r.maxX));
   const pz = Math.max(r.minZ, Math.min(c.z, r.maxZ));
-  return c.r - Math.hypot(c.x - px, c.z - pz);
+  return (visual ? (c.visualR ?? c.r) : c.r) - Math.hypot(c.x - px, c.z - pz);
 }
 
 function describe(c) {
   return c.type === 'circle'
-    ? `circle(${round(c.x)},${round(c.z)} r${round(c.r)}${c.group ? ` ${c.group}` : ''})`
+    ? `circle(${round(c.x)},${round(c.z)} r${round(c.r)}${c.group ? ` ${c.group}` : ''}${c.label ? ` ${c.label}` : ''})`
     : `aabb(${round(c.minX)}..${round(c.maxX)}, ${round(c.minZ)}..${round(c.maxZ)}${c.group ? ` ${c.group}` : ''})`;
 }
 

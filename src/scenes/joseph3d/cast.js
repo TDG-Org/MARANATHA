@@ -1,4 +1,5 @@
 import { mulberry32 } from '../../engine/world.js';
+import { abortReason } from '../../core/async.js';
 
 // The Joseph cast (character-design): distinct silhouette base + 1–2 signature
 // colors per named person, all from the two shared KayKit rigs. Plus the
@@ -61,11 +62,16 @@ export function buildWorker(factory, i, child = false) {
 // npc: { char, home:{x,z}, wanderR, faceTo?, gesture? } — small wanders, long
 // pauses, occasional talk-gesture; movement respects the collider world.
 export class AmbientNPCs {
-  constructor(colliderWorld, seed = 91) {
+  constructor(colliderWorld, { seed = 91, signal = null } = {}) {
     this.world = colliderWorld;
     this.rnd = mulberry32(seed);
+    this.signal = signal;
     this.npcs = [];
     this._circles = []; // shared dynamics list (NPC-vs-NPC separation)
+    this._timers = new Set();
+    this._disposed = false;
+    this._onAbort = () => this.cancelMoves(abortReason(signal));
+    signal?.addEventListener('abort', this._onAbort, { once: true });
   }
 
   add(char, { x, z, wanderR = 2.2, gestureEvery = 9000, canWander = true, speed = 1.1 } = {}) {
@@ -99,10 +105,12 @@ export class AmbientNPCs {
   // Choreography: send an NPC somewhere (campfire ring, tent door…). Resolves
   // when they arrive (or give up against a blocker). Overrides wandering.
   sendTo(npc, x, z, { speed = null } = {}) {
-    return new Promise((resolve) => {
+    if (this.signal?.aborted) return Promise.reject(abortReason(this.signal));
+    npc.onArrive?.resolve?.(false); // a newer order safely supersedes the old
+    return new Promise((resolve, reject) => {
       npc.target = { x, z, scripted: true, speed };
       npc.stuckT = 0;
-      npc.onArrive = resolve;
+      npc.onArrive = { resolve, reject };
     });
   }
 
@@ -111,9 +119,9 @@ export class AmbientNPCs {
     n.timer = 1400 + this.rnd() * 3200;
     n.stuckT = 0;
     n.char.play('idle');
-    const cb = n.onArrive;
+    const op = n.onArrive;
     n.onArrive = null;
-    cb?.();
+    op?.resolve?.(true);
   }
 
   update(dt, playerPos = null) {
@@ -135,7 +143,11 @@ export class AmbientNPCs {
       if (n.gestureT <= 0 && !n.target) {
         n.gestureT = n.gestureEvery * (0.7 + this.rnd() * 0.8);
         c.play('talk');
-        setTimeout(() => { if (!n.frozen && c.state === 'talk') c.play('idle'); }, 1400 + this.rnd() * 900);
+        const id = setTimeout(() => {
+          this._timers.delete(id);
+          if (!this._disposed && !n.frozen && c.state === 'talk') c.play('idle');
+        }, 1400 + this.rnd() * 900);
+        this._timers.add(id);
       }
 
       // wander
@@ -192,5 +204,24 @@ export class AmbientNPCs {
     npc.frozen = on;
     if (on && (npc.char.state === 'walk' || npc.char.state === 'run')) npc.char.play('idle');
   }
-  dispose() { this.npcs.length = 0; this._circles.length = 0; }
+
+  cancelMoves(error = null) {
+    for (const n of this.npcs) {
+      const op = n.onArrive;
+      n.onArrive = null;
+      n.target = null;
+      n.stuckT = 0;
+      if (error) op?.reject?.(error); else op?.resolve?.(false);
+    }
+  }
+
+  dispose() {
+    this._disposed = true;
+    this.cancelMoves(this.signal?.aborted ? abortReason(this.signal) : null);
+    this.signal?.removeEventListener('abort', this._onAbort);
+    for (const id of this._timers) clearTimeout(id);
+    this._timers.clear();
+    this.npcs.length = 0;
+    this._circles.length = 0;
+  }
 }

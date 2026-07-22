@@ -52,8 +52,8 @@ function pageShell({ app, camera, heading, passage }) {
     'pointer-events:auto', 'width:min(92vw,600px)', 'max-height:64vh', 'overflow-y:auto',
     'margin:26px 20px', 'padding:24px 26px', 'text-align:left', 'line-height:1.62',
     'font-size:clamp(14px,1.9vw,16px)',
-    'background:rgba(16,14,26,0.5)', 'border:1px solid rgba(242,184,128,0.18)',
-    'border-radius:16px', 'backdrop-filter:blur(4px)', 'box-shadow:0 10px 34px rgba(0,0,0,0.32)',
+    'background:rgba(16,14,26,0.75)', 'border:1px solid rgba(242,184,128,0.18)',
+    'border-radius:16px', 'box-shadow:0 10px 34px rgba(0,0,0,0.32)',
   ].join(';');
 
   const back = document.createElement('button');
@@ -63,11 +63,11 @@ function pageShell({ app, camera, heading, passage }) {
     'position:fixed', 'top:calc(14px + env(safe-area-inset-top))', 'left:calc(14px + env(safe-area-inset-left))',
     'z-index:22', 'pointer-events:auto', 'padding:10px 16px', 'border-radius:11px', 'cursor:pointer',
     'font:600 14px "Segoe UI",system-ui,sans-serif', 'color:#fdf6e3',
-    'background:rgba(16,14,26,0.55)', 'border:1px solid rgba(255,255,255,0.14)', 'backdrop-filter:blur(3px)',
+    'background:rgba(16,14,26,0.75)', 'border:1px solid rgba(255,255,255,0.14)',
     'transition:background 150ms ease',
   ].join(';');
   back.onmouseenter = () => { back.style.background = 'rgba(30,26,44,0.7)'; };
-  back.onmouseleave = () => { back.style.background = 'rgba(16,14,26,0.55)'; };
+  back.onmouseleave = () => { back.style.background = 'rgba(16,14,26,0.75)'; };
   back.onclick = () => { Audio.uiClick?.(); app.navigate('home'); };
 
   root.append(card);
