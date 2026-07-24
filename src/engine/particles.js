@@ -8,6 +8,7 @@ import { glowTexture, mulberry32 } from './world.js';
 class PointsEffect {
   constructor({ count, size, color, blending = THREE.AdditiveBlending, opacity = 0.5, fog = true, seed = 1 }) {
     this.count = count;
+    this.activeCount = count;
     this.rnd = mulberry32(seed);
     this.pos = new Float32Array(count * 3);
     this.life = new Float32Array(count);   // 0..1
@@ -17,6 +18,7 @@ class PointsEffect {
     this.emitters = [];
     this.geo = new THREE.BufferGeometry();
     this.geo.setAttribute('position', new THREE.BufferAttribute(this.pos, 3));
+    this.geo.setDrawRange(0, count);
     this.mat = new THREE.PointsMaterial({
       map: glowTexture(64), color, size, sizeAttenuation: true, transparent: true,
       opacity, blending, depthWrite: false, fog,
@@ -29,6 +31,14 @@ class PointsEffect {
   }
 
   addEmitter(x, y, z) { this.emitters.push({ x, y, z }); return this.emitters.length - 1; }
+
+  // Quality can demote while a scene is live. Draw and simulate only the
+  // active prefix; the fixed backing buffers remain reusable if the player
+  // explicitly raises quality again during the same scene.
+  setActiveCount(count) {
+    this.activeCount = Math.max(0, Math.min(this.count, Math.round(count)));
+    this.geo.setDrawRange(0, this.activeCount);
+  }
 
   _respawn(i) {
     if (!this.emitters.length) return;
@@ -47,7 +57,7 @@ class PointsEffect {
   _fadeStep(dt) {
     this._fadeCur += (this.fade - this._fadeCur) * Math.min(dt * 0.002, 1);
     this.mat.opacity = this.baseOpacity * this._fadeCur;
-    this.points.visible = this.mat.opacity > 0.01;
+    this.points.visible = this.activeCount > 0 && this.mat.opacity > 0.01;
   }
 
   dispose() {
@@ -66,7 +76,7 @@ export function makeSmoke({ count = 26, seed = 21 } = {}) {
     fx._fadeStep(dt);
     if (!fx.points.visible || !fx.emitters.length) return;
     const s = dt * 0.001;
-    for (let i = 0; i < count; i++) {
+    for (let i = 0; i < fx.activeCount; i++) {
       fx.life[i] += s * 0.22 * fx.speed[i];
       if (fx.life[i] >= 1) { fx._respawn(i); fx.life[i] = 0; }
       const e = fx.emitters[fx.emIdx[i]];
@@ -88,7 +98,7 @@ export function makeEmbers({ count = 14, seed = 22 } = {}) {
     fx._fadeStep(dt);
     if (!fx.points.visible || !fx.emitters.length) return;
     const s = dt * 0.001;
-    for (let i = 0; i < count; i++) {
+    for (let i = 0; i < fx.activeCount; i++) {
       fx.life[i] += s * (0.8 + fx.speed[i] * 0.5);
       if (fx.life[i] >= 1) { fx._respawn(i); fx.life[i] = 0; }
       const e = fx.emitters[fx.emIdx[i]];
@@ -121,7 +131,7 @@ export function makeFireflies({ count = 26, span = 30, seed = 23 } = {}) {
   fx.update = (dt, t) => {
     fx._fadeStep(dt);
     if (!fx.points.visible) return;
-    for (let i = 0; i < count; i++) {
+    for (let i = 0; i < fx.activeCount; i++) {
       fx.pos[i * 3] += Math.sin(t * 0.35 * fx.speed[i] + fx.phase[i]) * dt * 0.0006;
       fx.pos[i * 3 + 1] += Math.cos(t * 0.5 * fx.speed[i] + fx.phase[i] * 2) * dt * 0.0004;
       fx.pos[i * 3 + 2] += Math.cos(t * 0.3 * fx.speed[i] + fx.phase[i]) * dt * 0.0006;

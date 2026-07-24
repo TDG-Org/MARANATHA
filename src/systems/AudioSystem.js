@@ -7,6 +7,41 @@
 // Engine-agnostic: no rendering-library imports. UI (volume slider/mute)
 // lives in the DOM — see src/ui/volume.js.
 const VOL_KEY = 'maranatha-volume';
+const VO_FETCH_TIMEOUT_MS = 5000;
+const MEDIA_READY_TIMEOUT_MS = 5000;
+const SAMPLE_LOAD_TIMEOUT_MS = 5000;
+// Compressed narration stays much smaller than decoded PCM, but an unbounded
+// story-by-story preload would still grow for the entire session. Eight MiB
+// holds many chapters (Scene 1 is under 1 MiB) while keeping the ceiling
+// predictable on memory-constrained phones.
+const VO_BYTE_CACHE_BUDGET = 8 * 1024 * 1024;
+
+function abortError(signal) {
+  if (signal?.reason instanceof Error) return signal.reason;
+  const error = new Error('Operation aborted');
+  error.name = 'AbortError';
+  return error;
+}
+
+function awaitWithSignal(promise, signal) {
+  if (!signal) return promise;
+  if (signal.aborted) return Promise.reject(abortError(signal));
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      signal.removeEventListener('abort', onAbort);
+      fn(value);
+    };
+    const onAbort = () => finish(reject, abortError(signal));
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(
+      (value) => finish(resolve, value),
+      (error) => finish(reject, error),
+    );
+  });
+}
 
 // C-major pentatonic — always consonant.
 const PENTA = [261.63, 293.66, 329.63, 392.0, 440.0];
@@ -24,6 +59,9 @@ class AudioSystem {
     this.ctx = null;
     this.master = null;
     this.space = null; // echo send bus
+    this._spaceNodes = null;
+    this._spaceTimer = null;
+    this._spaceDeadline = 0;
     this.music = null; // music sub-bus (emotional score)
     this.sfx = null;   // sfx sub-bus (ambient beds + one-shots + UI)
     this.channels = { music: 1, sfx: 1, voice: 1 }; // 0..1, driven by Settings
@@ -35,8 +73,15 @@ class AudioSystem {
     this._manifest = null;
     this._loaded = false;
     this._loadPromise = null;
+    this._mediaReadyTimeoutMs = MEDIA_READY_TIMEOUT_MS;
+    this._sampleLoadTimeoutMs = SAMPLE_LOAD_TIMEOUT_MS;
     this.voiceBus = null; // real gain bus for file-based narration (live volume)
-    this._voCache = {};   // decoded VO buffers / negative cache by url
+    this._voCache = new Map(); // at most two decoded narrator lines (LRU)
+    this._voBytes = new Map(); // compressed bytes, LRU bounded by byte budget
+    this._voByteTotal = 0;
+    this._voByteBudget = VO_BYTE_CACHE_BUDGET;
+    this._voFetchPending = new Map(); // one bounded network request per URL
+    this._voPending = new Map(); // one decode per URL; consumers may still abort
     this.noiseBuf = null;
     this.amb = null; // procedural beds are created lazily, never at gain zero
     this._ambDesired = { wind: 0, night: 0 };
@@ -46,7 +91,9 @@ class AudioSystem {
     this.onVoiceMuted = null; // narrator-channel zero owns the same teardown
     this.onVolume = null; // hook: DOM UI stays in sync
     this._liveLoops = new Map(); // key → live loop handle (double-start guard)
+    this._retiringLoops = new Set(); // streamed loops completing an audible fade
     this._liveOneShots = 0;      // simultaneous one-shot cap (phones die past ~dozens)
+    this._activeOneShots = new Set(); // real + procedural source ownership
     const unlock = () => this.unlock();
     window.addEventListener('pointerdown', unlock);
     window.addEventListener('keydown', unlock);
@@ -117,20 +164,6 @@ class AudioSystem {
       this.voiceBus.gain.value = this.channels.voice;
       this.voiceBus.connect(this.master);
 
-      // Space: a soft filtered feedback echo the one-shots are sent into.
-      const delay = this.ctx.createDelay(1);
-      delay.delayTime.value = 0.31;
-      const fb = this.ctx.createGain();
-      fb.gain.value = 0.32;
-      const damp = this.ctx.createBiquadFilter();
-      damp.type = 'lowpass';
-      damp.frequency.value = 1400;
-      const wet = this.ctx.createGain();
-      wet.gain.value = 0.4;
-      delay.connect(damp).connect(fb).connect(delay);
-      delay.connect(wet).connect(this.sfx);
-      this.space = delay;
-
       const len = this.ctx.sampleRate * 2;
       this.noiseBuf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
       const data = this.noiseBuf.getChannelData(0);
@@ -155,6 +188,7 @@ class AudioSystem {
       this.master.gain.setTargetAtTime(0.9 * this.volume, this.ctx.currentTime, 0.06);
     }
     if (wasEnabled && !this.enabled) {
+      this.stopOneShots();
       // Mute means SILENCE: stop the narrator mid-verse (speech synthesis
       // is a separate output path the gain node can't touch), then suspend
       // the context so muted play doesn't burn battery.
@@ -187,6 +221,9 @@ class AudioSystem {
     if (name === 'sfx' && this.sfx) this.sfx.gain.setTargetAtTime(v, t, 0.05);
     if (name === 'music' && this.music) this.music.gain.setTargetAtTime(v, t, 0.05);
     if (name === 'voice' && this.voiceBus) this.voiceBus.gain.setTargetAtTime(v, t, 0.05);
+    if ((name === 'music' || name === 'sfx') && v <= 0.004) {
+      this.stopOneShots({ bus: name });
+    }
     if (name === 'music' || name === 'sfx') this._syncMediaLoops(name);
   }
 
@@ -294,16 +331,35 @@ class AudioSystem {
   async loadSamples() {
     if (this._loadPromise) return this._loadPromise;
     if (!this._manifest || !this.ctx) return;
-    this._loaded = true;
     // Long beds/score stay compressed and stream through HTMLMediaElement.
     // Only short latency-sensitive one-shots become resident AudioBuffers.
-    this._loadPromise = Promise.all(
-      [...this._manifest.values()]
-        .filter((e) => e.bus !== 'voice' && !e.loop && e.available)
-        // fetch the real file path (folder/name) when set, else the key
-        .map(async (e) => { this.samples[e.key] = (await this._fetchDecode(e.file || e.key)) || null; }),
-    );
-    await this._loadPromise;
+    const targets = [...this._manifest.values()]
+      .filter((e) => e.bus !== 'voice' && !e.loop && e.available && !this.samples[e.key]);
+    if (!targets.length) {
+      this._loaded = true;
+      this._loadPromise = Promise.resolve([]);
+      return this._loadPromise;
+    }
+
+    let allLoaded = false;
+    const work = Promise.all(targets.map(async (e) => {
+      // Fetch the real file path (folder/name) when set, else the key.
+      const sample = await this._fetchDecode(e.file || e.key);
+      this.samples[e.key] = sample || null;
+      return !!sample;
+    })).then((results) => {
+      allLoaded = results.every(Boolean);
+      this._loaded = allLoaded;
+      return results;
+    });
+    this._loadPromise = work;
+    try {
+      return await work;
+    } finally {
+      // Success stays memoized. A timeout/transient failure does not: the next
+      // authored use can retry only the still-missing sample.
+      if (this._loadPromise === work && !allLoaded) this._loadPromise = null;
+    }
   }
 
   // Looping bed/music by manifest key. Real file → looped source with a live
@@ -358,7 +414,9 @@ class AudioSystem {
     let fallback = null;
     let pauseTimer = null;
     let stopTimer = null;
+    let loadTimer = null;
     let playPromise = null;
+    let mediaReleased = false;
 
     const canTransportRun = () => this.enabled && this.channels[entry.bus] > 0.004 && !this.holdSuspend
       && !document.hidden && this.ctx?.state === 'running';
@@ -389,7 +447,15 @@ class AudioSystem {
       media.removeEventListener('canplay', onReady);
       media.removeEventListener('error', onError);
     };
+    const clearLoadTimer = () => {
+      if (!loadTimer) return;
+      clearTimeout(loadTimer);
+      loadTimer = null;
+    };
     const releaseMedia = () => {
+      if (mediaReleased) return;
+      mediaReleased = true;
+      clearLoadTimer();
       removeLoadListeners();
       pauseTransport();
       try { media.removeAttribute('src'); media.load(); } catch { /* done */ }
@@ -413,6 +479,7 @@ class AudioSystem {
     };
     const onReady = () => {
       if (state !== 'pending') return;
+      clearLoadTimer();
       removeLoadListeners();
       state = 'media';
       if (entry.bus === 'music') this.stopMusic();
@@ -421,6 +488,12 @@ class AudioSystem {
     const onError = () => {
       if (state !== 'pending') return;
       loadCandidate();
+    };
+    const finishRetirement = () => {
+      if (stopTimer) clearTimeout(stopTimer);
+      stopTimer = null;
+      this._retiringLoops.delete(handle);
+      releaseMedia();
     };
 
     const pauseAfter = (seconds) => {
@@ -450,13 +523,16 @@ class AudioSystem {
         if (pauseTimer) { clearTimeout(pauseTimer); pauseTimer = null; }
         if (wasFallback) fallback?.stop?.(fade);
         else this._setParam(gainNode.gain, 0, fade > 0 ? Math.max(0.01, fade / 3) : 0);
-        const release = () => {
-          stopTimer = null;
-          releaseMedia();
-        };
-        if (fade <= 0 || wasPending || wasFallback) release();
-        else stopTimer = setTimeout(release, fade * 1000 + 200);
+        if (fade <= 0 || wasPending || wasFallback) finishRetirement();
+        else {
+          // Keep a fading transport reachable after it leaves `_liveLoops`.
+          // A scene exit/mute/hidden tab can now force deterministic release
+          // instead of leaving a detached HTML decoder alive for the tail.
+          this._retiringLoops.add(handle);
+          stopTimer = setTimeout(finishRetirement, fade * 1000 + 200);
+        }
       },
+      _forceRelease: finishRetirement,
       _pauseTransport: () => {
         if (state === 'fallback') fallback?._pauseTransport?.();
         else pauseTransport();
@@ -473,6 +549,13 @@ class AudioSystem {
       _bus: entry.bus,
     };
     this._liveLoops.set(key, handle);
+    // A stalled media request may emit neither canplay nor error. Bound the
+    // entire format chain, then release its decoder/network ownership and use
+    // the authored fallback instead of leaving the scene silent.
+    loadTimer = setTimeout(() => {
+      loadTimer = null;
+      if (state === 'pending') activateFallback();
+    }, this._mediaReadyTimeoutMs);
     loadCandidate();
     return handle;
   }
@@ -512,6 +595,7 @@ class AudioSystem {
 
   _pauseMediaLoops() {
     for (const handle of this._liveLoops.values()) handle._pauseTransport?.();
+    this.stopOneShots();
     this._syncAmbient('wind', 0);
     this._syncAmbient('night', 0);
     this._stopBirdTimer();
@@ -535,16 +619,81 @@ class AudioSystem {
     }
   }
 
-  async _fetchDecode(key) {
-    for (const ext of ['mp3', 'ogg', 'webm']) {
-      try {
-        const res = await fetch(`audio/${key}.${ext}`);
-        if (!res.ok) continue;
-        const arr = await res.arrayBuffer();
-        return await this.ctx.decodeAudioData(arr);
-      } catch { /* try next extension */ }
+  async _fetchDecode(key, { timeoutMs = this._sampleLoadTimeoutMs } = {}) {
+    const controller = new AbortController();
+    let timeout = null;
+    const work = (async () => {
+      for (const ext of ['mp3', 'ogg', 'webm']) {
+        try {
+          const res = await fetch(`audio/${key}.${ext}`, { signal: controller.signal });
+          if (!res.ok) continue;
+          const arr = await res.arrayBuffer();
+          return await this.ctx.decodeAudioData(arr);
+        } catch { /* try next extension */ }
+      }
+      return null;
+    })();
+    const deadline = new Promise((resolve) => {
+      timeout = setTimeout(() => {
+        controller.abort();
+        resolve(null);
+      }, Math.max(1, timeoutMs));
+    });
+    try {
+      return await Promise.race([work, deadline]);
+    } finally {
+      if (timeout) clearTimeout(timeout);
     }
-    return null;
+  }
+
+  _ownOneShot(source, nodes = [], { bus = 'sfx', counted = false } = {}) {
+    let finished = false;
+    const entry = {
+      bus,
+      finish: () => {
+        if (finished) return;
+        finished = true;
+        this._activeOneShots.delete(entry);
+        source.onended = null;
+        if (counted) this._liveOneShots = Math.max(0, this._liveOneShots - 1);
+        for (const node of [source, ...nodes]) {
+          try { node?.disconnect(); } catch { /* already disconnected */ }
+        }
+      },
+      stop: () => {
+        if (finished) return;
+        source.onended = null;
+        try { source.stop(); } catch { /* already stopped */ }
+        entry.finish();
+      },
+    };
+    source.onended = entry.finish;
+    this._activeOneShots.add(entry);
+    return entry;
+  }
+
+  // Scene exit, mute, pause, and tab hiding all own deterministic transient
+  // cleanup. Scheduled WebAudio sources otherwise keep the audio clock and
+  // their graph alive until their natural tail, even when no longer audible.
+  _releaseRetiringLoops(bus = null) {
+    for (const handle of [...this._retiringLoops]) {
+      if (bus && handle._bus !== bus) continue;
+      handle._forceRelease?.();
+    }
+  }
+
+  stopOneShots({ bus = null, retiringBus = bus } = {}) {
+    for (const entry of [...this._activeOneShots]) {
+      if (bus && entry.bus !== bus) continue;
+      entry.stop();
+    }
+    if (!bus) this._liveOneShots = 0;
+    // Scene teardown calls this after asking music/ambience to fade. Streamed
+    // handles have already left `_liveLoops`, so retain and flush them here.
+    this._releaseRetiringLoops(retiringBus);
+    // The feedback graph belongs only to procedural SFX. Music mute must not
+    // cut an unrelated SFX tail; all-bus/SFX teardown still releases it.
+    if (!bus || bus === 'sfx') this._disposeSpace();
   }
 
   // Play a manifest sound by KEY: the real file if loaded, else the labeled
@@ -574,14 +723,14 @@ class AudioSystem {
       g.gain.value = gain;
       const bus = e?.bus === 'music' ? this.music : this.sfx;
       src.connect(g).connect(bus || this.master);
-      src.onended = () => {
-        this._liveOneShots = Math.max(0, this._liveOneShots - 1);
-        try { src.disconnect(); } catch { /* done */ }
-        try { g.disconnect(); } catch { /* done */ }
-      };
+      this._ownOneShot(src, [g], { bus: channel, counted: true });
       src.start();
       return;
     }
+    // A transient first-unlock failure is retryable. Retry only when this
+    // missing authored sound is actually requested; never poll or wake an idle
+    // scene, and let loadSamples' shared promise deduplicate concurrent uses.
+    if (e.available && !this._loadPromise) void this.loadSamples();
     const fb = e?.fallback;
     if (fb && typeof this[fb] === 'function') this[fb]();
   }
@@ -656,16 +805,110 @@ class AudioSystem {
   // null-cache a verse forever, so its every later play fell back to TTS
   // ("the narrator turns into a robot at the end"). Only success is cached;
   // a miss simply retries on the next play.
-  async decodeVO(url) {
-    if (this._voCache[url]) return this._voCache[url];
+  _getVOBytes(url) {
+    const bytes = this._voBytes.get(url);
+    if (!bytes) return null;
+    // LRU touch: narration replay and the current chapter remain warmer than
+    // old story lines when later chapters enter the bounded cache.
+    this._voBytes.delete(url);
+    this._voBytes.set(url, bytes);
+    return bytes;
+  }
+
+  _deleteVOBytes(url) {
+    const bytes = this._voBytes.get(url);
+    if (!bytes) return;
+    this._voBytes.delete(url);
+    this._voByteTotal = Math.max(0, this._voByteTotal - (bytes.byteLength || 0));
+  }
+
+  _cacheVOBytes(url, bytes) {
+    const size = bytes?.byteLength || 0;
+    this._deleteVOBytes(url);
+    // An exceptional oversized line is still returned to its caller; it just
+    // cannot evict the whole useful chapter cache and remain resident itself.
+    if (!size || size > this._voByteBudget) return;
+    while (this._voBytes.size && this._voByteTotal + size > this._voByteBudget) {
+      this._deleteVOBytes(this._voBytes.keys().next().value);
+    }
+    this._voBytes.set(url, bytes);
+    this._voByteTotal += size;
+  }
+
+  async preloadVO(url, { signal = null, timeoutMs = VO_FETCH_TIMEOUT_MS } = {}) {
+    const cached = this._getVOBytes(url);
+    if (cached) return awaitWithSignal(Promise.resolve(cached), signal);
+
+    let request = this._voFetchPending.get(url);
+    if (!request) {
+      request = (async () => {
+        const controller = new AbortController();
+        let timeout = null;
+        const fetchWork = (async () => {
+          try {
+            const res = await fetch(url, { signal: controller.signal });
+            if (!res.ok) return null;
+            return await res.arrayBuffer();
+          } catch {
+            return null;
+          }
+        })();
+        const timeoutWork = new Promise((resolve) => {
+          timeout = setTimeout(() => {
+            controller.abort();
+            resolve(null);
+          }, Math.max(1, timeoutMs));
+        });
+        try {
+          const bytes = await Promise.race([fetchWork, timeoutWork]);
+          if (bytes) this._cacheVOBytes(url, bytes);
+          return bytes;
+        } finally {
+          if (timeout) clearTimeout(timeout);
+          this._voFetchPending.delete(url);
+        }
+      })();
+      this._voFetchPending.set(url, request);
+    }
+    return awaitWithSignal(request, signal);
+  }
+
+  async decodeVO(url, { signal = null } = {}) {
     if (!this.ctx) return null;
-    try {
-      const res = await fetch(url);
-      if (!res.ok) return null;
-      const buf = await this.ctx.decodeAudioData(await res.arrayBuffer());
-      this._voCache[url] = buf;
-      return buf;
-    } catch { return null; }
+    const cached = this._voCache.get(url);
+    if (cached) {
+      // LRU touch: the current and next line remain resident.
+      this._voCache.delete(url);
+      this._voCache.set(url, cached);
+      return awaitWithSignal(Promise.resolve(cached), signal);
+    }
+    let work = this._voPending.get(url);
+    if (!work) {
+      work = (async () => {
+        try {
+          const bytes = await this.preloadVO(url);
+          if (!bytes) return null;
+          // Some WebAudio implementations detach decode input; retain the
+          // compressed preload for offline playback of later/replayed lines.
+          const buf = await this.ctx.decodeAudioData(bytes.slice(0));
+          this._voCache.set(url, buf);
+          while (this._voCache.size > 2) {
+            this._voCache.delete(this._voCache.keys().next().value);
+          }
+          return buf;
+        } catch {
+          // A successfully fetched but corrupt/truncated file must not poison
+          // every later attempt. Evict its compressed bytes so the next line
+          // request performs a clean network retry before TTS fallback.
+          this._deleteVOBytes(url);
+          return null;
+        } finally {
+          this._voPending.delete(url);
+        }
+      })();
+      this._voPending.set(url, work);
+    }
+    return awaitWithSignal(work, signal);
   }
 
   // Play a decoded VO buffer through the voice bus; returns the source so the
@@ -819,6 +1062,62 @@ class AudioSystem {
   }
 
   // --- Synthesis primitives (all route partly into the echo space) --------
+  // The feedback graph used to stay connected for the entire session, even
+  // while only music played. Create it for an audible send, then tear it down
+  // after the last tail so idle WebAudio has no needless DSP graph.
+  _ensureSpace() {
+    if (this.space || !this.ctx || this.channels.sfx <= 0.004) return this.space;
+    const delay = this.ctx.createDelay(1);
+    delay.delayTime.value = 0.31;
+    const fb = this.ctx.createGain();
+    fb.gain.value = 0.32;
+    const damp = this.ctx.createBiquadFilter();
+    damp.type = 'lowpass';
+    damp.frequency.value = 1400;
+    const wet = this.ctx.createGain();
+    wet.gain.value = 0.4;
+    delay.connect(damp).connect(fb).connect(delay);
+    delay.connect(wet).connect(this.sfx);
+    this.space = delay;
+    this._spaceNodes = { delay, fb, damp, wet };
+    return delay;
+  }
+
+  _touchSpace(seconds = 2) {
+    const deadline = performance.now() + Math.max(500, seconds * 1000);
+    // A later short click must never tear down the feedback graph while an
+    // earlier long swell still owns an audible echo tail.
+    if (this._spaceTimer && deadline <= this._spaceDeadline) return;
+    if (this._spaceTimer) clearTimeout(this._spaceTimer);
+    this._spaceDeadline = deadline;
+    const expire = () => {
+      const remaining = this._spaceDeadline - performance.now();
+      if (remaining > 1) {
+        this._spaceTimer = setTimeout(expire, remaining);
+        return;
+      }
+      this._spaceTimer = null;
+      this._spaceDeadline = 0;
+      this._disposeSpace();
+    };
+    this._spaceTimer = setTimeout(expire, Math.max(1, deadline - performance.now()));
+  }
+
+  _disposeSpace() {
+    if (this._spaceTimer) {
+      clearTimeout(this._spaceTimer);
+      this._spaceTimer = null;
+    }
+    this._spaceDeadline = 0;
+    if (this._spaceNodes) {
+      for (const node of Object.values(this._spaceNodes)) {
+        try { node.disconnect(); } catch { /* already disconnected */ }
+      }
+    }
+    this._spaceNodes = null;
+    this.space = null;
+  }
+
   tone({ freq = 440, type = 'sine', dur = 0.5, attack = 0.02, release = 0.3, gain = 0.15, filter = 0, slideTo = 0, delay = 0, send = 0.3 }) {
     if (!this.on || this.channels.sfx <= 0.004) return;
     const t = this.ctx.currentTime + delay;
@@ -827,23 +1126,30 @@ class AudioSystem {
     o.frequency.setValueAtTime(freq, t);
     if (slideTo) o.frequency.exponentialRampToValueAtTime(Math.max(slideTo, 1), t + dur);
     let node = o;
+    let filterNode = null;
     if (filter) {
       const f = this.ctx.createBiquadFilter();
       f.type = 'lowpass';
       f.frequency.value = filter;
       o.connect(f);
       node = f;
+      filterNode = f;
     }
     const g = this.ctx.createGain();
     g.gain.setValueAtTime(0, t);
     g.gain.linearRampToValueAtTime(gain, t + attack);
     g.gain.linearRampToValueAtTime(0, t + attack + dur + release);
     node.connect(g).connect(this.sfx);
-    if (send > 0 && this.space) {
+    let sendGain = null;
+    const space = send > 0 ? this._ensureSpace() : null;
+    if (space) {
       const sg = this.ctx.createGain();
       sg.gain.value = send;
-      g.connect(sg).connect(this.space);
+      g.connect(sg).connect(space);
+      sendGain = sg;
+      this._touchSpace(delay + attack + dur + release + 1.2);
     }
+    this._ownOneShot(o, [filterNode, g, sendGain], { bus: 'sfx' });
     o.start(t);
     o.stop(t + attack + dur + release + 0.05);
   }
@@ -864,11 +1170,16 @@ class AudioSystem {
     g.gain.linearRampToValueAtTime(gain, t + attack);
     g.gain.linearRampToValueAtTime(0, t + dur);
     s.connect(f).connect(g).connect(this.sfx);
-    if (send > 0 && this.space) {
+    let sendGain = null;
+    const space = send > 0 ? this._ensureSpace() : null;
+    if (space) {
       const sg = this.ctx.createGain();
       sg.gain.value = send;
-      g.connect(sg).connect(this.space);
+      g.connect(sg).connect(space);
+      sendGain = sg;
+      this._touchSpace(delay + dur + 1.2);
     }
+    this._ownOneShot(s, [f, g, sendGain], { bus: 'sfx' });
     s.start(t);
     s.stop(t + dur + 0.05);
   }

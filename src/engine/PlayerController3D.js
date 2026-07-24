@@ -3,6 +3,7 @@ import { clamp } from './world.js';
 import { Joystick } from '../ui/joystick.js';
 import { Audio } from '../systems/AudioSystem.js';
 import { abortReason } from '../core/async.js';
+import { CollisionGate } from './collision.js';
 
 // Moves a Character3D relative to the camera (WASD / arrows + touch joystick),
 // eased. The character turns toward its move direction and picks idle/walk/run.
@@ -26,6 +27,7 @@ export class PlayerController3D {
     this._fwd = new THREE.Vector3();
     this._right = new THREE.Vector3();
     this._moveDir = new THREE.Vector3(); // scratch (no per-frame alloc)
+    this._collisionGate = new CollisionGate();
     this._footT = 0;
 
     this.joystick = new Joystick({ side: 'left' });
@@ -146,9 +148,18 @@ export class PlayerController3D {
     const prevX = pos.x, prevZ = pos.z;
     pos.x += this.vel.x * dt * 0.001;
     pos.z += this.vel.y * dt * 0.001;
-    if (this.colliders) this.colliders.resolve(pos, this.radius, this.dynamics);
+    let collisionSettled = true;
+    if (this.colliders && this._collisionGate.needsResolve(this.colliders, pos, this.radius, this.dynamics)) {
+      collisionSettled = this.colliders.resolve(pos, this.radius, this.dynamics) !== false;
+    }
+    const resolvedX = pos.x, resolvedZ = pos.z;
     pos.x = clamp(pos.x, this.bounds.minX, this.bounds.maxX);
     pos.z = clamp(pos.z, this.bounds.minZ, this.bounds.maxZ);
+    // A capped correction or bounds clamp may still leave a body touching a
+    // static on this frame. Keep the gate dirty for one more legacy resolve.
+    if (this.colliders && collisionSettled && pos.x === resolvedX && pos.z === resolvedZ) {
+      this._collisionGate.commit(this.colliders, pos);
+    }
 
     const speed = this.vel.length();
     this.moveVec.set(this.vel.x, this.vel.y);

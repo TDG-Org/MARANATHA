@@ -1,6 +1,7 @@
 import { WEB } from '../../../data/versesWEB.js';
 import { Audio } from '../../../systems/AudioSystem.js';
 import { isAbortError } from '../../../core/async.js';
+import { BETRAYAL_STRIP_CAMERA } from './helpers.js';
 
 // SCENE 1 — Joseph, Genesis 37:1–11. The story is DATA + gates; this act's
 // beats are plain async functions over the shared scene context (`ctx`) and the
@@ -12,7 +13,7 @@ export function makeColdOpen(ctx, h) {
 
   // ---------- beat 0 · 🕳️ COLD OPEN v4 (D8): the 7 exact shots ---------------
   // 1 march · 2 the edge (clickable betrayal) · 3 the throw · 4 slow-mo fall,
-  // camera falling WITH him · 5 the brothers walk home toward a far warm light
+  // camera falling WITH him · 5 the brothers walk toward a nearby meal/fire
   // · 6 the boy crying alone in the dark · 7 slow black, 2.5s HOLD, morning.
   // REAL rigged cast only (level-layout law 8) — the story runner starts after
   // the GLBs load, so the four named brothers and Joseph play this themselves.
@@ -51,6 +52,7 @@ export function makeColdOpen(ctx, h) {
     // (vignette + drain — D8: barely any blur; it must never hide the action).
     ctx.futureVignette(true);
     ctx.grading.set('pit');
+    ctx.setStage?.('pit');
     // D11 (Nate): the pit plays as NIGHT — the golden sun sprite in the north
     // sky read as a sunrise from the crying shot. Dark until the real morning.
     ctx.sunSprite.visible = false;
@@ -84,6 +86,10 @@ export function makeColdOpen(ctx, h) {
     const AWAY = [[2.6, 1.2], [3.4, 0.2], [3.0, -1.0], [4.2, 0.8]]; // walk-off spread
     const smooth = (v) => { v = Math.max(0, Math.min(1, v)); return v * v * (3 - 2 * v); };
     const escortTargets = ESCORT.map(({ dx, dz }) => safeBrotherPoint(to.x + dx, to.z + dz));
+    const stripTarget = {
+      x: (to.x + escortTargets[1].x) / 2,
+      z: (to.z + escortTargets[1].z) / 2,
+    };
     ESCORT.forEach(({ n, dx, dz }) => {
       put(n, from.x + dx, from.z + dz);
       n.char.turnToward(dir.x, dir.z);
@@ -170,20 +176,41 @@ export function makeColdOpen(ctx, h) {
       { t: 'say', who: 'Simeon', text: 'Far enough. This is the place.', color: J.Simeon },
       { t: 'fn', fn: () => { charOf('simeon').play('idle'); const sp = posOf('joseph'), li = posOf('judah'); charOf('joseph').turnToward(li.x - sp.x, li.z - sp.z); charOf('joseph').play('talk'); } },
       { t: 'say', who: 'Joseph', text: 'Brothers — please. What have I done to you?', color: J.Joseph },
-      { t: 'fn', fn: () => { charOf('joseph').play('idle'); const sp = posOf('judah'), li = posOf('joseph'); charOf('judah').turnToward(li.x - sp.x, li.z - sp.z); charOf('judah').play('talk'); } },
-      { t: 'say', who: 'Judah', text: 'Here is your throne, dreamer. Now we shall see what becomes of your dreams.', color: J.Judah },
+      { t: 'fn', fn: () => {
+        charOf('joseph').play('idle');
+        const li = posOf('joseph');
+        B.forEach((brother) => {
+          brother.char.turnToward(li.x - brother.pos.x, li.z - brother.pos.z);
+          brother.char.play('talk');
+        });
+      } },
+      // Genesis 37:19–20 presents this as the brothers' shared plan; do not
+      // assign the collective line to one named brother.
+      { t: 'say', who: 'Brothers', text: 'Now we shall see what becomes of his dreams.', color: J.Judah },
       { t: 'dialogueHide' },
       // the exchange is over: the prowl stands down, and Joseph falls SILENT —
       // his arms must never keep gesturing into the fall (D9)
       { t: 'fn', fn: () => {
-        ctx.camera.setPoseDriver(null); charOf('judah').play('idle'); ctx.joseph.play('idle');
+        ctx.camera.setPoseDriver(null);
+        B.forEach((brother) => brother.char.play('idle'));
+        ctx.joseph.play('idle');
         // the talking is over — the cold, drained gloom closes back in for the
         // strip, the throw and the fall (D13: it lifted only for the faces)
         ctx.grading.grade('pit', 1200);
         ctx.postFX.setFilter('future', 1200);
       } },
+      // Dialogue timing can leave the prowl at any phase. Cover its exit, then
+      // reveal one fixed audience-safe angle on Joseph and Judah; no visible
+      // replacement chord can pass close behind Reuben.
+      { t: 'fade', on: true, ms: 300 },
+      {
+        t: 'cam',
+        ...BETRAYAL_STRIP_CAMERA,
+        target: stripTarget,
+        duration: 1,
+      },
+      { t: 'fade', on: false, ms: 420 },
       // they STRIP the tunic (37:23) — it hangs from Judah's hand
-      { t: 'cam', angle: Math.PI * 0.22, target: () => ({ x: ctx.joseph.position.x, z: ctx.joseph.position.z }), distance: 2.9, height: 1.6, lookHeight: 1.0, duration: 1100 },
       { t: 'fn', fn: async () => {
         B.forEach((n) => n.char.play('idle'));
         ctx.sound('sfx.cloth_equip');
@@ -216,7 +243,7 @@ export function makeColdOpen(ctx, h) {
         ctx.npcs.freeze(B[1], true); ctx.npcs.freeze(B[2], true);
         B[1].char.play('talk'); B[2].char.play('talk');
         ctx.controller.vel.set(0, 0);
-        if (ctx.joseph.shadowMesh) ctx.joseph.shadowMesh.visible = false;
+        ctx.contactShadows?.setVisible(ctx.joseph, false);
         ctx.joseph.setAnimPaused(true); // seized — the body goes LIMP and still
         // D11 deterministic FACE-UP landing: move his yaw from the facing child
         // onto the root (order YXZ = yaw first, then pitch in his own frame) —
@@ -298,13 +325,14 @@ export function makeColdOpen(ctx, h) {
         ctx.sound('sfx.pit_impact'); // the dull earth landing
       } },
       { t: 'wait', ms: 1500 },
-      // SHOT 5 — CUT: the brothers walk away SLOWLY toward their camp — a
-      // faint warm firelight far ahead where they live; behind them, nothing.
+      // SHOT 5 — CUT: the brothers walk away SLOWLY toward a nearby fire/meal.
+      // Genesis 37:25 says they sat down to eat; it does not say they went
+      // home. The scene fades before arrival and makes no stronger claim.
       // Framed from behind so no one ever looks back.
       { t: 'fade', on: true, ms: 500 },
       { t: 'fn', fn: () => {
         ctx.grading.set('ominous');
-        P.setCampGlow(1);
+        P.setMealGlow(1);
         B.forEach((n, i) => { put(n, P.PIT.x + AWAY[i][0], P.PIT.z + AWAY[i][1]); n.char.turnToward(0.95, -0.32); n.char.play('walk'); });
         walkStarts = B.map((n) => ({ x: n.pos.x, z: n.pos.z }));
       } },
@@ -362,17 +390,18 @@ export function makeColdOpen(ctx, h) {
         ctx.joseph.setGrief(false);
         P.group.visible = false;
         P.coatProp.visible = false;
-        P.setCampGlow(0);
+        P.setMealGlow(0);
         jRoot.position.y = 0;
         jRoot.rotation.x = 0;             // back on his feet
         ctx.joseph.play('idle');          // …and standing (he was seated, weeping)
-        if (ctx.joseph.shadowMesh) ctx.joseph.shadowMesh.visible = true;
+        ctx.contactShadows?.setVisible(ctx.joseph, true);
         ctx.joseph.setCoat(false);
         ctx.camera.minGroundY = baseMinGroundY; // ground-clip back on
         // the brothers return to their camp-morning spots, alive again
         B.forEach((n, i) => { n.pos.x = homes[i].x; n.pos.z = homes[i].z; n.char.setPosition(homes[i].x, homes[i].z); n.char.play('idle'); ctx.npcs.freeze(n, false); });
         ctx.controller.bounds = ctx.bounds;
         ctx.joseph.setPosition(-7, -2.5); // by his tent in the camp
+        ctx.setStage?.('camp');
         // D11 (Nate: the cut from the gray pit went "way too white"): the
         // morning arrives as a DEEP warm dawn and only eases into full gold
         // across the pan below — a sunrise, not a lightswitch.
@@ -387,15 +416,14 @@ export function makeColdOpen(ctx, h) {
       // D9 (Nate): the open said 'In the days to come' — this card answers it
       // plainly, so every player knows the pit was a glimpse of the future.
       // D11: held longer, matching the opening card's new weight.
-      { t: 'title', heading: 'Hebron, Canaan', sub: 'Present day · c. 1898 BC · Genesis 37', holdMs: 4200 },
+      { t: 'title', heading: 'Hebron, Canaan', sub: 'Present day · Genesis 37', holdMs: 4200 },
       { t: 'fade', on: false, ms: 2000 },
       // a slow, beautiful pan across the golden camp; Joseph steps out
-      // (12s — long enough that both verses finish inside the glide) while the
+      // (8s — long enough for the opening verse) while the
       // dawn warms into full gold underneath it
       { t: 'fn', fn: () => { ctx.grading.grade('goldenHour', 9000); } },
-      { t: 'cam', angle: Math.PI * 1.1, target: { x: 2, z: -2 }, distance: 12, height: 5.5, lookHeight: 1.3, duration: 12000, awaitMs: false },
+      { t: 'cam', angle: Math.PI * 1.1, target: { x: 2, z: -2 }, distance: 12, height: 5.5, lookHeight: 1.3, duration: 8000, awaitMs: false },
       { t: 'verse', verse: WEB.gen_37_1 },
-      { t: 'verse', verse: WEB.gen_37_2_short },
       { t: 'verseHide' },
       { t: 'fn', fn: () => { ctx.joseph.turnToward(1, 1); } },
       { t: 'camRelease', ms: 1600 },

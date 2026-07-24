@@ -1,9 +1,5 @@
 import { createApp } from './core/app.js';
 import { buildHome } from './screens/home.js';
-import { buildJoseph } from './scenes/joseph/index.js';
-import { buildJoseph3D } from './scenes/joseph3d/index.js';
-import { buildPlayground } from './screens/playground.js';
-import { buildAbout, buildSupport } from './screens/pages.js';
 import { Audio } from './systems/AudioSystem.js';
 import { Settings } from './systems/Settings.js';
 import { Narrator } from './systems/Narrator.js';
@@ -19,11 +15,14 @@ const container = document.getElementById('app');
 const app = createApp(container);
 
 app.register('home', buildHome);
-app.register('joseph', buildJoseph3D);        // the 3D Scene 1 is the default story route
-app.register('legacy-joseph', buildJoseph);   // the 2D original, until Nate signs off on 3D
-app.register('playground', buildPlayground);  // #playground — 3D foundation test bench
-app.register('about', buildAbout);            // #about — the vision
-app.register('support', buildSupport);        // #support — Stripe payment link
+// Load only the route a player opens. Scene 1 no longer makes the home screen
+// parse the legacy game/playground, and those developer routes never occupy a
+// normal player's memory.
+app.registerLazy('joseph', () => import('./scenes/joseph3d/index.js').then((m) => m.buildJoseph3D));
+app.registerLazy('legacy-joseph', () => import('./scenes/joseph/index.js').then((m) => m.buildJoseph));
+app.registerLazy('playground', () => import('./screens/playground.js').then((m) => m.buildPlayground));
+app.registerLazy('about', () => import('./screens/pages.js').then((m) => m.buildAbout));
+app.registerLazy('support', () => import('./screens/pages.js').then((m) => m.buildSupport));
 
 Audio.registerManifest(AUDIO_MANIFEST);
 mountVolumeControl();

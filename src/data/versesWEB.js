@@ -11,11 +11,10 @@ export const WEB = {
     vo: 'joseph/1/verse-37-1',
     text: 'Jacob lived in the land of his father’s travels, in the land of Canaan.',
   },
-  gen_37_2_short: {
+  gen_37_2: {
     ref: 'Genesis 37:2 (WEB)',
     vo: 'joseph/1/verse-37-2',
-    // Whole-clause trim of v2 (opening and closing sentences dropped).
-    text: '… Joseph, being seventeen years old, was feeding the flock with his brothers.',
+    text: 'This is the history of the generations of Jacob. Joseph, being seventeen years old, was feeding the flock with his brothers. He was a boy with the sons of Bilhah and Zilpah, his father’s wives. Joseph brought an evil report of them to their father.',
   },
   gen_37_3: {
     ref: 'Genesis 37:3 (WEB)',
@@ -35,7 +34,7 @@ export const WEB = {
   gen_37_7: {
     ref: 'Genesis 37:7 (WEB)',
     vo: 'joseph/1/verse-37-7',
-    text: 'For behold, we were binding sheaves in the field, and behold, my sheaf arose and also stood upright; and behold, your sheaves came around, and bowed down to my sheaf.',
+    text: 'for behold, we were binding sheaves in the field, and behold, my sheaf arose and also stood upright; and behold, your sheaves came around, and bowed down to my sheaf.',
   },
   gen_37_8: {
     ref: 'Genesis 37:8 (WEB)',
@@ -47,11 +46,10 @@ export const WEB = {
     vo: 'joseph/1/verse-37-9',
     text: 'He dreamed yet another dream, and told it to his brothers, and said, “Behold, I have dreamed yet another dream: and behold, the sun and the moon and eleven stars bowed down to me.”',
   },
-  gen_37_10_short: {
+  gen_37_10: {
     ref: 'Genesis 37:10 (WEB)',
     vo: 'joseph/1/verse-37-10',
-    // Whole-clause trim (first sentence dropped).
-    text: '… His father rebuked him, and said to him, “What is this dream that you have dreamed? Will I and your mother and your brothers indeed come to bow ourselves down to the earth before you?”',
+    text: 'He told it to his father and to his brothers. His father rebuked him, and said to him, “What is this dream that you have dreamed? Will I and your mother and your brothers indeed come to bow ourselves down to the earth before you?”',
   },
   gen_37_11: {
     ref: 'Genesis 37:11 (WEB)',
@@ -62,15 +60,13 @@ export const WEB = {
     ref: 'Genesis 37:24 (WEB)',
     vo: 'joseph/1/verse-37-24',
     // The COLD-OPEN flash-forward (verified verbatim at ebible.org/web/GEN37.htm
-    // 2026-07-16). Leading "And" capitalized for a standalone card — the same
-    // presentation-casing note as v7; no wording change.
-    text: 'And they took him, and threw him into the pit. The pit was empty. There was no water in it.',
+    // 2026-07-16). The lowercase opening is canonical: v24 continues v23.
+    text: 'and they took him, and threw him into the pit. The pit was empty. There was no water in it.',
   },
 };
 
 // Note on v7: canonical text begins mid-sentence continuing v6 ("…dreamed:
-// for behold, we were binding…"). We capitalize the leading "For" for a
-// standalone card — a presentation-casing change only, no wording change.
+// for behold, we were binding…"). Keep its lowercase opening word-perfect.
 
 // ─────────────────────────────────────────────────────────────────────────────
 // NARRATION (D8) — non-scripture narrator lines. These are NEVER shown on a
@@ -81,7 +77,7 @@ export const NARRATION = {
     vo: 'joseph/1/narr-dream-begins',
     // present-moment only (D8): the dream's opening may not foreshadow the
     // telling — Gen 37:5's card now lands at the campfire, where it happens.
-    text: 'That night, Joseph began to dream.',
+    text: 'Joseph began to dream.',
   },
 };
 
@@ -94,12 +90,19 @@ export const NARRATION = {
 // are text only, so Nate records ONLY the verses.
 export const SCENE1_ROUTING = [
   { beat: 'cold-open', voice: 'NARRATOR', line: 'gen_37_24 (verse card + VO)' },
-  { beat: 'intro', voice: 'NARRATOR', line: 'gen_37_1, gen_37_2 (verse cards + VO)' },
-  { beat: 'herd', voice: 'CHARACTER', line: 'Simeon/Levi sneer (text; gameplay taunt, no verse)' },
-  { beat: 'report', voice: 'CHARACTER', line: 'Jacob/Joseph (text; gameplay dialogue, no verse)' },
+  { beat: 'intro', voice: 'NARRATOR', line: 'gen_37_1 (verse card + VO)' },
+  { beat: 'herd', voice: 'CHARACTER', line: 'Simeon/Levi give practical flock directions (text; no verse)' },
+  { beat: 'report', voice: 'MIXED', line: 'Jacob/Joseph enact the report (text) · then full gen_37_2 (verse card + VO)' },
   { beat: 'coat', voice: 'MIXED', line: 'Jacob + brothers speak (text) · verses 37:3, 37:4 narrated — no line quotes its verse' },
   { beat: 'dusk', voice: 'GAMEPLAY', line: 'objective + Sit prompt only (no spoken lines)' },
-  { beat: 'dream', voice: 'NARRATOR', line: 'narr-dream-begins (spoken-only present-moment opener, D8) · 37:7, 37:9 (verse cards + VO) — no character speaks in the dream; 37:5 moved to the telling' },
-  { beat: 'tell', voice: 'MIXED', line: 'Joseph recounts the dreams (text) · gen_37_5 verse card + VO under the D8 orbit shot · Judah/Jacob add DISTINCT venom (text) · verses 37:8, 37:10 narrated — characters never quote the verses' },
+  { beat: 'dream-and-first-telling', voice: 'MIXED', line: 'dream 1: narr-dream-begins + 37:7 · Joseph tells only the brothers (text) · 37:5, 37:8 narrated · then dream 2' },
+  { beat: 'second-telling', voice: 'MIXED', line: 'Joseph tells dream 2 to his brothers · 37:9 narrated · then tells his father and brothers · Jacob reacts · 37:10 narrated' },
   { beat: 'close', voice: 'NARRATOR', line: 'gen_37_11 (verse card + VO) + tease title' },
+];
+
+// Canonical runtime order for Genesis 37:5–11. Beat 5 deliberately contains
+// the first four events so external checkpoint indices remain stable.
+export const SCENE1_CANONICAL_ORDER = [
+  'dream1', 'tell1', 'response1', 'dream2',
+  'tell2_brothers', 'tell2_family', 'rebuke', 'envy',
 ];

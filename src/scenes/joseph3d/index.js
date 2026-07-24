@@ -12,7 +12,7 @@ import { MoodGrading, MOODS } from '../../engine/MoodGrading.js';
 import { Sequencer } from '../../engine/Sequencer.js';
 import { makeSmoke, makeEmbers, makeFireflies } from '../../engine/particles.js';
 import { CharacterFactory } from '../../engine/CharacterFactory.js';
-import { Graphics } from '../../systems/Graphics.js';
+import { Graphics, particleCapacity } from '../../systems/Graphics.js';
 import { createCinema } from '../../ui/cinema.js';
 import { createVerseCard } from '../../ui/verseCard.js';
 import { createDialogue } from '../../ui/dialogue.js';
@@ -30,7 +30,14 @@ import { buildDreamField } from './dreamField.js';
 import { Narrator } from '../../systems/Narrator.js';
 import { WEB, NARRATION } from '../../data/versesWEB.js';
 import { CutsceneMotion } from '../../engine/CutsceneMotion.js';
+import { ContactShadowPool } from '../../engine/ContactShadowPool.js';
+import { loadOwnedTexture } from '../../engine/textureLoader.js';
 import { isAbortError, makeAbortError } from '../../core/async.js';
+import {
+  createInputGate,
+  isInteractiveCheckpoint,
+  runInteractiveCheckpointEntry,
+} from './checkpointEntry.js';
 
 // JOSEPH — SCENE 1 in full 3D (Genesis 37:1–11): the GOLD TEMPLATE. A living
 // golden-hour camp near Hebron, real rigged characters, authored camera,
@@ -39,6 +46,7 @@ import { isAbortError, makeAbortError } from '../../core/async.js';
 // beats.js, set in props.js, cast in cast.js, sheep in sheep.js, and the two
 // off-camp stages in pit.js + dreamField.js.)
 export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
+  if (signal?.aborted) throw signal.reason || makeAbortError('Joseph scene build aborted');
   // --- world (Alto look, D3 grade: warmer, more saturated, earthier ground).
   // Base palette comes straight from MOODS.goldenHour — one source of truth.
   const gh = MOODS.goldenHour;
@@ -47,15 +55,21 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
   scene.add(sky.mesh);
 
   // --- real textures (D5): grass ground, limestone rock, dirt paths (CC0) ---
-  // TextureLoader.load() returns immediately; the image streams in and updates
-  // the GPU when ready, so no await is needed.
-  const texLoader = new THREE.TextureLoader();
+  // Materials receive their Texture objects immediately, but minimum scene
+  // readiness waits for all three images to decode. This prevents a cold-load
+  // reveal from popping the ground/path textures in on the first visible frame.
+  const textureReadiness = [];
   const loadTiled = (url, rx, ry) => {
-    const t = texLoader.load(url);
-    t.wrapS = t.wrapT = THREE.RepeatWrapping;
-    t.repeat.set(rx, ry);
-    t.colorSpace = THREE.SRGBColorSpace;
-    t.anisotropy = 4;
+    const { texture: t, whenReady } = loadOwnedTexture(url, {
+      signal,
+      configure: (texture) => {
+        texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(rx, ry);
+        texture.colorSpace = THREE.SRGBColorSpace;
+        texture.anisotropy = Graphics.anisotropy;
+      },
+    });
+    textureReadiness.push(whenReady);
     return t;
   };
   const grassTex = loadTiled('textures/grass.jpg', 26, 11);
@@ -99,7 +113,7 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
   // and the morning brings it back.
   const sunSprite = makeSun({ x: 8, y: 22, z: -200, core: 62, halo: 165 });
   scene.add(sunSprite);
-  const motes = makeMotes({ count: Graphics.particles(70) });
+  const motes = makeMotes({ count: particleCapacity(70) });
   scene.add(motes.points);
 
   // The SUN — a real warm directional key light that now shapes the WHOLE
@@ -116,11 +130,11 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
   scene.add(camp.group);
 
   // --- particles ---
-  const smoke = makeSmoke({ count: Graphics.particles(30) });
-  const embers = makeEmbers({ count: Graphics.particles(16) });
+  const smoke = makeSmoke({ count: particleCapacity(30) });
+  const embers = makeEmbers({ count: particleCapacity(16) });
   camp.fireEmitters.forEach((e) => { smoke.addEmitter(e.x, e.y, e.z); embers.addEmitter(e.x, e.y, e.z); });
   smoke.init(); embers.init();
-  const fireflies = makeFireflies({ count: Graphics.particles(26), span: 34 });
+  const fireflies = makeFireflies({ count: particleCapacity(26), span: 34 });
   fireflies.init();
   scene.add(smoke.points, embers.points, fireflies.points);
 
@@ -133,13 +147,19 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
     scene.add(L);
     return { light: L, phase: e.x * 1.7 };
   });
+  const DARK_FIRE_MOODS = new Set(['dusk', 'night', 'dream', 'ominous', 'tentWarm', 'pit', 'pitTalk']);
+  const FOOTSTEP_PATHS = [[0, -2.5, 3.6], [-5, -5, 3.3], [5.5, 3, 3.2], [10, 8, 3.1]];
   let fireLevel = 0.35; // 0..1 base intensity scale (grading raises it at night)
   let lastFireGain = -1; // change-gate for the crackle bed's proximity gain
 
   // --- presentation ---
   let disposed = false; // set on dispose(); async init + the story loop check it
+  // The renderer already sleeps while a tab is hidden. Story time must sleep
+  // with it: otherwise DOM/timer-backed waits can complete off-screen and the
+  // player returns several lines or a checkpoint later.
+  const isScenePaused = () => app.paused || document.hidden;
   const cinema = createCinema({
-    isPaused: () => app.paused,
+    isPaused: isScenePaused,
     signal,
     // beat fades ride a soft blur swell (smooth cross-transitions — D6)
     onFade: (toBlack, ms) => app.postFX.blurPulse(Math.min(ms * 1.3, 1400)),
@@ -155,8 +175,8 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
   // lives in PostFX and scales with the Graphics preset.
   const futureVignette = (on) => app.postFX.setFilter(on ? 'future' : 'none');
 
-  const verseCard = createVerseCard({ signal, isPaused: () => app.paused });
-  const dialogue = createDialogue({ signal });
+  const verseCard = createVerseCard({ signal, isPaused: isScenePaused });
+  const dialogue = createDialogue({ signal, isPaused: isScenePaused });
   const nameTags = createNameTags();
   const guide = new Guidance(scene);
   const grading = new MoodGrading({ sky, fog: scene.fog, keyLight, hemiLight, cinema, ridges: ridges.userData.materials });
@@ -182,24 +202,35 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
   // silence and the morning can bring it back. `amb.camp_wind` carries
   // BIRDSONG, so this is also what keeps birds out of the night wilderness.
   const CAMP_BED_GAIN = { wind: 1, sheepPen: 0.5, chatter: 0.4 };
-  const startBeat = Math.min(getCheckpoint('joseph3d'), 6); // also picks the opening music below
-  const startsAtColdOpen = startBeat === 0;
-  const bedScale = startsAtColdOpen ? 0 : 1;
-  const beds = {
-    wind: Audio.playLoop('amb.camp_wind', { gain: CAMP_BED_GAIN.wind * bedScale }),
-    fire: Audio.playLoop('amb.fire_crackle', { gain: 0 }), // proximity-driven below
-    sheepPen: Audio.playLoop('amb.sheep_pen', { gain: CAMP_BED_GAIN.sheepPen * bedScale }),
-    chatter: Audio.playLoop('amb.camp_chatter', { gain: CAMP_BED_GAIN.chatter * bedScale }),
+  const savedBeat = Number(getCheckpoint('joseph3d'));
+  // A hand-edited/corrupt localStorage value must never turn the story loop
+  // into `for (let i = NaN; ...)` and leave the player in an empty camp.
+  const startBeat = Number.isFinite(savedBeat)
+    ? Math.max(0, Math.min(7, Math.floor(savedBeat)))
+    : 0; // also picks the opening music below
+  const silentLoop = () => ({ stop() {}, setGain() {} });
+  let audioActivated = false;
+  let campAmbienceLevel = 0;
+  let beds = null;
+  const startBeds = () => {
+    if (beds) return;
+    beds = {
+      wind: Audio.playLoop('amb.camp_wind', { gain: CAMP_BED_GAIN.wind * campAmbienceLevel }) || silentLoop(),
+      fire: Audio.playLoop('amb.fire_crackle', { gain: 0 }) || silentLoop(), // proximity-driven below
+      sheepPen: Audio.playLoop('amb.sheep_pen', { gain: CAMP_BED_GAIN.sheepPen * campAmbienceLevel }) || silentLoop(),
+      chatter: Audio.playLoop('amb.camp_chatter', { gain: CAMP_BED_GAIN.chatter * campAmbienceLevel }) || silentLoop(),
+    };
   };
   // level 0..1 — the whole camp bed layer, faded as one.
   const setCampAmbience = (level, fade = 2) => {
+    campAmbienceLevel = Math.max(0, level);
+    if (!audioActivated || !beds) return;
     beds.wind.setGain(CAMP_BED_GAIN.wind * level, fade);
     beds.sheepPen.setGain(CAMP_BED_GAIN.sheepPen * level, fade);
     beds.chatter.setGain(CAMP_BED_GAIN.chatter * level, fade);
     // The wind handle owns its file-or-procedural fallback, including birds.
     // Callers never inspect decode state, so a slow stream cannot double beds.
   };
-  if (startsAtColdOpen) setCampAmbience(0, 0.1); // silence before the first frame
   // MUSIC STATE MACHINE (D8): the score is beat-driven, crossfade-only, and
   // NEVER doubles. The cold open starts in silence (no warm camp theme under a
   // betrayal); a checkpoint resume opens on the emotional state of its beat
@@ -208,17 +239,31 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
   // over itself.
   // D9: the cold open carries a low DREAD bed (Nate heard silence and missed
   // the tension — a real music/betrayal_dark.mp3 takes over when it lands)
-  const MUSIC_BY_BEAT = { 0: 'music.betrayal_dark', 1: 'music.camp_warm', 2: 'music.camp_warm', 3: 'music.camp_warm', 4: 'music.ominous_turn', 5: null, 6: 'music.camp_warm' };
+  const MUSIC_BY_BEAT = {
+    0: 'music.betrayal_dark',
+    1: 'music.camp_warm',
+    2: 'music.camp_warm',
+    3: 'music.camp_warm',
+    4: 'music.ominous_turn',
+    5: null,
+    6: 'music.camp_warm',
+    7: 'music.ominous_turn',
+  };
   // (`in`, not `??` — beats 0 and 5 map to a DELIBERATE null = silence, which
   // `??` would silently coalesce back into the warm theme)
   let musicKey = startBeat in MUSIC_BY_BEAT ? MUSIC_BY_BEAT[startBeat] : 'music.camp_warm';
-  let music = musicKey ? Audio.playLoop(musicKey) : { stop() {}, setGain() {} };
+  let music = null;
+  const startMusic = () => {
+    if (music) return;
+    music = musicKey ? (Audio.playLoop(musicKey) || silentLoop()) : silentLoop();
+  };
   const setMusic = (key) => {
     if (disposed) return; // a zombie beat must never restart music after exit
     if (key === musicKey) return; // already the playing state — no restart blip
     musicKey = key;
-    music.stop(1.4);
-    music = Audio.playLoop(key);
+    if (!audioActivated) return;
+    music?.stop(1.4);
+    music = key ? (Audio.playLoop(key) || silentLoop()) : silentLoop();
   };
   // --- cast (async GLB load; world plays while it streams) ---
   const factory = new CharacterFactory();
@@ -227,6 +272,21 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
   let joseph = null;
   let controller = null;
   let ready = false;
+  let contactShadows = null;
+  const syncContactShadows = (graphics = Graphics) => {
+    if (!graphics.contactShadow) {
+      if (contactShadows) contactShadows.mesh.visible = false;
+      return;
+    }
+    if (!contactShadows && joseph) {
+      contactShadows = new ContactShadowPool(scene, 16);
+      contactShadows.add(joseph);
+      Object.values(cast).forEach((n) => {
+        if (n.char) contactShadows.add(n.char, n.char === cast.child?.char ? 0.7 : 1.15);
+      });
+    }
+    if (contactShadows) contactShadows.mesh.visible = true;
+  };
 
   const askLeave = () => confirmModal({
     title: 'Return home?',
@@ -236,6 +296,7 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
 
   const hud = createStoryHud({
     signal,
+    isPaused: isScenePaused,
     onHome: async () => {
       // freeze ALL input surfaces while the confirm is up (controller AND
       // interactables — E must not start a dialogue behind the modal)
@@ -255,11 +316,12 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
   renderer.domElement.addEventListener('contextmenu', onCanvasContextMenu);
 
   let inputOn = true;
-  const setInput = (on) => {
+  const inputGate = createInputGate((on) => {
     inputOn = on;
     if (ready) controller.setEnabled(on);
     interactables.setEnabled(on);
-  };
+  });
+  const setInput = (on) => inputGate.set(on);
   signal?.addEventListener('abort', () => setInput(false), { once: true });
 
   // Esc / ⏸ — true pause: loop frozen, audio suspended, zero input bleed.
@@ -301,18 +363,20 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
   // "blocked by the trees/rocks," never an invisible wall in open ground.
   const bounds = { minX: -18.3, maxX: 18.3, minZ: -16, maxZ: 16.4 };
   const motion = new CutsceneMotion();
+  const storyEvents = [];
   const onLifetimeAbort = () => motion.cancel(makeAbortError('Scene lifetime ended'));
   signal?.addEventListener('abort', onLifetimeAbort, { once: true });
   const ctx = {
     scene, app, cinema, verseCard, dialogue, hud, guide, grading, interactables, signal,
     camera: director, sequencer: null, setInput,
-    isPaused: () => app.paused,
+    isPaused: isScenePaused,
     sound: (key, gain) => { if (!disposed) Audio.play(key, gain !== undefined ? { gain } : {}); },
     setMusic, setCampAmbience, camp, dream, pit, tentInterior, bounds, motion, futureVignette, sunSprite,
     postFX: app.postFX, // named filter looks (dream/future) + blur transitions
     get joseph() { return joseph; },
     get cast() { return cast; },
     npcs,
+    storyEvent: (event) => { storyEvents.push(event); },
     sheep: null,
     sparkle: (n) => Audio.sparkle(n),
     onDusk: () => fireflies.setFade(1),
@@ -325,6 +389,59 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
     },
   };
   ctx.sequencer = new Sequencer(ctx);
+  Object.defineProperty(ctx, 'contactShadows', {
+    configurable: true,
+    get: () => contactShadows,
+  });
+
+  // Automatic quality can demote while this scene remains open. Apply every
+  // live-safe preset owner immediately instead of waiting for a reload:
+  // draw/simulate fewer particles, hide the pooled shadow draw, and shorten
+  // fog distance together with the already-live DPR/PostFX changes.
+  const applyLiveGraphics = (graphics = Graphics) => {
+    scene.fog.far = graphics.fogFar;
+    for (const texture of Object.values(worldTextures)) {
+      if (texture.anisotropy === graphics.anisotropy) continue;
+      texture.anisotropy = graphics.anisotropy;
+      texture.needsUpdate = true;
+    }
+    motes.setActiveCount?.(graphics.particles(70));
+    smoke.setActiveCount?.(graphics.particles(30));
+    embers.setActiveCount?.(graphics.particles(16));
+    fireflies.setActiveCount?.(graphics.particles(26));
+    dream.setParticleScale?.(graphics.particleScale);
+    syncContactShadows(graphics);
+  };
+  const unsubscribeGraphics = Graphics.subscribe((graphics) => applyLiveGraphics(graphics));
+  applyLiveGraphics(Graphics);
+
+  // One explicit stage owns the expensive life layer. Camp particles, sheep,
+  // fire lights, sway and background AI must sleep while the camera is 60u
+  // away in the pit/dream/tent. Every switch happens under black in the beats,
+  // so this removes invisible work without changing a painted frame.
+  let activeStage = 'camp';
+  const stageStats = { campFrames: 0, offstageFrames: 0 };
+  const setStage = (name) => {
+    if (!['camp', 'pit', 'dream', 'tent'].includes(name) || name === activeStage) return;
+    activeStage = name;
+    const campOn = name === 'camp';
+    camp.group.visible = campOn;
+    motes.points.visible = campOn;
+    smoke.points.visible = campOn;
+    embers.points.visible = campOn;
+    fireflies.points.visible = campOn;
+    ctx.sheep.bodies.visible = campOn;
+    ctx.sheep.heads.visible = campOn;
+    for (const f of fireLights) f.light.visible = campOn;
+    // The stage owns its soundscape too. Sheep/chatter/bird loops should not
+    // keep streaming or leak into the pit, dream, or isolated tent interior.
+    setCampAmbience(campOn ? 1 : 0, campOn ? 1.2 : 0.6);
+    if (!campOn) {
+      lastFireGain = 0;
+      beds?.fire.setGain(0, 0.35);
+    }
+  };
+  ctx.setStage = setStage;
 
   // --- sheep (independent of GLB load) ---
   // The 3 stray LAMBS sit DEEP in the camp, all WEST/SW of the pen in open
@@ -365,17 +482,15 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
 
     // name tags for the named cast
     nameTags.add(joseph, 'Joseph');
-    nameTags.add(cast.jacob.char, 'Jacob · your father');
+    nameTags.add(cast.jacob.char, 'Jacob (Israel) · your father');
     nameTags.add(cast.reuben.char, 'Reuben');
     nameTags.add(cast.judah.char, 'Judah');
     nameTags.add(cast.simeon.char, 'Simeon');
     nameTags.add(cast.levi.char, 'Levi');
 
-    // soft contact-shadow blobs under every character (Graphics High only)
-    if (Graphics.contactShadow) {
-      joseph.addContactShadow();
-      Object.values(cast).forEach((n) => n.char?.addContactShadow(n.char === cast.child?.char ? 0.7 : 1.15));
-    }
+    // Soft contact-shadow blobs under every character (one pooled draw on
+    // Medium/High; Low removes the cue entirely).
+    syncContactShadows(Graphics);
 
     controller = new PlayerController3D({
       camera, character: joseph, bounds, colliders, radius: 0.42, signal,
@@ -383,8 +498,13 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
     controller.dynamics = [...ctx.sheep.dynamics, ...npcs.dynamics];
     controller.onFootstep = (pos) => {
       // surface-aware: dirt on the path decals, grass elsewhere
-      const paths = [[0, -2.5, 3.6], [-5, -5, 3.3], [5.5, 3, 3.2], [10, 8, 3.1]];
-      const onPath = paths.some(([x, z, r]) => (pos.x - x) ** 2 + (pos.z - z) ** 2 < r * r);
+      let onPath = false;
+      for (const [x, z, r] of FOOTSTEP_PATHS) {
+        if ((pos.x - x) ** 2 + (pos.z - z) ** 2 < r * r) {
+          onPath = true;
+          break;
+        }
+      }
       Audio.play(onPath ? 'sfx.footstep_dirt' : 'sfx.footstep_grass');
     };
     ctx.controller = controller;
@@ -397,8 +517,11 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
     // textures upload on the FIRST frame they appear — a guaranteed hitch at
     // the exact moment a cutscene starts. Warm them here instead, behind the
     // loading screen (the veil covers the frames these lines may touch).
+    await Promise.all(textureReadiness);
+    const wasDream = dream.group.visible;
+    const wasPit = pit.group.visible;
+    const wasTent = tentInterior.mesh.visible;
     try {
-      const wasDream = dream.group.visible, wasPit = pit.group.visible, wasTent = tentInterior.mesh.visible;
       dream.group.visible = true; pit.group.visible = true; tentInterior.mesh.visible = true;
       scene.traverse((o) => {
         const mats = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
@@ -407,24 +530,95 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
         }
       });
       renderer.compile(scene, camera);
-      dream.group.visible = wasDream; pit.group.visible = wasPit; tentInterior.mesh.visible = wasTent;
-    } catch (e) { console.warn('[joseph3d] stage pre-warm skipped', e); }
+    } catch (e) {
+      console.warn('[joseph3d] stage pre-warm skipped', e);
+    } finally {
+      dream.group.visible = wasDream;
+      pit.group.visible = wasPit;
+      tentInterior.mesh.visible = wasTent;
+    }
 
-    ready = true;
-
-    // start (or resume) the story (startBeat also chose the opening music)
-    runStory(startBeat);
   })();
+
+  // Readiness and activation are separate contracts. Rigs and compressed
+  // narration preload in parallel behind the loader; the story clock does not
+  // start until the app has actually revealed this ready screen.
+  const sceneReady = Promise.all([
+    castReady,
+    Promise.all(textureReadiness),
+    Narrator.preload(
+      [...Object.values(WEB), ...Object.values(NARRATION)].map((v) => v.vo),
+      { signal },
+    ),
+  ]).then((result) => {
+    if (disposed || signal?.aborted) {
+      throw signal?.reason || makeAbortError('Joseph scene left before readiness');
+    }
+    ready = true;
+    return result;
+  });
+  let activated = false;
+  const activate = () => {
+    if (activated || disposed || signal?.aborted) return;
+    if (!ready) throw new Error('Joseph scene activated before readiness');
+    activated = true;
+    // Construction/readiness happen behind the loader and own no audible
+    // transport. Start the exact checkpoint soundscape only after reveal.
+    audioActivated = true;
+    campAmbienceLevel = [1, 2, 4, 6, 7].includes(startBeat) ? 1 : 0;
+    startBeds();
+    startMusic();
+    // startBeat also chose the opening music/checkpoint presentation.
+    runStory(startBeat);
+  };
 
   // --- story state machine ---
   const beats = createBeats(ctx);
   let storyDone = false;
   async function runStory(from) {
     try {
-      // a checkpoint resume starts behind the D8 pre-black — apply the state,
-      // then lift gently (the intro beat manages its own fades from black).
-      if (from > 0) { beats.applyState(from, ctx); await cinema.fade(false, 800); }
-      for (let i = from; i < beats.list.length; i++) {
+      // A checkpoint resume starts behind the D8 pre-black. Interactive beats
+      // establish their objective/guide before reveal while input stays held.
+      // Beats 3/5 own their stage reveal; beat 7 precomposes its close.
+      let loopFrom = from;
+      if (from > 0 && isInteractiveCheckpoint(from)) {
+        loopFrom = await runInteractiveCheckpointEntry({
+          index: from,
+          holdInput: () => inputGate.hold(),
+          prepare: () => {
+            beats.applyState(from, ctx);
+            setCheckpoint('joseph3d', from);
+          },
+          invokeBeat: () => beats.list[from](ctx),
+          reveal: () => cinema.fade(false, 800),
+        });
+      } else if (from > 0) {
+        // Beats 3 and 5 own their black-to-stage reveal. Beat 7 owns its
+        // precomposed close. No generic camp frame may appear before them.
+        ctx.setInput(false);
+        beats.applyState(from, ctx);
+        if (from === 7) {
+          ctx.hud.setLetterbox?.(true);
+          ctx.camera.setDrift(true);
+          // Establish the close's opening composition while the checkpoint
+          // veil is still opaque. Previously the veil lifted for ~800ms onto
+          // the generic follow camera before the authored shot took ownership.
+          ctx.camera.cinematicMoveTo({
+            angle: 0.35,
+            target: { x: 0.2, z: -6.6 },
+            distance: 4.5,
+            height: 2.2,
+            lookHeight: 1.3,
+            duration: 1,
+            path: 'groupArc',
+            arcCenter: { x: 0, z: -6 },
+            arcRadius: 6.4,
+          });
+          await cinema.letterbox(true);
+          await cinema.fade(false, 800);
+        }
+      }
+      for (let i = loopFrom; i < beats.list.length; i++) {
         if (disposed || signal?.aborted) return; // exited mid-story: no more beats/checkpoints
         setCheckpoint('joseph3d', i);
         await beats.list[i](ctx);
@@ -443,44 +637,59 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
     clock.t = t;
     sky.update(dt);
     grading.update(dt);
-    motes.update(dt, t);
-    smoke.update(dt, t);
-    embers.update(dt, t);
-    fireflies.update(dt, t);
-    camp.sway.forEach((c, i) => { c.rotation.x = Math.sin(t * 1.1 + c.userData.sway.phase) * 0.13; });
+    const campActive = activeStage === 'camp';
+    if (campActive) {
+      stageStats.campFrames += 1;
+      motes.update(dt, t);
+      smoke.update(dt, t);
+      embers.update(dt, t);
+      fireflies.update(dt, t);
+      for (const c of camp.sway) {
+        c.rotation.x = Math.sin(t * 1.1 + c.userData.sway.phase) * 0.13;
+      }
+    } else {
+      stageStats.offstageFrames += 1;
+    }
     dream.update(dt, t);
     pit.update(dt, t);
 
     // fire glow: brighter at night (dark moods), flickering; the pool must
     // VISIBLY light the ground + nearby characters after dark (D6 boost).
-    const dark = ['dusk', 'night', 'dream', 'ominous', 'tentWarm', 'pit', 'pitTalk'].includes(grading.current);
-    fireLevel += ((dark ? 1 : 0.22) - fireLevel) * Math.min(dt * 0.0015, 1);
-    for (const f of fireLights) {
-      const flick = 2.15 + Math.sin(t * 11 + f.phase) * 0.34 + Math.sin(t * 5.3 + f.phase) * 0.2;
-      f.light.intensity = fireLevel * Math.max(0, flick);
+    const dark = DARK_FIRE_MOODS.has(grading.current);
+    if (campActive) {
+      fireLevel += ((dark ? 1 : 0.22) - fireLevel) * Math.min(dt * 0.0015, 1);
+      for (const f of fireLights) {
+        const flick = 2.15 + Math.sin(t * 11 + f.phase) * 0.34 + Math.sin(t * 5.3 + f.phase) * 0.2;
+        f.light.intensity = fireLevel * Math.max(0, flick);
+      }
     }
 
     if (!ready) return;
     controller.update(dt);
-    npcs.update(dt, joseph.position);
+    // 24u comfortably spans every active camp/pit/tent composition. Actors
+    // beyond it are behind another stage and pause until staged nearby.
+    npcs.update(dt, joseph.position, 24);
+    if (contactShadows?.mesh.visible) contactShadows.update();
     motion.update(dt);
     director.setTarget(joseph.position);
     director.setLead(controller.vel.x, controller.vel.y);
     director.frame(dt);
-    ctx.sheep.update(dt, joseph.position, t);
+    if (campActive) ctx.sheep.update(dt, joseph.position, t);
     interactables.update();
     guide.update(dt, camera);
     nameTags.update(camera, dt);
 
     // fire crackle proximity — change-gated: an unconditional setGain queued
     // ~60 WebAudio automation events/s on the bed all game long
-    const fires = camp.fireEmitters;
-    let nearest = Infinity;
-    for (const f of fires) nearest = Math.min(nearest, Math.hypot(joseph.position.x - f.x, joseph.position.z - f.z));
-    const fireGain = Math.max(0, 1 - nearest / 7);
-    if (Math.abs(fireGain - lastFireGain) > 0.005) {
-      lastFireGain = fireGain;
-      beds.fire.setGain(fireGain);
+    if (campActive) {
+      const fires = camp.fireEmitters;
+      let nearest = Infinity;
+      for (const f of fires) nearest = Math.min(nearest, Math.hypot(joseph.position.x - f.x, joseph.position.z - f.z));
+      const fireGain = Math.max(0, 1 - nearest / 7);
+      if (Math.abs(fireGain - lastFireGain) > 0.005) {
+        lastFireGain = fireGain;
+        beds?.fire.setGain(fireGain);
+      }
     }
   }
 
@@ -496,8 +705,9 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
     // driver now — no timer loops exist to outlive the scene)
     // (canvas filter/vignette live in app.postFX now — app resets on navigate)
     renderer.domElement.removeEventListener('contextmenu', onCanvasContextMenu);
-    Object.values(beds).forEach((b) => b.stop(0.6));
-    music.stop(0.6);
+    Object.values(beds || {}).forEach((b) => b.stop(0.6));
+    music?.stop(0.6);
+    Audio.stopOneShots();
     Audio.ambience({ wind: 0, birds: 0, night: 0 });
     Audio.stopMusic();
     hud.destroy();
@@ -510,6 +720,8 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
     guide.dispose();
     controller?.dispose();
     npcs.dispose();
+    unsubscribeGraphics();
+    contactShadows?.dispose();
     ctx.sheep.dispose();
     smoke.dispose(); embers.dispose(); fireflies.dispose();
     joseph?.dispose();
@@ -544,6 +756,14 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
     ],
   });
 
+  const hasFleeingSheep = () => {
+    if (activeStage !== 'camp') return false;
+    for (const sheep of ctx.sheep.sheep) {
+      if (sheep.state === 'flee') return true;
+    }
+    return false;
+  };
+
   return {
     update, dispose,
     // D12 power governor hint: TRUE whenever this scene can move fast — the
@@ -559,15 +779,19 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
       || motion.active
       || director.inCinematic || !!director._poseDriver || director.drift
       || (controller && (!!controller._script || controller.vel.lengthSq() > 0.02))
-      || ctx.sheep.sheep.some((s) => s.state === 'flee'),
-    // the loading screen holds for BOTH the rigs and the full narration —
-    // every verse mp3 decodes up front, so the one voice can never drop to
-    // TTS from a mid-scene network blip (D7).
-    whenReady: Promise.all([castReady, Narrator.preload([...Object.values(WEB), ...Object.values(NARRATION)].map((v) => v.vo))]),
+      || hasFleeingSheep(),
+    // The loading screen holds for the rigs and compressed narration bytes.
+    // Audio decodes on demand into a two-line LRU, avoiding a scene-long PCM
+    // allocation while keeping every line locally ready before the veil lifts.
+    whenReady: sceneReady,
+    activate,
     debug: {
       get joseph() { return joseph; }, get controller() { return controller; },
       get ready() { return ready; }, get storyDone() { return storyDone; },
       cast, ctx, director, sheep: () => ctx.sheep, beats, colliders, factory, audit,
+      get contactShadows() { return contactShadows; },
+      get activeStage() { return activeStage; },
+      stageStats, storyEvents,
     },
   };
 }

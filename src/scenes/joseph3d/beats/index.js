@@ -13,24 +13,36 @@ import { makeTellingBeats } from './telling.js';
 //   ./helpers.js   shared sequencing + shot grammar
 //   ./coldOpen.js  beat 0            — the flash-forward to the pit
 //   ./camp.js      beats 1,2,3,4     — herd · report · the coat · dusk fire
-//   ./dream.js     beat 5            — the dream (finale is signed off: don't restage)
-//   ./telling.js   beats 6,7         — telling the brothers · the close
+//   ./dream.js     beat 5            — dream 1 · first telling · dream 2
+//   ./telling.js   beat-5 helper + 6,7 — both tellings · the close
 export function createBeats(ctx) {
   const h = makeHelpers(ctx);
   const { intro } = makeColdOpen(ctx, h);
   const { herd, report, coat, dusk } = makeCampBeats(ctx, h);
-  const { dream } = makeDreamBeat(ctx, h);
-  const { tell, close } = makeTellingBeats(ctx, h);
+  const { firstTell, tell, close } = makeTellingBeats(ctx, h);
+  const { dream } = makeDreamBeat(ctx, h, { firstTell });
   const { FIRE, TELL_RING, ringXZ } = h;
 
   // ---------- checkpoint resume: enter beat N fresh ----------
   function applyState(n, c) {
     // world/story state that earlier beats would have produced
-    if (n >= 2) c.sheep.sheep.forEach((s) => { if (!s.counted) { s.counted = true; s.penned = true; s.x = c.camp.pen.minX + 2 + Math.random() * 3; s.z = c.camp.pen.minZ + 1.5 + Math.random() * 3; } });
+    if (n >= 2) c.sheep.sheep.forEach((sheep, i) => {
+      if (sheep.counted) return;
+      sheep.counted = true;
+      sheep.penned = true;
+      // A resumed checkpoint must paint the same flock every time.
+      sheep.x = c.camp.pen.minX + 2 + (i % 3) * 1.15;
+      sheep.z = c.camp.pen.minZ + 1.5 + (i % 2) * 1.25;
+    });
     if (n >= 4) c.joseph.setCoat(true);
+    c.setStage?.('camp');
+    c.hud.clearObjective?.();
+    c.guide.setTarget(null);
     const spawns = { 1: [2, 12.5], 2: [1, 1.5], 3: [-8.2, -4.6], 4: [-7.5, -4], 5: [1.4, -4.6], 6: [-6, -3], 7: [0.9, -4.1] };
     const s = spawns[n] || [0, 12];
     c.joseph.setPosition(s[0], s[1]);
+    c.camera.setTarget(c.joseph.position);
+    c.camera.setLead(0, 0);
     c.camera.snap();
     // resuming INTO the close (beat 7): the telling already happened, so seat the
     // brothers in their frozen circle round the fire (beat 6 does this live).
@@ -47,8 +59,8 @@ export function createBeats(ctx) {
       c.npcs.freeze(jc, true);
       jc.char.turnToward(FIRE.x + 2.6, FIRE.z + 4.4);
     }
-    // beat 5 (dream) sets its own night/dream grade on entry; beats 6-7 (the
-    // telling) now happen the NEXT MORNING (Task 8 wakes in the tent at dawn).
+    // Beat 5 owns both dream/day transitions and the first telling; beats 6–7
+    // resume in the camp for the second telling and close.
     c.grading.set('goldenHour');
   }
 

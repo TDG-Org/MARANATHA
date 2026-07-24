@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "voice": "en-US-AndrewNeural",
+  "format": "AUDIO_24KHZ_48KBITRATE_MONO_MP3",
+  "prosody": {
+    "rate": "-8%"
+  },
+  "lines": {
+    "joseph/1/verse-37-1": "12715d5ab468e6e8141c6007416476aaa9b3bd1a0447f4fa4fc3788829adb359",
+    "joseph/1/verse-37-2": "5690c9afee1b6ba6757bbd7b7313e801ad35a82c5e4ff1d625f342eba25f7b1e",
+    "joseph/1/verse-37-3": "bbf1fbdf51d856e4c8d33c7fbbfe7843526c12dcacdd746b2f95cf86dded59d6",
+    "joseph/1/verse-37-4": "f42995e667a1f046f49963ef13612d5aa4bb2f762465cd9e677fdbc0356eebf7",
+    "joseph/1/verse-37-5": "082ecc9106f8aebd6dcdc74f921c0ae92035d8d4bc1686f625f87be1fc8c28b2",
+    "joseph/1/verse-37-7": "fda45cabcab142e73cb469cac2d1df40982c7ed59ff81a25ee0c535cad3a3857",
+    "joseph/1/verse-37-8": "4c1081455c151d90cf0166ae8460f374d8b6f48ab4a4bc8b86a386891927fe5d",
+    "joseph/1/verse-37-9": "41b86991a09e76eae97279410a4f3a738624e2d5899075cf048924fa25dad09b",
+    "joseph/1/verse-37-10": "416e4b30f16ef6e9dbe8b0f5cfe857f868eb12e51c8c1eb776070a65522e38f7",
+    "joseph/1/verse-37-11": "c23989c3bff081232dfae387f81712ee119b7abfc3ab8031e78d8fe547faea46",
+    "joseph/1/verse-37-24": "4a203ab74087cad2d91e9bbfb7cd6c1efa8534ac667d42411dd21c735e0a872c",
+    "joseph/1/narr-dream-begins": "befeb1d9df217890f542e73089c11f3fb31a77314f2848ba123b2f61ab8efbeb",
+    "ui/voice-test": "d313a9e66e26b887fdbce6fc01278828bafc8ac4163e234fbdafac52bbcc9416",
+    "playground/demo/line-1": "49debb189c7f8f8e4cf04cab9c7c7b8c0b698f57c91bb85f30c45596fe4c46a1"
+  }
+}

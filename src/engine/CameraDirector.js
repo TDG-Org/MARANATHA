@@ -81,6 +81,19 @@ export class CameraDirector {
     this._renderLook = new THREE.Vector3();
     this._poseMoveK = 1;
     this._poseMoveSpeed = 0;
+    // Visible angle changes may explicitly orbit around their moving look
+    // anchor instead of taking the Cartesian chord through the cast. Linear
+    // remains the default because covered cuts and special authored shots
+    // already rely on it.
+    this._posePath = 'linear';
+    this._arcFromAngle = 0;
+    this._arcAngleDelta = 0;
+    this._arcFromRadius = 0;
+    this._arcToRadius = 0;
+    this._arcFromY = 0;
+    this._arcToY = 0;
+    this._arcCenter = new THREE.Vector3();
+    this._arcSafeRadius = 0;
   }
 
   setDrift(on) { this.drift = !!on; }
@@ -218,12 +231,48 @@ export class CameraDirector {
     if (this.pose && this.poseK > 0) {
       const kk = easeInOut(this.poseK);
       const moveK = easeInOut(this._poseMoveK);
-      const posePos = this._poseMoveK < 1
-        ? this._poseOutPos.lerpVectors(this._poseFromPos, this.pose.pos, moveK)
-        : this.pose.pos;
-      const poseLook = this._poseMoveK < 1
-        ? this._poseOutLook.lerpVectors(this._poseFromLook, this.pose.look, moveK)
-        : this.pose.look;
+      let posePos = this.pose.pos;
+      let poseLook = this.pose.look;
+      if (this._poseMoveK < 1) {
+        poseLook = this._poseOutLook.lerpVectors(this._poseFromLook, this.pose.look, moveK);
+        if (this._posePath === 'groupArc') {
+          // Three clean movements: ease radially OUT from the current shot,
+          // orbit the whole group at a safe radius, then ease IN to the next
+          // composition. This never takes the head-crossing chord through a
+          // dialogue circle and never rises over it.
+          let angle;
+          let radius;
+          if (moveK < 0.2) {
+            const u = easeInOut(moveK / 0.2);
+            angle = this._arcFromAngle;
+            radius = lerp(this._arcFromRadius, this._arcSafeRadius, u);
+          } else if (moveK < 0.8) {
+            const u = easeInOut((moveK - 0.2) / 0.6);
+            angle = this._arcFromAngle + this._arcAngleDelta * u;
+            radius = this._arcSafeRadius;
+          } else {
+            const u = easeInOut((moveK - 0.8) / 0.2);
+            angle = this._arcFromAngle + this._arcAngleDelta;
+            radius = lerp(this._arcSafeRadius, this._arcToRadius, u);
+          }
+          this._poseOutPos.set(
+            this._arcCenter.x + Math.sin(angle) * radius,
+            lerp(this._poseFromPos.y, this.pose.pos.y, moveK),
+            this._arcCenter.z + Math.cos(angle) * radius,
+          );
+        } else if (this._posePath === 'arc') {
+          const angle = this._arcFromAngle + this._arcAngleDelta * moveK;
+          const radius = lerp(this._arcFromRadius, this._arcToRadius, moveK);
+          this._poseOutPos.set(
+            poseLook.x + Math.sin(angle) * radius,
+            poseLook.y + lerp(this._arcFromY, this._arcToY, moveK),
+            poseLook.z + Math.cos(angle) * radius,
+          );
+        } else {
+          this._poseOutPos.lerpVectors(this._poseFromPos, this.pose.pos, moveK);
+        }
+        posePos = this._poseOutPos;
+      }
       // pose drift: orbit the held shot around its look target (~0.03 rad/s)
       // + a slow rise — felt, never seen (cutscene-director NEVER-STATIC).
       let px = posePos.x, py = posePos.y, pz = posePos.z;
@@ -257,7 +306,18 @@ export class CameraDirector {
   }
 
   // Beat API — identical contract to the D1 camera so sequences are portable.
-  cinematicMoveTo({ angle = 0, target = this.target, distance = 4, height = 1.6, lookHeight = 1.3, duration = 1400 } = {}) {
+  cinematicMoveTo({
+    angle = 0,
+    target = this.target,
+    distance = 4,
+    height = 1.6,
+    lookHeight = 1.3,
+    duration = 1400,
+    path = 'linear',
+    arcDirection = 0,
+    arcCenter = null,
+    arcRadius = 0,
+  } = {}) {
     this.still = false; // any new shot wakes the camera from a held still
     this._poseDriver = null; // a new authored shot supersedes any driver
     const replacing = !!this.pose && this.poseK > 0.001;
@@ -277,6 +337,37 @@ export class CameraDirector {
     const pos = new THREE.Vector3(t.x - Math.sin(angle) * distance, t.y + height, t.z - Math.cos(angle) * distance);
     const look = new THREE.Vector3(t.x, t.y + lookHeight, t.z);
     this.pose = { pos, look };
+    this._posePath = replacing && (path === 'arc' || path === 'groupArc') ? path : 'linear';
+    if (this._posePath === 'arc' || this._posePath === 'groupArc') {
+      const center = this._posePath === 'groupArc'
+        ? (arcCenter || look)
+        : this._poseFromLook;
+      this._arcCenter.set(center.x, center.y ?? 0, center.z);
+      const toCenter = this._posePath === 'groupArc' ? this._arcCenter : look;
+      const fromX = this._poseFromPos.x - this._arcCenter.x;
+      const fromZ = this._poseFromPos.z - this._arcCenter.z;
+      const toX = pos.x - toCenter.x;
+      const toZ = pos.z - toCenter.z;
+      this._arcFromAngle = Math.atan2(fromX, fromZ);
+      const toAngle = Math.atan2(toX, toZ);
+      let delta = toAngle - this._arcFromAngle;
+      while (delta > Math.PI) delta -= Math.PI * 2;
+      while (delta < -Math.PI) delta += Math.PI * 2;
+      // 0 = shortest route. A caller may opt into a clockwise/counter-clockwise
+      // long route when eyeline geography requires one.
+      if (arcDirection > 0 && delta < 0) delta += Math.PI * 2;
+      if (arcDirection < 0 && delta > 0) delta -= Math.PI * 2;
+      this._arcAngleDelta = delta;
+      this._arcFromRadius = Math.hypot(fromX, fromZ);
+      this._arcToRadius = Math.hypot(toX, toZ);
+      this._arcSafeRadius = Math.max(
+        Number.isFinite(arcRadius) ? arcRadius : 0,
+        this._arcFromRadius,
+        this._arcToRadius,
+      );
+      this._arcFromY = this._poseFromPos.y - this._poseFromLook.y;
+      this._arcToY = pos.y - look.y;
+    }
     if (!replacing) {
       this._poseDir = 1;
       this._poseSpeed = 1 / Math.max(1, duration);
@@ -284,7 +375,7 @@ export class CameraDirector {
     this._driftT = 0; // each shot's drift arc starts from ITS authored frame
   }
 
-  release(duration = 1400) { this.still = false; this._poseDriver = null; this._poseMoveK = 1; this._poseDir = -1; this._poseSpeed = 1 / Math.max(1, duration); }
+  release(duration = 1400) { this.still = false; this._poseDriver = null; this._posePath = 'linear'; this._poseMoveK = 1; this._poseDir = -1; this._poseSpeed = 1 / Math.max(1, duration); }
   get inCinematic() { return this.poseK > 0.001 || this._poseDir > 0; }
 
   snap() { this._init = false; this.frame(0); }

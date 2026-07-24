@@ -18,17 +18,19 @@ export function makeCampBeats(ctx, h) {
     const penGate = pointToGate(ctx.camp.pen);
     ctx.guide.setTargetXZ(penGate.x, penGate.z);
 
-    // brothers sneer as you pass the fire (once) — speakers gesture and face
-    // him. GATED to this beat (a stale trigger firing during the beat-4 gather
+    // His brothers call practical directions as he passes the fire (once).
+    // Genesis 37:4 places their explicit hatred after the special tunic, so
+    // this pre-coat beat must not make favoritism or contempt arrive early.
+    // GATED to this beat (a stale trigger firing during the beat-4 gather
     // froze the ring walkers and re-enabled input inside a cutscene), and the
-    // beat won't complete until the sneer dialogue has fully resolved.
+    // beat won't complete until the directions dialogue has fully resolved.
     let herdActive = true;
-    let sneerBusy = null;
+    let directionsBusy = null;
     ctx.interactables.addTrigger({
-      id: 'sneer', x: 0.8, z: -6.5, r: 3.4, once: true,
+      id: 'herd-directions', x: 0.8, z: -6.5, r: 3.4, once: true,
       when: () => herdActive,
       onEnter: () => {
-        sneerBusy = (async () => {
+        directionsBusy = (async () => {
           ctx.setInput(false);
           const sim = ctx.cast.simeon, lev = ctx.cast.levi;
           ctx.npcs.freeze(sim, true);
@@ -36,23 +38,19 @@ export function makeCampBeats(ctx, h) {
           const j = ctx.joseph.position;
           sim.char.turnToward(j.x - sim.pos.x, j.z - sim.pos.z);
           sim.char.play('talk');
-          await ctx.dialogue.say('Simeon', 'Look — father’s favorite, out among the sheep.', { color: J.Simeon });
+          await ctx.dialogue.say('Simeon', 'Joseph — the flock is spreading into the camp.', { color: J.Simeon });
           sim.char.play('idle');
           lev.char.turnToward(j.x - lev.pos.x, j.z - lev.pos.z);
           lev.char.play('talk');
-          await ctx.dialogue.say('Levi', 'Mind the flock, little brother. It’s all you’re good for.', { color: J.Levi });
-          // Levi laughs ALONE at his own jab (the solo laugh file); the shared
-          // group laughs are saved for the bigger envy beats.
-          sim.char.play('talk'); lev.char.play('talk');
-          ctx.sound('sfx.man_laugh', 0.5); // D8: laughs sit under dialogue, quieter
-          await wait(1500);
+          await ctx.dialogue.say('Levi', 'Circle behind the strays, little brother. Bring them through the gate.', { color: J.Levi });
+          await wait(700);
           sim.char.play('idle'); lev.char.play('idle');
           ctx.dialogue.hide();
           ctx.npcs.freeze(sim, false);
           ctx.npcs.freeze(lev, false);
           if (herdActive) ctx.setInput(true); // never re-arm input inside a later beat
         })();
-        return sneerBusy; // Interactables observes async trigger failures/abort
+        return directionsBusy; // Interactables observes async trigger failures/abort
       },
     });
 
@@ -64,14 +62,19 @@ export function makeCampBeats(ctx, h) {
         ctx.hud.setObjective(`Bring the stray sheep to the pen — ${n} of 3.`, 'Walk up behind a sheep — it runs ahead of you.');
         const s = ctx.sheep.nearestStray(ctx.joseph.position.x, ctx.joseph.position.z);
         if (s) ctx.guide.setTargetXZ(s.x, s.z);
-      } else done();
+      } else {
+        // The gameplay goal no longer owns the banner once its gate resolves,
+        // even if a concurrent conversation still needs to finish.
+        ctx.hud.clearObjective?.();
+        done();
+      }
     };
     // point at the first stray
     const first = ctx.sheep.nearestStray(ctx.joseph.position.x, ctx.joseph.position.z);
     if (first) ctx.guide.setTargetXZ(first.x, first.z);
     if (ctx.sheep.straysLeft === 0) done(); // checkpoint-resume safety
     await all;
-    if (sneerBusy) await sneerBusy; // never hand off to beat 2 mid-dialogue
+    if (directionsBusy) await directionsBusy; // never hand off to beat 2 mid-dialogue
     herdActive = false;
     ctx.onStrayPenned = null;
     ctx.guide.setTarget(null);
@@ -100,17 +103,25 @@ export function makeCampBeats(ctx, h) {
         onInteract: async () => {
           spoken = true;
           ctx.setInput(false);
+          ctx.hud.clearObjective?.();
           ctx.guide.setTarget(null);
           ctx.npcs.freeze(jac, true);
           jac.char.turnToward(ctx.joseph.position.x - jac.pos.x, ctx.joseph.position.z - jac.pos.z);
           jac.char.play('talk');
           await ctx.dialogue.say('Jacob', 'Joseph, my son. How are the sheep?', { color: J.Jacob });
-          await ctx.dialogue.say('Joseph', 'They are strong, father. The strays are back in the pen.', { color: J.Joseph });
-          await ctx.dialogue.say('Joseph', 'But my brothers… what they do out there — it is not right.', { color: J.Joseph });
-          await ctx.dialogue.say('Jacob', 'I hear you. You have done well to tell me.', { color: J.Jacob });
+          await ctx.dialogue.say('Joseph', 'The flock is well. But I bring a bad report about my brothers.', { color: J.Joseph });
+          await ctx.dialogue.say('Jacob', 'I hear you, my son.', { color: J.Jacob });
           await ctx.dialogue.say('Jacob', 'Come inside — I have something for you.', { color: J.Jacob });
           ctx.dialogue.hide();
           jac.char.play('idle');
+          // Land the full verse where its flock/report action has just been
+          // enacted instead of announcing Joseph's report before the player
+          // performs it during the opening pan.
+          await seq([
+            { t: 'letterbox', on: true },
+            { t: 'verse', verse: WEB.gen_37_2 },
+            { t: 'verseHide' },
+          ]);
           resolve();
         },
       });
@@ -130,7 +141,7 @@ export function makeCampBeats(ctx, h) {
         jac.char.play('talk');
         twoShot('jacob', 'joseph', {
           ms: 950, distMin: 3.2, distMax: 3.35,
-          height: 1.9, look: 1.18, towardB,
+          height: 1.9, look: 1.18, towardB, responsiveSpeaker: 'a',
         });
         await wait(570);
       },
@@ -141,6 +152,7 @@ export function makeCampBeats(ctx, h) {
       { t: 'fade', on: true, ms: 750 },
       { t: 'fn', fn: () => {
         T.group.visible = true;
+        ctx.setStage?.('tent');
         ctx.grading.set('tentWarm');
         // bounds travel with the stage (the clamp runs even with input off)
         ctx.controller.bounds = { minX: T.POS.x - 3.4, maxX: T.POS.x + 3.4, minZ: T.POS.z - 3.4, maxZ: T.POS.z + 3.4 };
@@ -149,15 +161,21 @@ export function makeCampBeats(ctx, h) {
         ctx.joseph.setPosition(T.POS.x + 1.0, T.POS.z + 0.9);
         jac.char.turnToward(ctx.joseph.position.x - jac.pos.x, ctx.joseph.position.z - jac.pos.z);
         ctx.joseph.turnToward(jac.pos.x - ctx.joseph.position.x, jac.pos.z - ctx.joseph.position.z);
-        ctx.camera.cinematicMoveTo({ angle: -Math.PI * 0.3, target: { x: T.POS.x, z: T.POS.z }, distance: 3.3, height: 1.9, lookHeight: 1.15, duration: 1 });
+        // The first painted tent frame uses the same live, responsive plan as
+        // the dialogue: a relationship two-shot when it fits, Jacob's clean
+        // single on portrait when the full pair would leave the safe frame.
+        twoShot('jacob', 'joseph', {
+          ms: 1, distMin: 3.2, distMax: 3.35,
+          height: 1.9, look: 1.18, towardB: 0.32, responsiveSpeaker: 'a',
+        });
       } },
       { t: 'fade', on: false, ms: 1000 },
       coatFrame(0.32),
       { t: 'say', who: 'Jacob', text: 'Joseph. Come, stand in the lamplight.', color: J.Jacob },
       coatFrame(0.44),
-      { t: 'say', who: 'Jacob', text: 'You came to me in my old age, my son — a gift I did not look for.', color: J.Jacob },
+      { t: 'say', who: 'Jacob', text: 'You came to me in my old age, my son.', color: J.Jacob },
       coatFrame(0.36),
-      { t: 'say', who: 'Jacob', text: 'I had this made for you. Let all of Hebron see it.', color: J.Jacob },
+      { t: 'say', who: 'Jacob', text: 'I had this made for you. Come, let me place it on your shoulders.', color: J.Jacob },
       { t: 'dialogueHide' },
       // THE GIFT (D9 framing law): a SIDE two-shot from LIVE positions —
       // and recomputed AFTER Jacob walks over (the old pre-walk framing left
@@ -165,7 +183,10 @@ export function makeCampBeats(ctx, h) {
       // D11: distance capped + a touch lower — the lens stays INSIDE the tent.
       // D13: swung 0.6 rad toward Joseph's side so we watch FATHER'S FACE give
       // the coat, never the back of his head.
-      { t: 'fn', fn: () => twoShot('jacob', 'joseph', { ms: 1500, distMax: 3.4, height: 1.9, look: 1.2, towardB: 0.6 }) },
+      { t: 'fn', fn: () => twoShot('jacob', 'joseph', {
+        ms: 1500, distMax: 3.4, height: 1.9, look: 1.2,
+        towardB: 0.6, responsiveSpeaker: 'a',
+      }) },
       { t: 'wait', ms: 1500 },
       { t: 'fn', fn: async () => {
         // Jacob carries it to his son — a real per-frame walk (D8: the old
@@ -179,7 +200,10 @@ export function makeCampBeats(ctx, h) {
         await ctx.npcs.sendTo(jac, tx, tz, { speed: 0.8 });
         ctx.npcs.freeze(jac, true);
         jac.char.turnToward(dx, dz);
-        twoShot('jacob', 'joseph', { ms: 900, distMax: 3.3, height: 1.9, look: 1.2, towardB: 0.6 }); // re-frame the CLOSED-UP pair — his face, inside the tent
+        twoShot('jacob', 'joseph', {
+          ms: 900, distMax: 3.3, height: 1.85, look: 1.2,
+          towardB: 0.6, responsiveSpeaker: 'a',
+        }); // re-frame the CLOSED-UP pair — his face, inside the tent
         jac.char.play('talk'); // the offering gesture
         await wait(420);
         ctx.joseph.setCoat(true);       // the tunic settles over his shoulders
@@ -199,8 +223,20 @@ export function makeCampBeats(ctx, h) {
       // …then the cut BEHIND him: the banded diamonds held clear on the BACK.
       { t: 'fn', fn: async () => {
         const j = ctx.joseph.position;
-        const a = Math.atan2(j.x - jac.pos.x, j.z - jac.pos.z);
-        ctx.camera.cinematicMoveTo({ angle: a, target: { x: j.x, z: j.z }, distance: 2.3, height: 1.55, lookHeight: 1.1, duration: 1400 });
+          // CameraDirector subtracts its angle vector from the target. Begin
+          // opposite Jacob, then swing to Joseph's rear three-quarter: the coat
+          // still reads across his back, but neither large head can sit directly
+          // on the lens axis and hide the other face.
+          const a = Math.atan2(jac.pos.x - j.x, jac.pos.z - j.z) + 1.0;
+          ctx.camera.cinematicMoveTo({
+            angle: a,
+            target: { x: j.x, z: j.z },
+            distance: 3.1,
+            height: 1.7,
+            lookHeight: 1.1,
+            duration: 1400,
+            path: 'arc',
+        });
         await wait(2800);
       } },
       { t: 'verse', verse: WEB.gen_37_3 },
@@ -219,7 +255,7 @@ export function makeCampBeats(ctx, h) {
       // D11 (Nate): raised further — heads were still clipping the lens here
       shot('judah', 'reuben', { side: 0.45, dist: 3.1, height: 2.15, look: 1.15 }),
       { t: 'anim', get char() { return ctx.cast.judah.char; }, state: 'talk' },
-      { t: 'say', who: 'Judah', text: 'A prince’s tunic… while we wear the dust of his father’s fields.', color: J.Judah },
+      { t: 'say', who: 'Judah', text: 'A special tunic for Joseph — so all can see whom father loves most.', color: J.Judah },
       { t: 'anim', get char() { return ctx.cast.judah.char; }, state: 'idle' },
       shot('reuben', 'judah', { side: -0.42, dist: 3.1, height: 2.15, look: 1.15 }),
       { t: 'anim', get char() { return ctx.cast.reuben.char; }, state: 'talk' },
@@ -239,6 +275,7 @@ export function makeCampBeats(ctx, h) {
       { t: 'fade', on: true, ms: 300 },
       { t: 'fn', fn: () => {
         T.group.visible = false;
+        ctx.setStage?.('camp');
         jac.pos.x = jacHome.x; jac.pos.z = jacHome.z;
         jac.char.setPosition(jacHome.x, jacHome.z);
         ctx.controller.bounds = ctx.bounds; // back to the camp
@@ -295,13 +332,25 @@ export function makeCampBeats(ctx, h) {
           if (sat) return;
           sat = true;
           ctx.setInput(false);
+          ctx.hud.clearObjective?.();
           ctx.guide.setTarget(null);
           ctx.joseph.turnToward(0.2 - ctx.joseph.position.x, -6 - ctx.joseph.position.z);
           ctx.joseph.play('kneel'); // Joseph sits (Sit_Floor_Idle / kneel fallback)
           // cozy fireside camera settles in as the light dies + sparks rise
           await seq([
             { t: 'letterbox', on: true },
-            { t: 'cam', angle: Math.PI * 0.34, target: { x: 0.25, z: -5.7 }, distance: 3.7, height: 1.25, lookHeight: 0.85, duration: 2600 },
+            {
+              t: 'cam',
+              angle: Math.PI * 0.34,
+              target: { x: 0.25, z: -5.7 },
+              distance: 3.7,
+              height: 1.25,
+              lookHeight: 0.85,
+              duration: 2600,
+              path: 'groupArc',
+              arcCenter: { x: 0, z: -6 },
+              arcRadius: 5.2,
+            },
             { t: 'wait', ms: 1200 },
           ]);
           resolve();
@@ -314,7 +363,18 @@ export function makeCampBeats(ctx, h) {
     // audio). Joseph, stung, rises to sleep alone.
     const jd = ctx.cast.judah, sm = ctx.cast.simeon;
     await seq([
-      { t: 'cam', angle: -Math.PI * 0.62, target: { x: 0.4, z: -6.4 }, distance: 3.4, height: 1.35, lookHeight: 0.95, duration: 1200 },
+      {
+        t: 'cam',
+        angle: -Math.PI * 0.62,
+        target: { x: 0.4, z: -6.4 },
+        distance: 3.4,
+        height: 1.35,
+        lookHeight: 0.95,
+        duration: 1200,
+        path: 'groupArc',
+        arcCenter: { x: 0, z: -6 },
+        arcRadius: 5.2,
+      },
       { t: 'fn', fn: () => {
         // (the tension score is already running — the state machine carried it
         // in from the envy scene; nothing restarts here)
@@ -323,7 +383,7 @@ export function makeCampBeats(ctx, h) {
       } },
       // D7 logic fix: no one can call him "dreamer" yet — the dreams come
       // later THIS NIGHT. The jeer mocks what they can see: the coat.
-      { t: 'say', who: 'Judah', text: 'Look at him — father’s little prince, warming himself in his fine new coat.', color: J.Judah },
+      { t: 'say', who: 'Judah', text: 'There he sits in the tunic father made especially for him.', color: J.Judah },
       // D8: the laugh lands exactly ONCE in this scene, quiet — under the
       // moment, never over it. (It used to fire again on the walk-out.)
       { t: 'fn', fn: async () => {
@@ -337,7 +397,18 @@ export function makeCampBeats(ctx, h) {
       // D8: Joseph is visibly STUNG — he rises, and his head drops; the camera
       // stays with him a breath so the hurt is unmissable before the quest.
       { t: 'fn', fn: () => { ctx.joseph.play('idle'); ctx.joseph.setGrief(true, 0.55); ctx.hud.emote('Joseph is sad'); } },
-      { t: 'cam', angle: Math.PI * 0.3, target: () => ({ x: ctx.joseph.position.x, z: ctx.joseph.position.z }), distance: 2.6, height: 1.35, lookHeight: 1.05, duration: 1500 },
+      {
+        t: 'cam',
+        angle: Math.PI * 0.3,
+        target: () => ({ x: ctx.joseph.position.x, z: ctx.joseph.position.z }),
+        distance: 3.2,
+        height: 1.55,
+        lookHeight: 1.05,
+        duration: 1500,
+        path: 'groupArc',
+        arcCenter: { x: 0, z: -6 },
+        arcRadius: 5.2,
+      },
       { t: 'wait', ms: 1700 },
       { t: 'letterbox', on: false },
     ]);
@@ -349,7 +420,7 @@ export function makeCampBeats(ctx, h) {
     // walks with his head down (a light grief residual rides the walk).
     let rested = false;
     ctx.joseph.setGrief(true, 0.32);
-    ctx.hud.setObjective('The night has turned cold with them. Go to your tent and rest.', 'Walk to your tent.');
+    ctx.hud.setObjective('Rest in your tent.');
     const rest = { x: -8.6, z: -4.4 };
     ctx.guide.setTargetXZ(rest.x, rest.z);
     ctx.camera.release(1);
@@ -363,6 +434,7 @@ export function makeCampBeats(ctx, h) {
           if (rested) return;
           rested = true;
           ctx.setInput(false);
+          ctx.hud.clearObjective?.();
           ctx.guide.setTarget(null);
           ctx.joseph.setGrief(false); // the day's hurt gives way to sleep
           ctx.joseph.setPosition(rest.x, rest.z);

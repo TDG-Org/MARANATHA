@@ -1,5 +1,6 @@
 import { Audio } from '../systems/AudioSystem.js';
 import { abortReason, makeAbortError } from '../core/async.js';
+import { pausableWait } from '../engine/Sequencer.js';
 
 // Dialogue popups. Every line shows WHO is speaking (storyteller skill: the
 // player must always know who each person is). Text types on; the first
@@ -29,7 +30,7 @@ const SPEAKER_STYLES = {
 };
 const NEUTRAL_STYLE = { bg: 'rgba(16,14,26,0.9)', border: 'rgba(242,184,128,0.22)' };
 
-export function createDialogue({ signal = null } = {}) {
+export function createDialogue({ signal = null, isPaused = null } = {}) {
   const box = document.createElement('div');
   box.className = 'mr-dialogue'; // D8: compact phone sizing lives in index.html
   box.style.cssText = [
@@ -89,14 +90,21 @@ export function createDialogue({ signal = null } = {}) {
   let destroyed = false;
   const pendingTimers = new Set();
   const later = (fn, ms) => {
-    const id = setTimeout(() => { pendingTimers.delete(id); fn(); }, ms);
-    pendingTimers.add(id);
-    return id;
+    const owner = new AbortController();
+    pendingTimers.add(owner);
+    pausableWait(ms, isPaused, owner.signal).then(() => {
+      pendingTimers.delete(owner);
+      fn();
+    }, (error) => {
+      pendingTimers.delete(owner);
+      if (error?.name !== 'AbortError') console.error('[dialogue] delayed action failed', error);
+    });
+    return owner;
   };
-  const clearLater = (id) => {
-    if (id == null) return;
-    clearTimeout(id);
-    pendingTimers.delete(id);
+  const clearLater = (owner) => {
+    if (!owner) return;
+    pendingTimers.delete(owner);
+    if (!owner.signal.aborted) owner.abort(makeAbortError('Dialogue timer cancelled'));
   };
 
   const show = () => {
@@ -136,14 +144,30 @@ export function createDialogue({ signal = null } = {}) {
       let i = 0;
       textEl.textContent = '';
       let done = false;
-      const finish = () => { done = true; textEl.textContent = text; resolveType(); };
-      const timer = setInterval(() => {
-        if (done) { clearInterval(timer); return; }
-        i += 1;
-        textEl.textContent = text.slice(0, i);
-        if (i >= text.length) { clearInterval(timer); done = true; resolveType(); }
-      }, 18);
-      skip = () => { clearInterval(timer); if (!done) finish(); };
+      const owner = new AbortController();
+      const finish = () => {
+        if (done) return;
+        done = true;
+        textEl.textContent = text;
+        resolveType();
+      };
+      skip = () => {
+        if (!owner.signal.aborted) owner.abort(makeAbortError('Dialogue typewriter skipped'));
+        finish();
+      };
+      (async () => {
+        try {
+          while (!done && i < text.length) {
+            await pausableWait(18, isPaused, owner.signal);
+            if (done) return;
+            i += 1;
+            textEl.textContent = text.slice(0, i);
+          }
+          finish();
+        } catch (error) {
+          if (error?.name !== 'AbortError') console.error('[dialogue] typewriter failed', error);
+        }
+      })();
     });
     return { promise, skip: () => skip?.() };
   }
@@ -313,7 +337,7 @@ export function createDialogue({ signal = null } = {}) {
       destroyed = true;
       const error = signal ? (signal.aborted ? abortReason(signal) : makeAbortError('Dialogue destroyed')) : null;
       activeCancel?.(error);
-      pendingTimers.forEach((id) => clearTimeout(id));
+      [...pendingTimers].forEach(clearLater);
       pendingTimers.clear();
       signal?.removeEventListener('abort', onAbort);
       hide(); box.remove();

@@ -1,10 +1,11 @@
 import { Audio } from '../systems/AudioSystem.js';
 import { abortReason, makeAbortError } from '../core/async.js';
+import { isObjectivePrepaintActive } from './objectivePrepaint.js';
 
 // The in-story HUD: a HOME button (top-left) and the live objective line that
 // tells the player what to do right now. Scenes call setObjective() as goals
 // change; pulse() re-nudges an idle player (game-feel law 7).
-export function createStoryHud({ onHome, signal = null } = {}) {
+export function createStoryHud({ onHome, signal = null, isPaused = null } = {}) {
   const home = document.createElement('button');
   home.type = 'button';
   home.setAttribute('aria-label', 'Home');
@@ -26,11 +27,16 @@ export function createStoryHud({ onHome, signal = null } = {}) {
   // it sits near the player's eye-line. Big, warm-white, glowing, with a small
   // marker icon and a brief pulse on change (ui-clarity). A hint rides under it.
   const obj = document.createElement('div');
+  obj.setAttribute('role', 'status');
+  obj.setAttribute('aria-live', 'polite');
+  obj.setAttribute('aria-atomic', 'true');
+  obj.setAttribute('aria-hidden', 'true');
   obj.style.cssText = [
     'position:fixed',
     'top:calc(11vh + 12px + env(safe-area-inset-top))', 'left:50%', 'transform:translateX(-50%)', 'z-index:40',
     // D6 mobile pass: wider on phones so quest text never wraps to a wall
-    'max-width:min(94vw,560px)', 'padding:11px 20px', 'border-radius:14px', 'text-align:center',
+    'width:min(94vw,560px)', 'max-width:calc(100vw - 12px)', 'box-sizing:border-box',
+    'padding:11px 20px', 'border-radius:14px', 'text-align:center',
     'font-family:"Segoe UI",system-ui,sans-serif', 'font-size:clamp(16px,2.4vw,21px)', 'font-weight:600',
     'letter-spacing:0.012em', 'color:#fff3d8', 'line-height:1.3',
     'background:rgba(12,10,20,0.82)', 'border:1px solid rgba(242,184,128,0.42)',
@@ -81,37 +87,138 @@ export function createStoryHud({ onHome, signal = null } = {}) {
   let current = '';
   let destroyed = false;
   const timers = new Set();
+  const clockNow = () => globalThis.performance?.now?.() ?? Date.now();
   const later = (fn, ms) => {
-    const id = setTimeout(() => { timers.delete(id); fn(); }, ms);
-    timers.add(id);
-    return id;
+    const win = globalThis.window;
+    const doc = globalThis.document;
+    const eventDriven = !!(
+      isPaused
+      && win?.addEventListener && win?.removeEventListener
+      && doc?.addEventListener && doc?.removeEventListener
+    );
+    const owner = {
+      timer: null,
+      remaining: Math.max(0, ms),
+      startedAt: 0,
+      settled: false,
+      cancel: null,
+    };
+    const cleanup = () => {
+      if (owner.timer !== null) clearTimeout(owner.timer);
+      owner.timer = null;
+      if (eventDriven) {
+        win.removeEventListener('maranatha-pausechange', onPauseState);
+        doc.removeEventListener('visibilitychange', onPauseState);
+      }
+      timers.delete(owner);
+    };
+    const finish = () => {
+      if (owner.settled) return;
+      owner.settled = true;
+      cleanup();
+      fn();
+    };
+    const suspend = () => {
+      if (owner.timer === null) return;
+      clearTimeout(owner.timer);
+      owner.timer = null;
+      owner.remaining = Math.max(0, owner.remaining - (clockNow() - owner.startedAt));
+    };
+    const arm = () => {
+      if (owner.settled || owner.timer !== null || isPaused?.()) return;
+      owner.startedAt = clockNow();
+      owner.timer = setTimeout(finish, owner.remaining);
+    };
+    const onPauseState = () => {
+      if (isPaused?.()) suspend();
+      else arm();
+    };
+    owner.cancel = () => {
+      if (owner.settled) return;
+      owner.settled = true;
+      cleanup();
+    };
+    timers.add(owner);
+    if (eventDriven) {
+      win.addEventListener('maranatha-pausechange', onPauseState);
+      doc.addEventListener('visibilitychange', onPauseState);
+    }
+    arm();
+    return owner;
   };
-  const clearLater = (id) => {
-    if (!id) return;
-    clearTimeout(id);
-    timers.delete(id);
+  const clearLater = (owner) => {
+    if (!owner) return;
+    owner.cancel?.();
   };
-  let objectiveTimer = 0;
+  let objectiveTimer = null;
   let activeCompletion = null;
   // D6: the banner AUTO-HIDES while a cutscene sequence runs (the Sequencer
   // drives this) — quest UI and narrator verse cards never share the frame.
   let inCutscene = false;
-  const applyVisible = () => { obj.style.opacity = current && !inCutscene ? '1' : '0'; };
+  let letterboxOn = false;
+  const setRenderedVisible = (visible) => {
+    obj.style.opacity = visible ? '1' : '0';
+    // Opacity alone leaves stale quest text in the accessibility tree. Keep
+    // assistive technology in the same state as the visual banner.
+    obj.setAttribute('aria-hidden', visible ? 'false' : 'true');
+  };
+  const applyVisible = () => {
+    setRenderedVisible(Boolean(current && !inCutscene && !letterboxOn));
+  };
   function setCutscene(on) {
     inCutscene = !!on;
     applyVisible();
   }
+  // Sequence depth and letterbox ownership are deliberately separate. A
+  // sequence can end while its authored bars stay up (for example while NPCs
+  // walk into a circle). In that gap the previous quest must remain hidden.
+  function setLetterbox(on) {
+    letterboxOn = !!on;
+    applyVisible();
+  }
+  function resetObjectiveChrome() {
+    objIcon.textContent = '✦';
+    objIcon.style.color = '#ffcf8a';
+    objIcon.style.filter = 'drop-shadow(0 0 6px rgba(242,184,128,0.6))';
+  }
+  // Atomic ownership handoff for gameplay goals. Hiding is presentation;
+  // clearing ends the logical objective, cancels every delayed write, and
+  // leaves no stale text for a later cutscene gap to restore.
+  function clearObjective() {
+    if (destroyed) return;
+    activeCompletion?.cancel?.();
+    clearLater(objectiveTimer);
+    objectiveTimer = null;
+    current = '';
+    setRenderedVisible(false);
+    objText.textContent = '';
+    objHint.textContent = '';
+    objHint.style.display = 'none';
+    resetObjectiveChrome();
+  }
   function setObjective(text, hint = '') {
     if (destroyed || signal?.aborted) return;
+    activeCompletion?.cancel?.();
     clearLater(objectiveTimer);
-    objectiveTimer = 0;
-    if (!text) { obj.style.opacity = '0'; current = ''; return; }
+    objectiveTimer = null;
+    // A new quest can supersede a completion while its green check is still
+    // visible. Reclaim all shared banner chrome before scheduling new text.
+    resetObjectiveChrome();
+    if (!text) { clearObjective(); return; }
     if (text === current) { if (!inCutscene) pulse(); return; }
     current = text;
+    if (isObjectivePrepaintActive()) {
+      objText.textContent = text;
+      objHint.textContent = hint;
+      objHint.style.display = hint ? 'block' : 'none';
+      applyVisible();
+      if (!inCutscene) pulse();
+      return;
+    }
     // Cross-fade the text so it never hard-swaps.
-    obj.style.opacity = '0';
+    setRenderedVisible(false);
     objectiveTimer = later(() => {
-      objectiveTimer = 0;
+      objectiveTimer = null;
       if (destroyed || signal?.aborted || current !== text) return;
       objText.textContent = text;
       objHint.textContent = hint;
@@ -128,20 +235,21 @@ export function createStoryHud({ onHome, signal = null } = {}) {
     if (destroyed || signal?.aborted) return Promise.reject(signal?.aborted ? abortReason(signal) : makeAbortError('Story HUD destroyed'));
     activeCompletion?.cancel?.(); // one banner owner; a newer completion supersedes the old
     clearLater(objectiveTimer);
-    objectiveTimer = 0;
+    objectiveTimer = null;
     current = `✓ ${text}`;
-    obj.style.opacity = '0';
+    setRenderedVisible(false);
     return new Promise((resolve, reject) => {
       let settled = false;
       const ownedTimers = new Set();
       const schedule = (fn, ms) => {
-        const id = later(() => { ownedTimers.delete(id); fn(); }, ms);
-        ownedTimers.add(id);
+        let owner = null;
+        owner = later(() => { ownedTimers.delete(owner); fn(); }, ms);
+        ownedTimers.add(owner);
       };
       const finish = (error = null) => {
         if (settled) return;
         settled = true;
-        for (const id of ownedTimers) clearLater(id);
+        for (const owner of ownedTimers) clearLater(owner);
         ownedTimers.clear();
         if (activeCompletion?.finish === finish) activeCompletion = null;
         if (error) reject(error); else resolve();
@@ -162,11 +270,12 @@ export function createStoryHud({ onHome, signal = null } = {}) {
         if (!inCutscene) pulse();
         schedule(() => {
           // hand the banner back to normal objectives
-          objIcon.textContent = '✦';
-          objIcon.style.color = '#ffcf8a';
-          objIcon.style.filter = 'drop-shadow(0 0 6px rgba(242,184,128,0.6))';
-          obj.style.opacity = '0';
+          resetObjectiveChrome();
+          setRenderedVisible(false);
           current = '';
+          objText.textContent = '';
+          objHint.textContent = '';
+          objHint.style.display = 'none';
           finish();
         }, holdMs);
       }, 180);
@@ -176,9 +285,11 @@ export function createStoryHud({ onHome, signal = null } = {}) {
   const onAbort = () => {
     activeCompletion?.finish?.(abortReason(signal));
     clearLater(objectiveTimer);
-    objectiveTimer = 0;
-    clearTimeout(counterTimer);
-    clearTimeout(emoteTimer);
+    objectiveTimer = null;
+    clearLater(counterTimer);
+    counterTimer = null;
+    clearLater(emoteTimer);
+    emoteTimer = null;
   };
   signal?.addEventListener('abort', onAbort, { once: true });
 
@@ -198,21 +309,22 @@ export function createStoryHud({ onHome, signal = null } = {}) {
 
   // emote('Joseph is sad') — the right-side feeling line. Re-calls restart the
   // hold; it always fades itself out.
-  let emoteTimer = 0;
+  let emoteTimer = null;
   function emote(text, holdMs = 2800) {
     if (destroyed || signal?.aborted) return;
     emoteEl.textContent = text;
     emoteEl.style.opacity = '1';
     emoteEl.style.transform = 'translateX(0)';
-    clearTimeout(emoteTimer);
-    emoteTimer = setTimeout(() => {
+    clearLater(emoteTimer);
+    emoteTimer = later(() => {
+      emoteTimer = null;
       emoteEl.style.opacity = '0';
       emoteEl.style.transform = 'translateX(14px)';
     }, holdMs);
   }
 
   // flashCount('🐑', 2, 3) — the big center pop for number quests.
-  let counterTimer = 0;
+  let counterTimer = null;
   function flashCount(icon, n, total) {
     if (destroyed || signal?.aborted) return;
     counter.textContent = `${icon} ${n} / ${total}`;
@@ -227,21 +339,25 @@ export function createStoryHud({ onHome, signal = null } = {}) {
         { duration: 450, easing: 'cubic-bezier(0.34,1.3,0.64,1)' },
       );
     } catch { /* no-op */ }
-    clearTimeout(counterTimer);
-    counterTimer = setTimeout(() => { counter.style.opacity = '0'; }, 1400);
+    clearLater(counterTimer);
+    counterTimer = later(() => {
+      counterTimer = null;
+      counter.style.opacity = '0';
+    }, 1400);
   }
 
   function destroy() {
     if (destroyed) return;
     destroyed = true;
     clearLater(objectiveTimer);
-    objectiveTimer = 0;
+    objectiveTimer = null;
     const error = signal ? (signal.aborted ? abortReason(signal) : makeAbortError('Story HUD destroyed')) : null;
     activeCompletion?.finish?.(error);
-    for (const id of timers) clearTimeout(id);
-    timers.clear();
-    clearTimeout(counterTimer);
-    clearTimeout(emoteTimer);
+    for (const owner of [...timers]) clearLater(owner);
+    clearLater(counterTimer);
+    counterTimer = null;
+    clearLater(emoteTimer);
+    emoteTimer = null;
     signal?.removeEventListener('abort', onAbort);
     home.remove();
     obj.remove();
@@ -249,5 +365,10 @@ export function createStoryHud({ onHome, signal = null } = {}) {
     emoteEl.remove();
   }
 
-  return { setObjective, completeObjective, setCutscene, pulse, flashCount, emote, destroy, homeButton: home, objectiveEl: obj, counterEl: counter, emoteEl };
+  return {
+    setObjective, clearObjective, completeObjective, setCutscene, setLetterbox,
+    pulse, flashCount, emote, destroy,
+    get objectiveText() { return current; },
+    homeButton: home, objectiveEl: obj, counterEl: counter, emoteEl,
+  };
 }

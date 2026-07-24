@@ -5,6 +5,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "test": "npm run test:pacing && npm run test:camera && npm run test:lifetime && npm run test:ui-lifetime && npm run test:beats && npm run test:story && npm run test:layout && npm run test:models && npm run test:audio-power && npm run test:graphics-power && npm run test:render-power && npm run test:app && npm run test:vo",
     "start": "vite --port 1225 --strictPort --open",
     "vo": "node tools/make-vo.mjs",
     "dev": "vite",
@@ -15,9 +16,14 @@
     "test:lifetime": "node tools/test-lifetime.mjs",
     "test:ui-lifetime": "node tools/test-ui-lifetime.mjs",
     "test:beats": "node tools/test-beat-entry.mjs",
+    "test:story": "node tools/test-story-order.mjs",
     "test:layout": "node tools/test-scene-layout.mjs",
     "test:models": "node tools/test-character-glb-optimizer.mjs",
-    "test:audio-power": "node tools/test-audio-power.mjs"
+    "test:audio-power": "node tools/test-audio-power.mjs",
+    "test:graphics-power": "node tools/test-graphics-power.mjs",
+    "test:render-power": "node tools/test-render-power.mjs",
+    "test:app": "node tools/test-app-recovery.mjs",
+    "test:vo": "node tools/test-vo-assets.mjs"
   },
   "devDependencies": {
     "msedge-tts": "^2.0.7",

@@ -12,9 +12,11 @@ export function createLoader() {
 
   const root = document.createElement('div');
   root.style.cssText = [
-    'position:fixed', 'inset:0', 'z-index:58', 'display:flex', 'flex-direction:column',
+    // Above the opaque transition veil (z60), below settings/modals (z65).
+    'position:fixed', 'inset:0', 'z-index:61', 'display:flex', 'flex-direction:column',
     'align-items:center', 'justify-content:center', 'gap:18px',
     'background:#08070e', 'opacity:0', 'pointer-events:none',
+    'visibility:hidden',
     'transition:opacity 420ms ease',
   ].join(';');
 
@@ -25,10 +27,10 @@ export function createLoader() {
   core.style.cssText = [
     'position:absolute', 'inset:18px', 'border-radius:50%',
     'background:radial-gradient(circle, #ffe9c9 0%, #f2b880 70%, rgba(242,184,128,0) 100%)',
-    'animation:mr-load-pulse 1.6s ease-in-out infinite',
+    'animation:mr-load-pulse 1.6s ease-in-out infinite', 'animation-play-state:paused',
   ].join(';');
   const ring = document.createElement('div');
-  ring.style.cssText = 'position:absolute; inset:0; animation:mr-load-orbit 5s linear infinite;';
+  ring.style.cssText = 'position:absolute; inset:0; animation:mr-load-orbit 5s linear infinite; animation-play-state:paused;';
   for (let i = 0; i < 8; i++) {
     const ray = document.createElement('div');
     const a = (i / 8) * 360;
@@ -52,9 +54,17 @@ export function createLoader() {
   document.body.append(root);
 
   let visible = false;
+  const syncAnimation = () => {
+    const state = visible && !document.hidden ? 'running' : 'paused';
+    core.style.animationPlayState = state;
+    ring.style.animationPlayState = state;
+  };
+  document.addEventListener('visibilitychange', syncAnimation);
   return {
     show() {
       visible = true;
+      root.style.visibility = 'visible';
+      syncAnimation();
       root.style.pointerEvents = 'auto';
       root.style.opacity = '1';
     },
@@ -63,8 +73,18 @@ export function createLoader() {
       visible = false;
       root.style.opacity = '0';
       root.style.pointerEvents = 'none';
-      return new Promise((r) => setTimeout(r, 430));
+      return new Promise((resolve) => setTimeout(() => {
+        if (!visible) {
+          root.style.visibility = 'hidden';
+          syncAnimation();
+        }
+        resolve();
+      }, 430));
     },
-    destroy() { root.remove(); style.remove(); },
+    destroy() {
+      document.removeEventListener('visibilitychange', syncAnimation);
+      root.remove();
+      style.remove();
+    },
   };
 }

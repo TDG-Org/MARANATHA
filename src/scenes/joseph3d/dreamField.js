@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mulberry32, mergeGeometries } from '../../engine/world.js';
-import { Graphics } from '../../systems/Graphics.js';
+import { Graphics, particleCapacity } from '../../systems/Graphics.js';
 
 // --- the DREAM: a moonlit farm field where the sky bows (Gen 37:7,9) ---------
 // A proper wheat field under a cool night, heavy fog banks behind, a visible
@@ -330,7 +330,12 @@ export function buildDreamField() {
   group.add(moonDisc);
 
   // floating dream motes (cool, drift upward)
-  const moteCount = 60;
+  const MOTE_BASE = 60;
+  const moteCount = particleCapacity(MOTE_BASE);
+  let activeMoteCount = Math.min(
+    moteCount,
+    Math.max(3, Math.round(MOTE_BASE * Graphics.particleScale)),
+  );
   const mp = new Float32Array(moteCount * 3);
   const mseed = new Float32Array(moteCount);
   for (let i = 0; i < moteCount; i++) {
@@ -341,12 +346,18 @@ export function buildDreamField() {
   }
   const moteGeo = new THREE.BufferGeometry();
   moteGeo.setAttribute('position', new THREE.BufferAttribute(mp, 3));
+  moteGeo.setDrawRange(0, activeMoteCount);
   const motes = new THREE.Points(moteGeo, new THREE.PointsMaterial({ map: fogTex, color: 0xdfe7ff, size: 0.5, transparent: true, opacity: 0.6, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true, fog: false }));
   group.add(motes);
 
   // D6: dream FIREFLIES — low warm-green sparks weaving through the wheat,
   // blinking softly (the motes drift high and cool; these live at stalk height)
-  const FIREFLY_N = Math.max(14, Math.round(44 * Graphics.particleScale));
+  const FIREFLY_BASE = 44;
+  const FIREFLY_N = particleCapacity(FIREFLY_BASE);
+  let activeFireflyCount = Math.min(
+    FIREFLY_N,
+    Math.max(3, Math.round(FIREFLY_BASE * Graphics.particleScale)),
+  );
   const fireflyGeo = new THREE.BufferGeometry();
   {
     const pts = new Float32Array(FIREFLY_N * 3);
@@ -360,6 +371,7 @@ export function buildDreamField() {
   const fireflySeed = new Float32Array(FIREFLY_N);
   for (let i = 0; i < FIREFLY_N; i++) fireflySeed[i] = rnd() * Math.PI * 2;
   const fireflyPts = new THREE.Points(fireflyGeo, new THREE.PointsMaterial({ map: fogTex, color: 0xd8f0b8, size: 0.32, transparent: true, opacity: 0.7, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true, fog: false }));
+  fireflyGeo.setDrawRange(0, activeFireflyCount);
   group.add(fireflyPts);
 
   // --- the celestial bodies: sun, moon, 11 stars (layered glow) ---
@@ -531,7 +543,7 @@ export function buildDreamField() {
       groundMist.forEach((m) => { m.material.opacity = 0.24 + Math.sin(t * 0.25 + m.userData.phase) * 0.08; });
       // dream fireflies: slow drift + soft per-point blink
       const fp = fireflyGeo.attributes.position;
-      for (let i = 0; i < FIREFLY_N; i++) {
+      for (let i = 0; i < activeFireflyCount; i++) {
         fp.setY(i, fp.getY(i) + Math.sin(t * 0.6 + fireflySeed[i]) * dt * 0.00018);
         fp.setX(i, fp.getX(i) + Math.cos(t * 0.35 + fireflySeed[i] * 2) * dt * 0.00012);
       }
@@ -544,7 +556,7 @@ export function buildDreamField() {
       });
       // dream motes drift upward, wrap
       const pos = moteGeo.attributes.position;
-      for (let i = 0; i < moteCount; i++) {
+      for (let i = 0; i < activeMoteCount; i++) {
         let y = pos.getY(i) + dt * 0.0004 * (1 + Math.sin(mseed[i]));
         if (y > 10) y -= 10;
         pos.setY(i, y);
@@ -571,6 +583,13 @@ export function buildDreamField() {
         if (skyState === 1) b.position.lerp(b.userData.mid, Math.min(dt * 0.0006, 1));
         else if (skyState === 2) b.position.lerp(b.userData.low, Math.min(dt * 0.0012, 1));
       });
+    },
+    setParticleScale(scale) {
+      const safe = Number.isFinite(scale) ? Math.max(0, scale) : 1;
+      activeMoteCount = Math.min(moteCount, Math.max(3, Math.round(MOTE_BASE * safe)));
+      activeFireflyCount = Math.min(FIREFLY_N, Math.max(3, Math.round(FIREFLY_BASE * safe)));
+      moteGeo.setDrawRange(0, activeMoteCount);
+      fireflyGeo.setDrawRange(0, activeFireflyCount);
     },
     dispose() {
       glowTex.dispose(); fogTex.dispose(); beamTex.dispose(); floatGlowTex.dispose();

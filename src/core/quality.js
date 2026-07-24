@@ -4,11 +4,15 @@
 // is struggling. Target 60fps mid-range; graceful floor on low-end.
 
 export function detectTier() {
-  const dpr = window.devicePixelRatio || 1;
-  const cores = navigator.hardwareConcurrency || 4;
-  const mem = navigator.deviceMemory || 4; // GB; undefined on iOS/Firefox
-  const mobile = /Android|iPhone|iPad|Mobi/i.test(navigator.userAgent)
-    || (navigator.maxTouchPoints > 1 && Math.min(screen.width, screen.height) < 900);
+  const win = globalThis.window;
+  const nav = globalThis.navigator || {};
+  const display = globalThis.screen || {};
+  const dpr = win?.devicePixelRatio || 1;
+  const cores = nav.hardwareConcurrency || 4;
+  const mem = nav.deviceMemory || 4; // GB; undefined on iOS/Firefox
+  const mobile = /Android|iPhone|iPad|Mobi/i.test(nav.userAgent || '')
+    || (nav.maxTouchPoints > 1
+      && Math.min(display.width || 1024, display.height || 768) < 900);
 
   let tier = 'high';
   if (mobile || cores <= 4 || mem <= 4) tier = 'mid';
@@ -21,49 +25,66 @@ export function detectTier() {
 }
 
 // Watches real frame times and steps the render resolution down when the
-// device sustains >22ms frames (≈45fps). Steps are sticky-down (no yo-yo):
-// one optional step back up only after a long, comfortably fast stretch.
+// device sustains slow frames. Steps are sticky-down; paced frame deltas
+// cannot prove headroom, so only an explicit preset choice may restore DPR.
 export class AdaptiveQuality {
   constructor(renderer, { basePixelRatio, onChange } = {}) {
     this.renderer = renderer;
-    this.base = basePixelRatio ?? Math.min(window.devicePixelRatio || 1, 2);
+    this.base = basePixelRatio
+      ?? Math.min(globalThis.window?.devicePixelRatio || 1, 2);
     this.ratio = this.base;
-    this.min = 1;
+    this.min = Math.min(1, this.base);
     this.onChange = onChange;
-    this.slow = 0;
-    this.fast = 0;
-    this.recovered = false;
+    this._window = null;
+    this._sampleFrames = 120;
     renderer.setPixelRatio(this.ratio);
   }
 
   frame(dtMs) {
-    if (dtMs > 22) {
-      this.slow += 1;
-      this.fast = 0;
-    } else if (dtMs < 13) {
-      this.fast += 1;
-      this.slow = 0;
-    } else {
-      this.slow = Math.max(0, this.slow - 1);
-    }
-    // ~1.5s of sustained slowness -> shed resolution.
-    if (this.slow > 90 && this.ratio > this.min) {
-      this.slow = 0;
-      this.set(Math.max(this.min, this.ratio - 0.25));
-    }
-    // One recovery step after ~20s of headroom (covers a slow first load).
-    if (!this.recovered && this.fast > 1200 && this.ratio < this.base) {
-      this.recovered = true;
-      this.set(Math.min(this.base, this.ratio + 0.25));
-    }
+    if (!Number.isFinite(dtMs) || dtMs <= 0 || this.ratio <= this.min) return;
+    const sample = this._window || (this._window = { n: 0, totalMs: 0, over22: 0 });
+    sample.n += 1;
+    sample.totalMs += dtMs;
+    if (dtMs > 22) sample.over22 += 1;
+    if (sample.n < this._sampleFrames) return;
+
+    // Alternating 10/30ms frames are visibly uneven and average only 50fps,
+    // but the old +1/-1 vote cancelled them to zero forever. Judge a bounded
+    // window by BOTH achieved cadence and its share of missed frame budgets.
+    // Fractional-refresh pacing (for example 90Hz's healthy 11/22ms rhythm)
+    // remains safe because its average stays close to 16.7ms.
+    const averageMs = sample.totalMs / sample.n;
+    const overBudgetRatio = sample.over22 / sample.n;
+    this._window = null;
+    const struggling = averageMs > 20.5
+      || (averageMs > 18.5 && overBudgetRatio >= 0.25);
+    if (struggling) this.set(Math.max(this.min, this.ratio - 0.25));
+  }
+
+  // Automatic preset changes update the ceiling but can never increase the
+  // current drawing-buffer ratio. `raise` is reserved for an explicit player
+  // selection, which may restore that preset's full base.
+  setBase(basePixelRatio, { raise = false } = {}) {
+    if (!Number.isFinite(basePixelRatio) || basePixelRatio <= 0) return;
+    this.base = basePixelRatio;
+    // A browser zoom/display change may raise native DPR after we were
+    // legitimately rendering below 1. Sticky-down means even the floor cannot
+    // clamp that 0.8 ratio upward; only an explicit preset action may do so.
+    this.min = Math.min(1, this.base, raise ? 1 : this.ratio);
+    this._window = null;
+    this.set(raise ? this.base : Math.min(this.ratio, this.base));
   }
 
   set(ratio) {
-    this.ratio = ratio;
-    this.renderer.setPixelRatio(ratio);
+    const next = Math.max(this.min, Math.min(this.base, ratio));
+    if (next === this.ratio) return;
+    this.ratio = next;
+    this.renderer.setPixelRatio(next);
     // Re-apply size so the drawing buffer actually changes.
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.onChange?.(ratio);
+    const width = globalThis.window?.innerWidth || 1;
+    const height = globalThis.window?.innerHeight || 1;
+    this.renderer.setSize(width, height);
+    this.onChange?.(next);
   }
 }
 

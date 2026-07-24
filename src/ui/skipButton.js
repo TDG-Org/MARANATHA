@@ -24,6 +24,9 @@ export function mountSkipButton() {
   btn.onclick = () => { Audio.uiClick?.(); Narrator.skip(); };
   document.body.append(btn);
 
-  Narrator.onSpeaking = (on) => { btn.style.display = on ? 'block' : 'none'; };
+  // Loading and muted reading holds remain skippable without claiming that an
+  // audible transport is running (Narrator.speaking still owns eco pacing).
+  Narrator.onActiveLine = (on) => { btn.style.display = on ? 'block' : 'none'; };
+  btn.style.display = Narrator.activeLine ? 'block' : 'none';
   return btn;
 }

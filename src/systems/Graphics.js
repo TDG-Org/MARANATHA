@@ -1,114 +1,176 @@
 import { detectTier } from '../core/quality.js';
 
-// Graphics Quality (D4): Low / Medium / High — a beauty-vs-perf dial the player
-// controls (persisted; the default auto-detects from the device tier). Each
-// preset caps the pixel ratio, scales particle density, and toggles extras
-// (soft contact-shadow blobs + richer fog on High). DPR changes apply live;
-// particle/shadow density applies on the next scene entry (they're built once).
-const KEY = 'maranatha-graphics-v1';      // the player's explicit choice
-const AUTO_KEY = 'maranatha-graphics-auto'; // what auto-detect/auto-tune settled on
+// Graphics Quality: Low / Medium / High is the player's beauty-versus-power
+// dial. Presets cap pixel ratio, scale particles, and toggle scene extras.
+const KEY = 'maranatha-graphics-v1'; // the player's explicit choice
+const AUTO_KEY = 'maranatha-graphics-auto'; // the last automatic demotion
+const PRESET_ORDER = ['low', 'medium', 'high'];
+const AUTO_START_CEILING = 'medium';
+const AUTO_SAMPLE_FRAMES = 600;
+const AUTO_COOLDOWN_FRAMES = 300;
 
 export const GRAPHICS_PRESETS = {
-  low: { label: 'Low', dprCap: 1, particleScale: 0.4, contactShadow: false, fogFar: 200 },
-  medium: { label: 'Medium', dprCap: 1.5, particleScale: 1.0, contactShadow: false, fogFar: 250 },
-  high: { label: 'High', dprCap: 2, particleScale: 1.6, contactShadow: true, fogFar: 300 },
+  low: { label: 'Low', dprCap: 1, particleScale: 0.4, contactShadow: false, fogFar: 200, anisotropy: 1 },
+  // The pooled character shadows cost one change-gated draw for the whole
+  // cast, so Medium can keep this grounding cue without restoring the old
+  // 15-draw fan-out. Only Low removes it.
+  medium: { label: 'Medium', dprCap: 1.5, particleScale: 1.0, contactShadow: true, fogFar: 250, anisotropy: 4 },
+  high: { label: 'High', dprCap: 2, particleScale: 1.6, contactShadow: true, fogFar: 300, anisotropy: 4 },
 };
 
-// AUTO-DETECT (D14, Nate: "the graphics should auto change to the best settings
-// the user's PC can handle"). Two stages:
-//   1. this first guess, from what the browser will tell us up front, and
-//   2. `autoTune()` below, which corrects the guess from MEASURED frame times
-//      once the game is actually running (a guess can be wrong either way).
-// A player who picks a preset by hand owns it forever — auto never overrides.
-function gpuName() {
-  try {
-    const c = document.createElement('canvas');
-    const gl = c.getContext('webgl') || c.getContext('experimental-webgl');
-    if (!gl) return '';
-    const ext = gl.getExtension('WEBGL_debug_renderer_info');
-    return (ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)) || '';
-  } catch { return ''; }
+const MAX_PARTICLE_SCALE = Math.max(
+  ...Object.values(GRAPHICS_PRESETS).map((preset) => preset.particleScale),
+);
+
+// Live settings may move both down and up. Allocate each tiny pooled backing
+// buffer once at the largest authored preset, then vary only its active prefix.
+// This avoids rebuilds while ensuring Low/Medium -> High can restore density.
+export function particleCapacity(base) {
+  return Math.max(3, Math.round(base * MAX_PARTICLE_SCALE));
 }
 
+// Automatic policy starts conservatively. Medium preserves the complete
+// visual language while avoiding a speculative 2x-DPR/dGPU startup on an
+// unknown device. Runtime evidence may step down; it never promotes.
 function autoDefault() {
-  const { tier } = detectTier();
-  if (tier === 'low') return 'low';
-  const cores = navigator.hardwareConcurrency || 4;
-  const mem = navigator.deviceMemory || 4; // GB (undefined on iOS/Firefox)
-  const mobile = /Android|iPhone|iPad|Mobi/i.test(navigator.userAgent);
-  const gpu = gpuName();
-  // discrete/desktop-class GPUs and Apple Silicon handle High comfortably
-  const strongGPU = /rtx|radeon rx|geforce (gtx|rtx)|arc a\d|apple m[1-9]|quadro|radeon pro/i.test(gpu);
-  // the weakest integrated parts should stay at Medium whatever the core count
-  const weakGPU = /uhd graphics [456]\d\d|hd graphics [345]\d\d\d|mali-[gt]?[0-5]\d|adreno [1-5]\d\d|powervr/i.test(gpu);
-  if (!mobile && !weakGPU && (strongGPU || (cores >= 8 && mem >= 8))) return 'high';
-  return 'medium';
+  return detectTier().tier === 'low' ? 'low' : 'medium';
 }
 
-// KEY holds the player's OWN choice (sacred). AUTO_KEY remembers what the
-// auto-tuner settled on, so a machine doesn't have to re-learn every session —
-// while staying "auto", free to re-tune if the device or driver changes.
-function readKey(k) {
+function defaultStorage() {
+  try { return globalThis.localStorage; } catch { return null; }
+}
+
+function readKey(storage, key) {
   try {
-    const v = localStorage.getItem(k);
-    if (v && GRAPHICS_PRESETS[v]) return v;
-  } catch { /* ignore */ }
+    const value = storage?.getItem(key);
+    if (value && GRAPHICS_PRESETS[value]) return value;
+  } catch { /* Storage may be blocked. */ }
   return null;
 }
 
-class GraphicsSystem {
-  constructor() {
-    const chosen = readKey(KEY);
-    this.autoDetected = !chosen;
-    this.name = chosen || readKey(AUTO_KEY) || autoDefault();
+function writeKey(storage, key, value) {
+  try { storage?.setItem(key, value); } catch { /* Storage may be blocked. */ }
+}
+
+function capAutoStart(name) {
+  const ceiling = PRESET_ORDER.indexOf(AUTO_START_CEILING);
+  const index = PRESET_ORDER.indexOf(name);
+  return PRESET_ORDER[Math.min(index < 0 ? ceiling : index, ceiling)];
+}
+
+function lowerPreset(a, b) {
+  const ai = PRESET_ORDER.indexOf(a);
+  const bi = PRESET_ORDER.indexOf(b);
+  return PRESET_ORDER[Math.min(ai < 0 ? 1 : ai, bi < 0 ? 1 : bi)];
+}
+
+export function nextLowerGraphicsPreset(name) {
+  const index = PRESET_ORDER.indexOf(name);
+  return index > 0 ? PRESET_ORDER[index - 1] : PRESET_ORDER[0];
+}
+
+export class GraphicsSystem {
+  constructor({
+    storage,
+    detectedPreset,
+    sampleFrames = AUTO_SAMPLE_FRAMES,
+    cooldownFrames = AUTO_COOLDOWN_FRAMES,
+  } = {}) {
+    this.storage = storage === undefined ? defaultStorage() : storage;
+    const chosen = readKey(this.storage, KEY);
+    const remembered = readKey(this.storage, AUTO_KEY);
+    this.provenance = chosen ? 'explicit' : 'auto';
+    const detected = capAutoStart(detectedPreset || autoDefault());
+    // Hardware can change between visits (desktop save opened on a phone,
+    // battery mode, remote session). A remembered auto result is only a
+    // ceiling; current weaker-device evidence always wins.
+    this.name = chosen || (remembered
+      ? lowerPreset(capAutoStart(remembered), detected)
+      : detected);
+
+    // Migrate an old automatic High result to the conservative ceiling.
+    if (!chosen && remembered && remembered !== this.name) {
+      writeKey(this.storage, AUTO_KEY, this.name);
+    }
+
+    this.sampleFrames = Math.max(1, sampleFrames);
+    this.cooldownFrames = Math.max(0, cooldownFrames);
+    this._cooldown = 0;
     this.subs = new Set();
   }
 
+  get autoDetected() { return this.provenance === 'auto'; }
+  get isExplicit() { return this.provenance === 'explicit'; }
   get preset() { return GRAPHICS_PRESETS[this.name]; }
   get dprCap() { return this.preset.dprCap; }
   get particleScale() { return this.preset.particleScale; }
   get contactShadow() { return this.preset.contactShadow; }
   get fogFar() { return this.preset.fogFar; }
+  get anisotropy() { return this.preset.anisotropy; }
 
   // Scale a base particle count by the preset (min 3 so effects never vanish).
   particles(base) { return Math.max(3, Math.round(base * this.particleScale)); }
 
   set(name) {
-    if (!GRAPHICS_PRESETS[name] || name === this.name) return;
+    if (!GRAPHICS_PRESETS[name]) return;
+    const previous = this.name;
     this.name = name;
-    this.autoDetected = false; // a hand-picked preset is the player's, forever
-    try { localStorage.setItem(KEY, name); } catch { /* ignore */ }
-    this._notify();
-  }
-
-  // AUTO-TUNE (D14): correct the opening guess from REAL frames. Only ever runs
-  // while the preset is still auto-detected — one step per session, in either
-  // direction, and only on a long, clean sample so a loading hitch or a heavy
-  // cutscene can't move it. `ms` samples must be FULL-RATE frames only (the
-  // power governor's eco frames are 33ms by design — see core/app.js).
-  sampleFrame(ms) {
-    if (!this.autoDetected || this._tuned) return;
-    const s = this._s || (this._s = { n: 0, slow: 0, fast: 0 });
-    s.n += 1;
-    if (ms > 20) s.slow += 1;        // ≈ under 50fps
-    else if (ms < 12.5) s.fast += 1; // ≈ comfortably over 80fps of headroom
-    if (s.n < 600) return;           // ~10s of full-rate frames before judging
-    const slowPct = s.slow / s.n, fastPct = s.fast / s.n;
-    const order = ['low', 'medium', 'high'];
-    const i = order.indexOf(this.name);
-    let next = this.name;
-    if (slowPct > 0.25 && i > 0) next = order[i - 1];            // struggling → step down
-    else if (fastPct > 0.85 && i < order.length - 1) next = order[i + 1]; // loads of room → step up
+    this.provenance = 'explicit';
     this._s = null;
-    if (next === this.name) return;
-    this._tuned = true; // one correction per session; no yo-yo
-    this.name = next;
-    try { localStorage.setItem(AUTO_KEY, next); } catch { /* ignore */ }
-    this._notify(); // autoDetected stays true — this is still the game choosing
+    this._cooldown = 0;
+    writeKey(this.storage, KEY, name);
+
+    // Clicking the currently selected preset is still an explicit request:
+    // if adaptive quality shed DPR, this lets the player restore its full cap.
+    this._notify({ source: 'explicit', previous, name });
   }
 
-  subscribe(fn) { this.subs.add(fn); return () => this.subs.delete(fn); }
-  _notify() { for (const fn of this.subs) { try { fn(this); } catch { /* ignore */ } } }
+  // Only FULL-RATE samples belong here (core/app.js excludes intentional eco
+  // frames). Sustained slowness may repeatedly step down, with a cooldown.
+  // There is deliberately no timed promotion: deadline-paced dt cannot prove
+  // CPU/GPU headroom. Only an explicit player choice can move quality up.
+  sampleFrame(ms) {
+    if (!this.autoDetected || this.name === 'low' || !Number.isFinite(ms)) return;
+    if (this._cooldown > 0) {
+      this._cooldown -= 1;
+      return;
+    }
+
+    const sample = this._s || (this._s = { n: 0, totalMs: 0, over22: 0 });
+    sample.n += 1;
+    sample.totalMs += ms;
+    if (ms > 22) sample.over22 += 1;
+    if (sample.n < this.sampleFrames) return;
+
+    // Judge achieved cadence over a window. Fractional monitor schedules are
+    // healthy but alternate short/long deltas (90Hz: ~11/22ms); classifying
+    // each >20ms delta as a miss falsely demoted an exact 60fps render stream.
+    const averageMs = sample.totalMs / sample.n;
+    const overBudgetRatio = sample.over22 / sample.n;
+    this._s = null;
+    const struggling = averageMs > 20.5
+      || (averageMs > 18.5 && overBudgetRatio >= 0.25);
+    if (!struggling) return;
+
+    const next = nextLowerGraphicsPreset(this.name);
+    if (next === this.name) return;
+    const previous = this.name;
+    this.name = next;
+    this._cooldown = this.cooldownFrames;
+    writeKey(this.storage, AUTO_KEY, next);
+    this._notify({ source: 'auto', previous, name: next });
+  }
+
+  subscribe(fn) {
+    this.subs.add(fn);
+    return () => this.subs.delete(fn);
+  }
+
+  _notify(change) {
+    for (const fn of this.subs) {
+      try { fn(this, change); } catch { /* One subscriber must not break settings. */ }
+    }
+  }
 }
 
 export const Graphics = new GraphicsSystem();

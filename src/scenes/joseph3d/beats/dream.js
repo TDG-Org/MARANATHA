@@ -1,6 +1,7 @@
 import { WEB, NARRATION } from '../../../data/versesWEB.js';
 import { Narrator } from '../../../systems/Narrator.js';
 import { isAbortError } from '../../../core/async.js';
+import { nearestUnbowedBundle } from './helpers.js';
 
 // SCENE 1 — Joseph, Genesis 37:1–11. The story is DATA + gates; this act's
 // beats are plain async functions over the shared scene context (`ctx`) and the
@@ -9,13 +10,72 @@ import { isAbortError } from '../../../core/async.js';
 // ACT 2 — THE DREAM (Gen 37:7, 37:9): the wheat field, the climb, and the
 // summit where the sky bows. NOTE: the finale descent is signed off by Nate
 // ("PERFECT! dont touch it more") — do not restage it.
-export function makeDreamBeat(ctx, h) {
+export function makeDreamBeat(ctx, h, { firstTell } = {}) {
   const { seq, wait, gate } = h;
+  const BROTHERS = ['judah', 'reuben', 'simeon', 'levi'];
+
+  // Both dreams wake through the same authored tent-to-camp handoff. Every
+  // expensive stage switch and teleport occurs behind black; control returns
+  // only after the new objective and guide agree.
+  async function wakeToCamp({ heading, objective, hint }) {
+    const D = ctx.dream;
+    ctx.postFX.setFilter('none', 1400);
+    ctx.joseph.root.position.y = 0;
+    D.group.visible = false;
+    D.resetSky();
+    const T = ctx.tentInterior;
+    T.group.visible = true;
+    ctx.setStage?.('tent');
+    ctx.grading.set('goldenHour');
+    ctx.onDawn?.();
+    ctx.controller.bounds = {
+      minX: T.POS.x - 3.4, maxX: T.POS.x + 3.4,
+      minZ: T.POS.z - 3.4, maxZ: T.POS.z + 3.4,
+    };
+    ctx.joseph.setPosition(T.POS.x + 0.5, T.POS.z + 0.7);
+    ctx.joseph.turnToward(0.3, 1);
+    ctx.joseph.play('kneel');
+    ctx.camera.cinematicMoveTo({
+      angle: -Math.PI * 0.3,
+      target: { x: T.POS.x, z: T.POS.z },
+      distance: 3.2, height: 1.4, lookHeight: 1.0, duration: 1,
+    });
+    ctx.camera.snap();
+    ctx.setMusic('music.camp_warm');
+    await seq([
+      { t: 'grade', mood: 'goldenHour', ms: 30 },
+      { t: 'fade', on: false, ms: 1500 },
+      { t: 'title', heading, sub: 'Hebron', holdMs: 2600 },
+      { t: 'fn', fn: async () => { ctx.joseph.play('idle'); await wait(900); } },
+      { t: 'fade', on: true, ms: 650 },
+    ]);
+
+    // The visible camp replaces the isolated tent stage only under black.
+    T.group.visible = false;
+    ctx.setStage?.('camp');
+    ctx.controller.bounds = ctx.bounds;
+    ctx.joseph.setPosition(-8.2, -4.2);
+    ctx.joseph.turnToward(1, 0.3);
+    ctx.camera.release(1);
+    ctx.camera.snap();
+    BROTHERS.forEach((k) => {
+      ctx.npcs.freeze(ctx.cast[k], false);
+      ctx.cast[k].char.play('idle');
+    });
+    await seq([
+      { t: 'fade', on: false, ms: 700 },
+      { t: 'letterbox', on: false },
+    ]);
+    ctx.hud.setObjective(objective, hint);
+    ctx.guide.setTargetXZ(0.8, -6.6);
+    ctx.setInput(true);
+  }
 
   // ---------- beat 5 · 💤 THE DREAM ----------
   async function dream() {
     const D = ctx.dream;
     ctx.setInput(false);
+    ctx.hud.clearObjective?.();
     // we arrive already asleep in the dark (beat 4 faded to black at the tent).
     // deepen to night behind the black, swap to the dream music, then slip in.
     await seq([
@@ -27,6 +87,7 @@ export function makeDreamBeat(ctx, h) {
     // slip into the dream field (behind the black). The campfire beat left the
     // camera HOLDING its authored ring shot — release the pose or the whole
     // dream plays on a camera locked 60u away (the review's softlock finding).
+    ctx.setStage?.('dream');
     D.group.visible = true;
     D.resetSky();
     ctx.joseph.setPosition(D.FIELD.x, D.FIELD.z + 9);
@@ -53,10 +114,11 @@ export function makeDreamBeat(ctx, h) {
       // foreshadowing. (Gen 37:5's card now lands at the campfire telling,
       // where the telling actually happens.)
       { t: 'fn', fn: async () => {
+        ctx.storyEvent?.('dream1');
         ctx.hud.emote('Joseph is dreaming');
         const line = Narrator.speak(NARRATION.dream_begins.text, NARRATION.dream_begins.vo, { signal: ctx.signal });
         line.catch((e) => { if (!isAbortError(e)) console.error('[dream narration]', e); });
-        await ctx.cinema.titleCard({ heading: 'That night', sub: 'Joseph began to dream', holdMs: 2400 });
+        await ctx.cinema.titleCard({ heading: 'Joseph dreamed', sub: 'A field of wheat', holdMs: 2400 });
         await line;
       } },
       { t: 'letterbox', on: false },
@@ -66,6 +128,11 @@ export function makeDreamBeat(ctx, h) {
 
     // each sheaf bows as Joseph draws near
     let bowed = 0;
+    const retargetBundleGuide = () => {
+      const next = nearestUnbowedBundle(D.outer, ctx.joseph.position);
+      if (next) ctx.guide.setTargetXZ(next.position.x, next.position.z);
+      else ctx.guide.setTarget(null);
+    };
     const allBowed = gate(() => new Promise((resolve) => {
       D.outer.forEach((s, i) => {
         ctx.interactables.addTrigger({
@@ -76,31 +143,76 @@ export function makeDreamBeat(ctx, h) {
             bowed += 1;
             ctx.hud.flashCount('🌾', bowed, D.outer.length);
             ctx.hud.setObjective(`The wheat bundles bow — ${bowed} of ${D.outer.length}.`);
+            retargetBundleGuide();
             if (bowed >= D.outer.length) resolve();
           },
         });
       });
     }));
-    ctx.guide.setTargetXZ(D.outer[0].position.x, D.outer[0].position.z);
+    retargetBundleGuide();
     await allBowed;
     ctx.guide.setTarget(null);
     ctx.sound('ui.chime');
     await ctx.hud.completeObjective('Every bundle of wheat bowed!'); // D9: let it land
 
-    // dream 1 answered (the field). A MOUNTAIN looms in the north — the dreamer
-    // climbs it. (short playable ascent → the summit where the sky bows)
+    // Scripture places the first telling and the brothers' response BEFORE
+    // Joseph dreams again (Genesis 37:5–9). Wake, let the player carry that
+    // dream to them, then enter the later sky dream without renumbering beat 5.
     await seq([
       { t: 'objective', text: '' },
       { t: 'verse', verse: WEB.gen_37_7 },
       { t: 'verseHide' },
+      { t: 'letterbox', on: true },
+      { t: 'fade', on: true, ms: 1200 },
     ]);
-    ctx.hud.setObjective('A mountain rises in the north. Climb to its summit.', 'Follow the glowing stones up the slope.');
+    await wakeToCamp({
+      heading: 'When Joseph awoke',
+      objective: 'Tell your brothers your dream.',
+      hint: 'Walk to your brothers by the fire.',
+    });
+    if (typeof firstTell !== 'function') throw new Error('Scene 1 first telling is not wired');
+    await firstTell();
+    ctx.storyEvent?.('response1');
+
+    // A clean black bridge says only what Scripture says: Joseph later dreamed
+    // again. The summit choreography below is unchanged; the mountain/cairns
+    // remain stylized traversal rather than a claimed part of the vision.
+    await seq([{ t: 'fade', on: true, ms: 1100 }]);
+    BROTHERS.forEach((k) => {
+      ctx.npcs.freeze(ctx.cast[k], false);
+      ctx.cast[k].char.play('idle');
+    });
+    ctx.setStage?.('dream');
+    D.group.visible = true;
+    D.resetSky();
+    D.center.visible = false;
+    D.outer.forEach((s) => { s.visible = false; });
+    ctx.joseph.setPosition(D.FIELD.x, D.FIELD.z + 9);
+    ctx.controller.bounds = {
+      minX: D.FIELD.x - 13, maxX: D.FIELD.x + 13,
+      minZ: D.FIELD.z - 13, maxZ: D.FIELD.z + 13,
+    };
+    ctx.camera.release(1);
+    ctx.camera.snap();
+    ctx.grading.set('dream');
+    D.showMoon(1);
+    ctx.postFX.setFilter('dream', 1400);
+    ctx.setMusic('music.dream_wonder');
+    ctx.storyEvent?.('dream2');
+    await seq([
+      { t: 'title', heading: 'Joseph dreamed again', sub: 'The sun, moon, and eleven stars', holdMs: 2600 },
+      { t: 'fade', on: false, ms: 1100, pulse: false },
+      { t: 'letterbox', on: false },
+    ]);
+
+    ctx.hud.setObjective('Follow the glowing stones.', 'Walk north along the glowing path.');
     const base = { x: D.FIELD.x, z: D.FIELD.z - 11.5 };
     ctx.guide.setTargetXZ(base.x, base.z);
     ctx.setInput(true);
     await gate(() => new Promise((resolve) => {
       ctx.interactables.addTrigger({ id: 'summit-reach', x: base.x, z: base.z, r: 2.8, once: true, onEnter: resolve });
     }));
+    ctx.hud.clearObjective?.();
     ctx.guide.setTarget(null);
     ctx.setInput(false);
 
@@ -169,46 +281,18 @@ export function makeDreamBeat(ctx, h) {
         if (p) { p.pos.set(CAMX, CAMY, CAMZ); p.look.set(CAMX, SY + 2.3, D.FIELD.z - 8); }
         ctx.camera.setStill(true);   // not even the breathing — a held still
       } },
-      { t: 'verse', verse: WEB.gen_37_9 },
-      { t: 'verseHide' },
-      { t: 'wait', ms: 1400 },
+      // Verse 9 also says Joseph told this dream to his brothers. Hold the
+      // signed-off image here; its full card/VO lands after he actually tells
+      // them, so presentation and Scripture stay in the same order.
+      { t: 'wait', ms: 2800 },
       { t: 'letterbox', on: true }, // (re-arms the drift for the scenes after)
       { t: 'fade', on: true, ms: 1500 },
     ]);
-    // 5) WAKE → inside the tent at MORNING; Joseph rises, then steps out to tell
-    ctx.postFX.setFilter('none', 1400);        // the dream look lifts with him
-    ctx.joseph.root.position.y = 0;            // back down to the ground
-    D.group.visible = false;
-    D.resetSky();
-    const T = ctx.tentInterior;
-    T.group.visible = true;
-    ctx.grading.set('goldenHour');             // warm morning light in the tent
-    ctx.onDawn?.();                            // the night's fireflies fade out
-    ctx.controller.bounds = { minX: T.POS.x - 3.4, maxX: T.POS.x + 3.4, minZ: T.POS.z - 3.4, maxZ: T.POS.z + 3.4 };
-    ctx.joseph.setPosition(T.POS.x + 0.5, T.POS.z + 0.7);
-    ctx.joseph.turnToward(0.3, 1);
-    ctx.joseph.play('kneel');                  // still down from sleep
-    ctx.camera.cinematicMoveTo({ angle: -Math.PI * 0.3, target: { x: T.POS.x, z: T.POS.z }, distance: 3.2, height: 1.4, lookHeight: 1.0, duration: 1 });
-    ctx.camera.snap();
-    ctx.setMusic('music.camp_warm');
-    await seq([
-      { t: 'grade', mood: 'goldenHour', ms: 30 },
-      { t: 'fade', on: false, ms: 1500 },      // waking: morning sun through the tent
-      { t: 'title', heading: 'The next morning', sub: 'Hebron', holdMs: 2600 },
-      { t: 'fn', fn: async () => { ctx.joseph.play('idle'); await wait(900); } }, // rises
-      { t: 'letterbox', on: false },
-    ]);
-    // step out into the golden morning → go tell the brothers
-    T.group.visible = false;
-    ctx.controller.bounds = ctx.bounds;
-    ctx.joseph.setPosition(-8.2, -4.2);
-    ctx.joseph.turnToward(1, 0.3);
-    ctx.camera.release(1);
-    ctx.camera.snap();
-    ['judah', 'reuben', 'simeon', 'levi'].forEach((k) => { ctx.npcs.freeze(ctx.cast[k], false); ctx.cast[k].char.play('idle'); });
-    ctx.hud.setObjective('Go and tell your brothers your dream.', 'Walk to your brothers.');
-    ctx.guide.setTargetXZ(0.8, -6.6);
-    ctx.setInput(true);
+    await wakeToCamp({
+      heading: 'When Joseph awoke',
+      objective: 'Tell your brothers the second dream.',
+      hint: 'Walk to your brothers by the fire.',
+    });
   }
 
   return { dream };

@@ -55,6 +55,11 @@ export class Interactables {
     // Click/tap the CHARACTER directly (ui-clarity law 6) + pointer cursor.
     this._ray = new THREE.Raycaster();
     this._ndc = new THREE.Vector2();
+    this._hoverDirty = false;
+    // Reused event-shaped scratch: a 1000 Hz gaming mouse must not allocate
+    // 1000 short-lived objects per second just to remember its latest point.
+    this._hoverPoint = { clientX: 0, clientY: 0, target: this.dom };
+    this._hasHoverPoint = false;
     this._castHit = (ev) => {
       const p = this._active;
       const obj = p && (typeof p.object === 'function' ? p.object() : p.object);
@@ -67,14 +72,27 @@ export class Interactables {
     };
     this._onDown = (ev) => {
       if (!this.enabled || this.busy || !this._active) return;
+      // Only the primary pointer's primary button may advance a story gate.
+      // Keep accepting older synthetic events that omit PointerEvent fields.
+      if (ev.isPrimary === false || (ev.button !== undefined && ev.button !== 0)) return;
       if (ev.target !== this.dom) return; // canvas only — never steal UI clicks
       if (this._castHit(ev)) this._interact();
     };
     this._onMove = (ev) => {
       if (!this.dom) return;
-      if (!this.enabled || this.busy || !this._active) { this.dom.style.cursor = ''; return; }
-      if (ev.target !== this.dom) return;
-      this.dom.style.cursor = this._castHit(ev) ? 'pointer' : '';
+      // A gaming mouse can dispatch hundreds or thousands of pointermove
+      // events per second. Store only the latest point here; update() performs
+      // at most one hover raycast on the frame governor.
+      if (!this.enabled || this.busy || ev.target !== this.dom) {
+        this._hasHoverPoint = false;
+        this._hoverDirty = false;
+        this.dom.style.cursor = '';
+        return;
+      }
+      this._hoverPoint.clientX = ev.clientX;
+      this._hoverPoint.clientY = ev.clientY;
+      this._hasHoverPoint = true;
+      this._hoverDirty = true;
     };
     if (this.dom) {
       this.dom.addEventListener('pointerdown', this._onDown);
@@ -93,6 +111,8 @@ export class Interactables {
     if (!on) {
       this.pill.style.display = 'none';
       this._active = null;
+      this._hasHoverPoint = false;
+      this._hoverDirty = false;
       if (this.dom) this.dom.style.cursor = ''; // never a stuck pointer cursor
     }
   }
@@ -135,8 +155,18 @@ export class Interactables {
       const d = Math.hypot(at.x - pp.x, at.z - pp.z);
       if (d < p.r && d < bestD) { bestD = d; best = p; best._px = at.x; best._pz = at.z; }
     }
+    const activeChanged = this._active !== best;
     this._active = best;
-    if (!best) { this.pill.style.display = 'none'; return; }
+    if (!best) {
+      this.pill.style.display = 'none';
+      if (this.dom) this.dom.style.cursor = '';
+      return;
+    }
+    if (activeChanged && this._hasHoverPoint) this._hoverDirty = true;
+    if (!this._touch && this.dom && this._hoverDirty) {
+      this._hoverDirty = false;
+      this.dom.style.cursor = this._hasHoverPoint && this._castHit(this._hoverPoint) ? 'pointer' : '';
+    }
 
     if (!this._v) this._v = this.camera.position.clone();
     this._v.set(best._px, (best.y ?? 0) + (best.lift ?? 1.9), best._pz);

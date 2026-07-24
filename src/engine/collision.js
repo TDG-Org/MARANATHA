@@ -5,18 +5,30 @@
 export class ColliderWorld {
   constructor() {
     this.statics = []; // {type:'circle',x,z,r} | {type:'aabb',minX,minZ,maxX,maxZ}
+    // Monotonic topology version for idle-body collision gates. Static
+    // colliders are immutable after add in Scene 1; add/clear are the only
+    // operations that can invalidate an already-resolved stationary body.
+    this.revision = 0;
   }
 
-  add(c) { this.statics.push(c); return c; }
+  add(c) {
+    this.statics.push(c);
+    this.revision += 1;
+    return c;
+  }
   addCircle(x, z, r) { return this.add({ type: 'circle', x, z, r }); }
   addAABB(minX, minZ, maxX, maxZ) { return this.add({ type: 'aabb', minX, minZ, maxX, maxZ }); }
-  clear() { this.statics.length = 0; }
+  clear() {
+    this.statics.length = 0;
+    this.revision += 1;
+  }
 
   // Resolve a moving circle at pos {x,z} with radius r against all statics
   // (+ optional dynamic circles like NPCs). Mutates pos. ≤3 iterations; total
   // correction clamped so bad data can never teleport anyone.
   resolve(pos, r, dynamics = null) {
     let totalCorr = 0;
+    let settled = false;
     for (let iter = 0; iter < 3; iter++) {
       let pushed = false;
       for (let i = 0; i < this.statics.length; i++) {
@@ -30,10 +42,17 @@ export class ColliderWorld {
           pushed = this._push(pos, r, d) || pushed;
         }
       }
-      if (!pushed) break;
+      if (!pushed) {
+        settled = true;
+        break;
+      }
       totalCorr += 1;
       if (totalCorr >= 3) break;
     }
+    // False is conservative: the third correction may have fully separated
+    // the body, but one cheap follow-up resolve proves it before an idle gate
+    // marks the static world clean.
+    return settled;
   }
 
   _push(pos, r, c) {
@@ -74,6 +93,32 @@ export class ColliderWorld {
     return true;
   }
 
+  // Cheap idle-body guard: true only when resolve() would move pos against
+  // one of the supplied live colliders. This deliberately mirrors _push's
+  // contact rules, including its exact-center circle no-op, but never scans
+  // the (much larger) static world.
+  hasResolvableOverlap(pos, r, dynamics) {
+    if (!dynamics) return false;
+    for (let i = 0; i < dynamics.length; i++) {
+      const c = dynamics[i];
+      if (c.skip) continue;
+      if (c.type === 'circle') {
+        const dx = pos.x - c.x;
+        const dz = pos.z - c.z;
+        const min = r + c.r;
+        const d2 = dx * dx + dz * dz;
+        if (d2 < min * min && d2 !== 0) return true;
+        continue;
+      }
+      const cx = Math.max(c.minX, Math.min(pos.x, c.maxX));
+      const cz = Math.max(c.minZ, Math.min(pos.z, c.maxZ));
+      const dx = pos.x - cx;
+      const dz = pos.z - cz;
+      if (dx * dx + dz * dz < r * r) return true;
+    }
+    return false;
+  }
+
   // True if a circle at (x,z,r) would overlap anything (spawn checks). Pass
   // skipGroup to ignore a family of colliders (e.g. 'border' so clustering
   // rocks/trees don't count as overlapping each other).
@@ -92,5 +137,31 @@ export class ColliderWorld {
       }
     }
     return false;
+  }
+}
+
+// One allocation per moving body, zero allocations per frame. A body needs a
+// full static-world resolve only after it moved/teleported, the static topology
+// changed, or a live collider moved into it. ColliderWorld-like test doubles
+// without the cheap overlap query conservatively keep the legacy behavior.
+export class CollisionGate {
+  constructor() {
+    this.x = NaN;
+    this.z = NaN;
+    this.revision = -1;
+  }
+
+  needsResolve(world, pos, r, dynamics = null) {
+    const revision = world.revision ?? 0;
+    if (pos.x !== this.x || pos.z !== this.z || revision !== this.revision) return true;
+    if (!dynamics?.length) return false;
+    if (typeof world.hasResolvableOverlap !== 'function') return true;
+    return world.hasResolvableOverlap(pos, r, dynamics);
+  }
+
+  commit(world, pos) {
+    this.x = pos.x;
+    this.z = pos.z;
+    this.revision = world.revision ?? 0;
   }
 }

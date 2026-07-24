@@ -64,7 +64,11 @@ export function buildJoseph({ scene, camera, renderer, app, signal = null }) {
   follow.frame(0);
 
   const guide = new Guidance(scene);
-  const dialogue = createDialogue({ signal });
+  const isScenePaused = () => app.paused || document.hidden;
+  const dialogue = createDialogue({
+    signal,
+    isPaused: isScenePaused,
+  });
   const verse = createVerseDisplay({ signal });
 
   const hud = createStoryHud({
@@ -78,6 +82,7 @@ export function buildJoseph({ scene, camera, renderer, app, signal = null }) {
       if (leave) app.navigate('home'); else if (!storyOver) controller.setEnabled(true);
     },
     signal,
+    isPaused: isScenePaused,
   });
 
   const interaction = new Interaction({ camera, getPlayerPos: () => joseph.position });

@@ -326,15 +326,17 @@ export function makeMotes({ count = 110, color = 0xfff3d6, spanX = 120, spanZ = 
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setDrawRange(0, count);
   const points = new THREE.Points(geo, new THREE.PointsMaterial({
     map: glowTexture(64), color, size: 0.55, sizeAttenuation: true,
     transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending,
     depthWrite: false, fog: true,
   }));
   const half = spanX / 2 + 2;
+  let activeCount = count;
   function update(dt, t) {
     const mp = geo.attributes.position;
-    for (let i = 0; i < count; i++) {
+    for (let i = 0; i < activeCount; i++) {
       let x = mp.getX(i) - dt * 0.0006 * (6 + Math.sin(seed[i]) * 3);
       if (x < -half) x += half * 2;
       mp.setX(i, x);
@@ -342,7 +344,11 @@ export function makeMotes({ count = 110, color = 0xfff3d6, spanX = 120, spanZ = 
     }
     mp.needsUpdate = true;
   }
-  return { points, update };
+  function setActiveCount(next) {
+    activeCount = Math.max(0, Math.min(count, Math.round(next)));
+    geo.setDrawRange(0, activeCount);
+  }
+  return { points, update, setActiveCount, get activeCount() { return activeCount; } };
 }
 
 // --- Billboarding: yaw-only so sprites stay upright as the camera moves -----

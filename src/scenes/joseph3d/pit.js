@@ -103,8 +103,8 @@ export function buildPitStage(tex = {}) {
   const coatProp = new THREE.Mesh(new THREE.PlaneGeometry(0.55, 0.8), new THREE.MeshBasicMaterial({ color: 0xb5643c, side: THREE.DoubleSide, fog: true }));
   coatProp.visible = false; group.add(coatProp);
 
-  // D8 shot 5: a faint WARM light far off in the direction the brothers walk —
-  // the fires of the camp they return to, while the boy stays in the cold dark.
+  // D8 shot 5: a faint WARM light in the direction the brothers walk — the
+  // nearby meal/fire of Genesis 37:25, while the boy stays in the cold dark.
   const glowTex = (() => {
     const c = document.createElement('canvas'); c.width = c.height = 64;
     const g2 = c.getContext('2d');
@@ -115,17 +115,17 @@ export function buildPitStage(tex = {}) {
     g2.fillStyle = g; g2.fillRect(0, 0, 64, 64);
     return new THREE.CanvasTexture(c);
   })();
-  // D11: deeper fire-red + smaller — it must read as distant CAMPFIRES, never
+  // D11: deeper fire-red + smaller — it must read as a distant MEAL FIRE, never
   // as a sunrise on the horizon (the pit plays as night).
-  const campGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0xff8f4a, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
-  campGlow.position.set(PIT.x + 30, 2.0, PIT.z - 9);
-  campGlow.scale.set(7, 4.2, 1);
-  group.add(campGlow);
+  const mealGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0xff8f4a, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+  mealGlow.position.set(PIT.x + 30, 2.0, PIT.z - 9);
+  mealGlow.scale.set(7, 4.2, 1);
+  group.add(mealGlow);
 
   return {
     group, PIT, coatProp, skyLight,
     setSkyLight(k) { skyLight.material.opacity = 0.9 * k; },
-    setCampGlow(k) { campGlow.material.opacity = 0.6 * k; },
+    setMealGlow(k) { mealGlow.material.opacity = 0.6 * k; },
     shrinkSkyLight(k) { skyLight.scale.setScalar(8 - 6.5 * k); }, // k 0→1 closes over him
     update() { /* static set — the beat animates the cast */ },
     dispose() {

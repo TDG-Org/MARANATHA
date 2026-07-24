@@ -264,7 +264,18 @@ export class Character3D {
       const mat = this._toon(0xffffff, { vertexColors: true });
       const mesh = new THREE.SkinnedMesh(mergedGeo, mat);
       mesh.bind(ref.skeleton, ref.bindMatrix.clone());
-      mesh.frustumCulled = false; // skinned bounds are unreliable; chars are few
+      // The old blanket `frustumCulled=false` forced every off-camera body
+      // through skeleton upload + draw submission, including the camp while
+      // the story was 60u away in the dream/pit. Use a deliberately generous
+      // clip-safe sphere instead: the bind-pose body plus 1.5u easily contains
+      // KayKit's widest run/talk/kneel limbs, while genuinely remote actors
+      // can finally sleep before WebGLObjects updates their skeleton texture.
+      mergedGeo.computeBoundingSphere();
+      if (mergedGeo.boundingSphere) {
+        mesh.boundingSphere = mergedGeo.boundingSphere.clone();
+        mesh.boundingSphere.radius += 1.5;
+      }
+      mesh.frustumCulled = true;
       ref.parent.add(mesh);
       return mesh;
     } catch (e) {

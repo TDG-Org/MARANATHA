@@ -23,30 +23,63 @@ import { abortReason, throwIfAborted, withAbort } from '../core/async.js';
 //   { t:'sound', key }                        — manifest one-shot
 //   { t:'wait', ms }
 //   { t:'fn', fn }                            — escape hatch (async ok)
-// A wait that honours the pause menu: wall-clock setTimeout would let
-// cutscenes advance behind the pause overlay (checkpoints saving, the close
-// beat dumping a paused player to the home screen). Poll in small steps and
-// simply don't count time while isPaused() is true.
+// A wait that honours pause + hidden-tab ownership. In the browser it sleeps
+// event-driven with NO polling wakeups while paused; the small polling fallback
+// exists only for non-DOM harnesses whose arbitrary predicate has no event.
 export const pausableWait = (ms, isPaused = null, signal = null) => new Promise((resolve, reject) => {
   if (signal?.aborted) { reject(abortReason(signal)); return; }
   if (!ms || ms <= 0) { resolve(); return; }
   let left = ms;
   const step = 50;
   let settled = false;
+  let timer = null;
+  const win = globalThis.window;
+  const doc = globalThis.document;
+  const eventDriven = !!(
+    isPaused
+    && win?.addEventListener && win?.removeEventListener
+    && doc?.addEventListener && doc?.removeEventListener
+  );
   const finish = (error = null) => {
     if (settled) return;
     settled = true;
-    clearInterval(id);
+    if (timer) clearTimeout(timer);
     signal?.removeEventListener('abort', onAbort);
+    if (eventDriven) {
+      win.removeEventListener('maranatha-pausechange', onPauseState);
+      doc.removeEventListener('visibilitychange', onPauseState);
+    }
     if (error) reject(error); else resolve();
   };
   const onAbort = () => finish(abortReason(signal));
-  const id = setInterval(() => {
-    if (isPaused && isPaused()) return;
-    left -= step;
+  const schedule = () => {
+    if (settled || timer) return;
+    if (isPaused?.()) {
+      // Browser pause/visibility events wake this exactly once on resume.
+      if (!eventDriven) timer = setTimeout(tick, step);
+      return;
+    }
+    const slice = Math.min(step, left);
+    timer = setTimeout(() => tick(slice), slice);
+  };
+  const tick = (elapsed = 0) => {
+    timer = null;
+    if (isPaused?.()) { schedule(); return; }
+    left -= elapsed || Math.min(step, left);
     if (left <= 0) finish();
-  }, step);
+    else schedule();
+  };
+  const onPauseState = () => {
+    if (timer) clearTimeout(timer);
+    timer = null;
+    schedule();
+  };
   signal?.addEventListener('abort', onAbort, { once: true });
+  if (eventDriven) {
+    win.addEventListener('maranatha-pausechange', onPauseState);
+    doc.addEventListener('visibilitychange', onPauseState);
+  }
+  schedule();
 });
 
 export class Sequencer {
@@ -75,6 +108,7 @@ export class Sequencer {
       switch (s.t) {
         case 'letterbox':
           c.setInput?.(!s.on);
+          c.hud?.setLetterbox?.(!!s.on);
           // NEVER-STATIC default (cutscene-director): while the bars are up,
           // the camera is always on a slow authored drift.
           c.camera.setDrift?.(!!s.on);

@@ -10,10 +10,23 @@ import { createFramePacer } from './framePacer.js';
 // on dual-GPU laptops 'high-performance' would spin up the discrete chip
 // (fans + battery) for nothing. High is the deliberate opt-in. The context
 // is created once, so a preset change applies on the next reload.
+export function rendererPowerPreference(graphics = Graphics) {
+  return graphics?.provenance === 'explicit' && graphics?.name === 'high'
+    ? 'high-performance'
+    : 'low-power';
+}
+
+// Low is the explicit/budget-device preset: at its 1x DPR, disabling MSAA
+// removes a full multisample resolve and extra color/depth storage. Medium and
+// High retain the signed-off edge quality.
+export function rendererAntialias(graphics = Graphics) {
+  return graphics?.name !== 'low';
+}
+
 export function createRenderer(container) {
   const renderer = new THREE.WebGLRenderer({
-    antialias: true,
-    powerPreference: Graphics.name === 'high' ? 'high-performance' : 'low-power',
+    antialias: rendererAntialias(Graphics),
+    powerPreference: rendererPowerPreference(Graphics),
     stencil: false,
   });
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -35,6 +48,8 @@ export function createRenderer(container) {
 export function startLoop(tick, getFps = () => 60) {
   let raf = 0;
   let running = false;
+  let enabled = true;
+  let visible = !document.hidden;
   const pacer = createFramePacer(performance.now());
 
   const frame = (now) => {
@@ -45,22 +60,28 @@ export function startLoop(tick, getFps = () => 60) {
     tick(pacer.dt, now, fps);
   };
 
-  const start = () => {
-    if (running) return;
+  const startInternal = () => {
+    if (running || !enabled || !visible) return;
     running = true;
     pacer.reset(performance.now());
     raf = requestAnimationFrame(frame);
   };
-  const stop = () => {
+  const stopInternal = () => {
     running = false;
     cancelAnimationFrame(raf);
   };
+  // Public start/stop are an ownership latch (navigation/pause), distinct from
+  // visibility. Showing a tab must never restart a loop the app deliberately
+  // stopped for a pause or loading gate.
+  const start = () => { enabled = true; startInternal(); };
+  const stop = () => { enabled = false; stopInternal(); };
 
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) stop();
-    else start();
+    visible = !document.hidden;
+    if (!visible) stopInternal();
+    else startInternal();
   });
 
-  start();
+  startInternal();
   return { start, stop };
 }

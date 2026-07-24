@@ -12,7 +12,7 @@ import { openSettings } from '../ui/settings.js';
 // Phase C note: entry is gated by "is this story's scene built" (registered in
 // the app) rather than by progression lock — so Joseph is playable now, before
 // the Creation prologue (Phase B) exists.
-export function buildHome({ scene, camera, app }) {
+export function buildHome({ scene, camera, app, params = {} }) {
   scene.fog = new THREE.Fog(0xffdfba, 46, 250);
 
   const sky = makeSky({ top: 0xf2b880, bottom: 0xffe9c9 });
@@ -85,7 +85,7 @@ export function buildHome({ scene, camera, app }) {
       new THREE.MeshBasicMaterial({ map: cloudTex, transparent: true, opacity: far ? 0.5 : 0.68, depthWrite: false, fog: false }),
     );
     c.position.set(-70 + i * 34, 16 + (i % 3) * 5, far ? -150 : -110);
-    c.userData = { speed: far ? 0.35 : 0.6, span: 95 };
+    c.userData = { speed: far ? 0.35 : 0.6, span: 95, opacity: far ? 0.5 : 0.68 };
     clouds.push(c); scene.add(c);
   }
   const starTex = canvasTexture(32, 32, (sctx) => {
@@ -117,13 +117,23 @@ export function buildHome({ scene, camera, app }) {
   // the camp theme at low gain; falls back to the procedural pad if missing).
   let homeMusic = null;
   let disposed = false;
+  let activated = false;
+  let bedsStarted = false;
   const startBeds = () => {
+    if (bedsStarted) return;
     if (disposed) return; // fired after leaving home — must not start anything
+    bedsStarted = true;
     Audio.ambience({ wind: 0.22, birds: 0.18 });
     homeMusic = Audio.playLoop('music.camp_warm', { gain: 0.45 });
   };
-  if (Audio.on) startBeds();
-  else window.addEventListener('pointerdown', startBeds, { once: true });
+  const activate = () => {
+    if (disposed || activated) return;
+    activated = true;
+    // Build/prepaint remain silent behind the veil. The home soundscape starts
+    // only after the app reveals this screen, or on the first audio-unlock tap.
+    if (Audio.on) startBeds();
+    else window.addEventListener('pointerdown', startBeds, { once: true });
+  };
 
   // ---- DOM overlay ---------------------------------------------------------
   const root = document.createElement('div');
@@ -148,6 +158,41 @@ export function buildHome({ scene, camera, app }) {
     'margin-top:10px', 'font-size:clamp(12px,1.8vw,15px)', 'letter-spacing:0.16em',
     'opacity:0.72', 'text-shadow:0 1px 6px rgba(15,12,26,0.6)',
   ].join(';');
+
+  // Lazy-screen and minimum-readiness failures return here behind the black
+  // veil. Make recovery explicit: retry without losing the map, or reload if
+  // the browser cached a failed module request.
+  const failedRoute = params.loadError?.key;
+  const loadNotice = failedRoute ? document.createElement('div') : null;
+  if (loadNotice) {
+    loadNotice.setAttribute('role', 'alert');
+    loadNotice.style.cssText = [
+      'pointer-events:auto', 'width:min(88vw,440px)', 'box-sizing:border-box',
+      'margin-top:14px', 'padding:10px 12px', 'border-radius:11px',
+      'display:flex', 'align-items:center', 'justify-content:center', 'gap:10px', 'flex-wrap:wrap',
+      'background:rgba(55,25,24,0.88)', 'border:1px solid rgba(255,184,150,0.45)',
+      'font-size:13px', 'line-height:1.35', 'text-align:center',
+      'box-shadow:0 6px 20px rgba(0,0,0,0.24)',
+    ].join(';');
+    const message = document.createElement('span');
+    message.textContent = params.loadError.phase === 'assets'
+      ? 'The story assets did not finish loading.'
+      : 'The story could not be loaded.';
+    const retry = document.createElement('button');
+    retry.type = 'button';
+    retry.textContent = 'Try again';
+    retry.style.cssText = 'padding:7px 10px;border-radius:8px;border:0;background:#f2b880;color:#241f38;font-weight:650;cursor:pointer;';
+    retry.onclick = () => app.navigate(
+      failedRoute,
+      failedRoute === 'joseph' ? { storyId: 'joseph' } : undefined,
+    );
+    const reload = document.createElement('button');
+    reload.type = 'button';
+    reload.textContent = 'Reload';
+    reload.style.cssText = 'padding:7px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.32);background:transparent;color:#fdf6e3;font-weight:600;cursor:pointer;';
+    reload.onclick = () => window.location.reload();
+    loadNotice.append(message, retry, reload);
+  }
 
   const spacer = document.createElement('div');
   spacer.style.flex = '1';
@@ -185,19 +230,12 @@ export function buildHome({ scene, camera, app }) {
   // story — sits big at the CENTER with a pulsing gold ring; the future
   // stories float around him as smaller LOCKED nodes (🔒 + name), joined by a
   // slowly-shimmering dotted path. Everything drifts gently — the storefront
-  // breathes. Pure DOM/CSS + one SVG; no per-frame JS.
+  // breathes. Its animation is owned by this screen's governed update().
   // D12 power: the old pulse/glow keyframes animated BOX-SHADOW — a repaint of
   // every node, every frame, forever, on the screen people park on. The pulse
   // is now a ring pseudo-element animating transform+opacity only (composited,
-  // no rasterization), over a STATIC glow shadow.
-  const mapStyle = document.createElement('style');
-  mapStyle.textContent = `
-    @keyframes mr-node-float { 0%,100% { transform: translate(-50%,-50%) translateY(0); } 50% { transform: translate(-50%,-50%) translateY(-5px); } }
-    @keyframes mr-ring-pulse { 0% { transform: scale(0.92); opacity: 0.6; } 70% { transform: scale(1.32); opacity: 0; } 100% { transform: scale(1.32); opacity: 0; } }
-    @keyframes mr-seal-breathe { 0%,100% { opacity: 0.3; } 50% { opacity: 0.75; } }
-    @keyframes mr-path-shimmer { to { stroke-dashoffset: -64; } }
-  `;
-  document.head.append(mapStyle);
+  // no rasterization), over a STATIC glow shadow. The app clock drives it so
+  // a 240Hz display cannot wake the compositor independently of eco-30.
 
   const map = document.createElement('div');
   map.style.cssText = [
@@ -219,6 +257,7 @@ export function buildHome({ scene, camera, app }) {
   svg.setAttribute('viewBox', '0 0 100 100');
   svg.setAttribute('preserveAspectRatio', 'none');
   svg.style.cssText = 'position:absolute; inset:0; width:100%; height:100%; pointer-events:none;';
+  const shimmerPaths = [];
   {
     let d = '';
     PATH_ORDER.forEach((id, i) => {
@@ -227,7 +266,7 @@ export function buildHome({ scene, camera, app }) {
       const [px, py] = NODE_POS[PATH_ORDER[i - 1]];
       d += ` Q ${(px + x) / 2} ${py + (y - py) * 0.15}, ${x} ${y}`;
     });
-    const mk = (dd, stroke, width, opacity, dash, anim) => {
+    const mk = (dd, stroke, width, opacity, dash, shimmerSeconds = 0) => {
       const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
       p.setAttribute('d', dd);
       p.setAttribute('fill', 'none');
@@ -236,20 +275,24 @@ export function buildHome({ scene, camera, app }) {
       p.setAttribute('stroke-opacity', String(opacity));
       if (dash) p.setAttribute('stroke-dasharray', dash);
       p.setAttribute('stroke-linecap', 'round');
-      if (anim) p.style.animation = anim;
+      if (shimmerSeconds) {
+        p.userData = { shimmerSeconds };
+        shimmerPaths.push(p);
+      }
       svg.append(p);
       return p;
     };
     mk(d, '#f2b880', 3.4, 0.16);                                    // the warm road bed
-    mk(d, '#ffe9c9', 0.85, 0.85, '0.01 2.6', 'mr-path-shimmer 8s linear infinite'); // the walked dots
+    mk(d, '#ffe9c9', 0.85, 0.85, '0.01 2.6', 8); // the walked dots
     // …and the road that hasn't been walked yet, fading past Joseph
     const [jx, jy] = NODE_POS.joseph;
     mk(`M ${jx} ${jy} Q ${jx + 10} ${jy - 8}, ${jx + 17} ${jy - 16}`, '#f2b880', 1.6, 0.1);
-    mk(`M ${jx} ${jy} Q ${jx + 10} ${jy - 8}, ${jx + 17} ${jy - 16}`, '#ffe9c9', 0.7, 0.3, '0.01 3.4', 'mr-path-shimmer 11s linear infinite');
+    mk(`M ${jx} ${jy} Q ${jx + 10} ${jy - 8}, ${jx + 17} ${jy - 16}`, '#ffe9c9', 0.7, 0.3, '0.01 3.4', 11);
   }
   map.append(svg);
 
   let selectedId = null;
+  const animatedNodes = [];
 
   function selectStory(id) {
     selectedId = id;
@@ -280,6 +323,7 @@ export function buildHome({ scene, camera, app }) {
 
   function renderNodes() {
     [...map.querySelectorAll('button, .mr-node-label')].forEach((n) => n.remove());
+    animatedNodes.length = 0;
     for (const story of STORIES) {
       const built = !!(story.sceneKey && app.hasScreen(story.sceneKey));
       const status = statusOf(story.id);
@@ -300,15 +344,21 @@ export function buildHome({ scene, camera, app }) {
         `border:2px solid ${big ? 'rgba(242,184,128,0.55)' : 'rgba(255,255,255,0.18)'}`,
         // static glow (the pulse ring animates separately, composited-only)
         `box-shadow:${big ? '0 0 30px 7px rgba(255,196,120,0.45), 0 6px 24px rgba(0,0,0,0.4)' : 'inset 0 0 14px rgba(0,0,0,0.45), 0 4px 14px rgba(0,0,0,0.3), 0 0 14px 3px rgba(242,184,128,0.16)'}`,
-        `animation: mr-node-float ${5 + (x % 3)}s ease-in-out ${y % 4}s infinite`,
+        'will-change:transform',
         'transition:border-color 200ms ease, filter 160ms ease',
       ].join(';');
       node.textContent = built ? (status === 'done' ? '✔' : '▶') : '🔒';
       const ring = document.createElement('span');
       ring.style.cssText = big
-        ? 'position:absolute; inset:-5px; border-radius:50%; border:2px solid rgba(242,184,128,0.65); pointer-events:none; will-change:transform,opacity; animation: mr-ring-pulse 2.6s ease-out infinite;'
-        : `position:absolute; inset:-3px; border-radius:50%; border:1px solid rgba(242,184,128,0.4); pointer-events:none; will-change:opacity; animation: mr-seal-breathe ${3.4 + (x % 2)}s ease-in-out infinite;`;
+        ? 'position:absolute; inset:-5px; border-radius:50%; border:2px solid rgba(242,184,128,0.65); pointer-events:none; will-change:transform,opacity; transform:scale(0.92); opacity:0.6;'
+        : 'position:absolute; inset:-3px; border-radius:50%; border:1px solid rgba(242,184,128,0.4); pointer-events:none; will-change:opacity; opacity:0.3;';
       node.append(ring);
+      animatedNodes.push({
+        node, ring, big,
+        floatSeconds: 5 + (x % 3),
+        phaseSeconds: y % 4,
+        ringSeconds: big ? 2.6 : 3.4 + (x % 2),
+      });
       node.onmouseenter = () => { node.style.filter = 'brightness(1.12)'; };
       node.onmouseleave = () => { node.style.filter = 'none'; };
       node.onclick = () => { Audio.uiClick(); selectStory(story.id); };
@@ -383,7 +433,9 @@ export function buildHome({ scene, camera, app }) {
     links.append(a);
   });
 
-  root.append(title, subtitle, spacer, map, card);
+  root.append(title, subtitle);
+  if (loadNotice) root.append(loadNotice);
+  root.append(spacer, map, card);
   document.body.append(root, gear, links);
   requestAnimationFrame(() => { root.style.opacity = '1'; });
 
@@ -413,7 +465,29 @@ export function buildHome({ scene, camera, app }) {
     for (const c of clouds) {
       c.position.x += c.userData.speed * dt * 0.001;
       if (c.position.x > c.userData.span) c.position.x = -c.userData.span;
-      c.material.opacity += (Math.sin(t * 0.14 + c.position.z) * 0.0025);
+      c.material.opacity = c.userData.opacity + Math.sin(t * 0.14 + c.position.z) * 0.04;
+    }
+    // The SVG shimmer now follows the app's 30/60 frame governor instead of
+    // running an independent refresh-rate CSS animation on 144–240 Hz panels.
+    for (const p of shimmerPaths) {
+      p.style.strokeDashoffset = String(-((t * 64 / p.userData.shimmerSeconds) % 64));
+    }
+    // Float + pulse share the 30/60 app governor. CSS `infinite` animations
+    // would otherwise commit at the display's full 144–240Hz while parked.
+    for (const a of animatedNodes) {
+      const floatPhase = ((t + a.phaseSeconds) / a.floatSeconds) * Math.PI * 2;
+      const floatY = -2.5 + Math.cos(floatPhase) * 2.5;
+      a.node.style.transform = `translate(-50%,-50%) translateY(${floatY.toFixed(2)}px)`;
+      const q = (t % a.ringSeconds) / a.ringSeconds;
+      if (a.big) {
+        const u = Math.min(1, q / 0.7);
+        const eased = 1 - (1 - u) ** 3;
+        a.ring.style.transform = `scale(${(0.92 + eased * 0.4).toFixed(3)})`;
+        a.ring.style.opacity = String((0.6 * (1 - eased)).toFixed(3));
+      } else {
+        const breathe = 0.5 - Math.cos(q * Math.PI * 2) * 0.5;
+        a.ring.style.opacity = String((0.3 + breathe * 0.45).toFixed(3));
+      }
     }
     stars.material.opacity = 0.34 + (Math.sin(t * 0.9) + Math.sin(t * 1.7)) * 0.09;
     const k = easeInOut((Math.sin(t * (Math.PI * 2 / 34)) + 1) / 2);
@@ -433,8 +507,7 @@ export function buildHome({ scene, camera, app }) {
     root.remove();
     gear.remove();
     links.remove();
-    mapStyle.remove();
   }
 
-  return { update, dispose };
+  return { update, dispose, activate };
 }

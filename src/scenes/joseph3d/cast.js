@@ -1,5 +1,6 @@
 import { mulberry32 } from '../../engine/world.js';
 import { abortReason } from '../../core/async.js';
+import { CollisionGate } from '../../engine/collision.js';
 
 // The Joseph cast (character-design): distinct silhouette base + 1–2 signature
 // colors per named person, all from the two shared KayKit rigs. Plus the
@@ -68,8 +69,6 @@ export class AmbientNPCs {
     this.signal = signal;
     this.npcs = [];
     this._circles = []; // shared dynamics list (NPC-vs-NPC separation)
-    this._timers = new Set();
-    this._disposed = false;
     this._onAbort = () => this.cancelMoves(abortReason(signal));
     signal?.addEventListener('abort', this._onAbort, { once: true });
   }
@@ -80,8 +79,10 @@ export class AmbientNPCs {
       char, home: { x, z }, wanderR, canWander, speed,
       target: null, onArrive: null, timer: 800 + this.rnd() * 2600,
       gestureT: gestureEvery * (0.5 + this.rnd()), gestureEvery,
+      gestureLeft: 0,
       stuckT: 0,
       pos: { x, z }, circle: { type: 'circle', x, z, r: 0.4 },
+      collisionGate: new CollisionGate(),
     };
     this.npcs.push(npc);
     this._circles.push(npc.circle);
@@ -124,30 +125,45 @@ export class AmbientNPCs {
     op?.resolve?.(true);
   }
 
-  update(dt, playerPos = null) {
+  update(dt, playerPos = null, activeRadius = Infinity) {
     const s001 = dt * 0.001;
+    const activeR2 = activeRadius * activeRadius;
     for (const n of this.npcs) {
       const c = n.char;
+      const dxPlayer = playerPos ? n.pos.x - playerPos.x : 0;
+      const dzPlayer = playerPos ? n.pos.z - playerPos.z : 0;
+      const playerD2 = dxPlayer * dxPlayer + dzPlayer * dzPlayer;
+      // Off-stage life pauses instead of burning mixers, collision queries,
+      // timers and bone uploads behind fog/black transitions. Scripted actors
+      // are staged beside Joseph before their visible action begins, so this
+      // conservative radius never interrupts choreography.
+      if (playerPos && playerD2 > activeR2) {
+        c.animLOD = 2;
+        continue;
+      }
       // D9 anim LOD: background NPCs far from the player mix animation at 1/3
       // rate. Frozen NPCs are CUTSCENE ACTORS — always full rate, wherever the
       // player happens to be teleported.
       if (n.frozen) c.animLOD = 0;
       else if (playerPos) {
-        const dx = n.pos.x - playerPos.x, dz = n.pos.z - playerPos.z;
-        c.animLOD = dx * dx + dz * dz > 324 ? 2 : 0; // beyond 18u
+        c.animLOD = playerD2 > 324 ? 2 : 0; // beyond 18u
       }
       if (n.frozen) { c.update(dt); continue; } // beats can freeze/choreograph
+      let collisionResolved = false;
+      let collisionSettled = false;
 
-      // gesture micro-action
+      // Gesture holds belong to the governed scene clock. The former
+      // setTimeout could wake and change animation behind pause/hidden/offstage
+      // states even though the render loop correctly slept.
+      if (n.gestureLeft > 0) {
+        n.gestureLeft = Math.max(0, n.gestureLeft - dt);
+        if (n.gestureLeft === 0 && c.state === 'talk') c.play('idle');
+      }
       n.gestureT -= dt;
-      if (n.gestureT <= 0 && !n.target) {
+      if (n.gestureT <= 0 && n.gestureLeft === 0 && !n.target) {
         n.gestureT = n.gestureEvery * (0.7 + this.rnd() * 0.8);
+        n.gestureLeft = 1400 + this.rnd() * 900;
         c.play('talk');
-        const id = setTimeout(() => {
-          this._timers.delete(id);
-          if (!this._disposed && !n.frozen && c.state === 'talk') c.play('idle');
-        }, 1400 + this.rnd() * 900);
-        this._timers.add(id);
       }
 
       // wander
@@ -169,8 +185,9 @@ export class AmbientNPCs {
           n.pos.z += (dz / d) * sp * s001;
           // resolve vs statics AND the other NPCs (skip self) — bodies never merge
           n.circle.skip = true;
-          this.world.resolve(n.pos, 0.4, this._circles);
+          collisionSettled = this.world.resolve(n.pos, 0.4, this._circles) !== false;
           n.circle.skip = false;
+          collisionResolved = true;
           // Animation follows REAL movement; blocked = no walk-in-place, and a
           // sustained block abandons the target instead of grinding on a prop.
           const stepped = Math.hypot(n.pos.x - ox, n.pos.z - oz);
@@ -186,13 +203,19 @@ export class AmbientNPCs {
           }
         }
       } else {
-        // idle separation: if someone was pushed into us, ease back apart
+        // A stationary NPC already resolved against immutable statics does not
+        // rescan the whole world. Live circles are still checked cheaply, so a
+        // sheep/NPC moving into this body gets the same next-update response.
         n.circle.skip = true;
-        this.world.resolve(n.pos, 0.4, this._circles);
+        if (n.collisionGate.needsResolve(this.world, n.pos, 0.4, this._circles)) {
+          collisionSettled = this.world.resolve(n.pos, 0.4, this._circles) !== false;
+          collisionResolved = true;
+        }
         n.circle.skip = false;
       }
       n.circle.x = n.pos.x;
       n.circle.z = n.pos.z;
+      if (collisionResolved && collisionSettled) n.collisionGate.commit(this.world, n.pos);
       c.setPosition(n.pos.x, n.pos.z);
       c.update(dt);
     }
@@ -216,11 +239,8 @@ export class AmbientNPCs {
   }
 
   dispose() {
-    this._disposed = true;
     this.cancelMoves(this.signal?.aborted ? abortReason(this.signal) : null);
     this.signal?.removeEventListener('abort', this._onAbort);
-    for (const id of this._timers) clearTimeout(id);
-    this._timers.clear();
     this.npcs.length = 0;
     this._circles.length = 0;
   }
