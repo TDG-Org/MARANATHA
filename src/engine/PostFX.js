@@ -17,8 +17,8 @@ import { Graphics } from '../systems/Graphics.js';
 // and a warmer, deeper read on both tiers; Low stays untouched for perf.
 const BASE = {
   low: '',
-  medium: 'saturate(1.3) contrast(1.06) brightness(1.04)',
-  high: 'saturate(1.46) contrast(1.1) brightness(1.06)',
+  medium: 'saturate(1.38) contrast(1.1) brightness(1.02)',
+  high: 'saturate(1.55) contrast(1.14) brightness(1.03)',
 };
 
 // Named filter looks, composed ON TOP of the base grade.

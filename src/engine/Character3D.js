@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { blobShadow, canvasTexture } from './world.js';
+import { blobShadow, canvasTexture, toonGradient } from './world.js';
 
 // Shared mouth flipbook (D4): 4 dark mouth shapes that cycle fast on whoever is
 // speaking (state === 'talk'), giving cheap, charming lip-flap over the painted
@@ -86,7 +86,14 @@ export class Character3D {
   }
 
   _toon(color, opts = {}) {
-    const m = new THREE.MeshToonMaterial({ color: new THREE.Color(color), ...opts });
+    // One shared four-band ramp makes the existing sun direction visibly
+    // shape faces, robes, and accessories. This is still the same single
+    // forward draw per mesh: no shadow map and no postprocess pass.
+    const m = new THREE.MeshToonMaterial({
+      color: new THREE.Color(color),
+      gradientMap: toonGradient(),
+      ...opts,
+    });
     this._mats.push(m);
     return m;
   }

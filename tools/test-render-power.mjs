@@ -376,6 +376,8 @@ let playerReduction = 0;
     camera, character, colliders: world,
     bounds: { minX: -10, maxX: 10, minZ: -10, maxZ: 10 },
   });
+  assert.equal(controller.walkSpeed, 3.05, 'default walk speed no longer matches the animation-paced tune');
+  assert.equal(controller.runSpeed, 5.4, 'default run speed no longer matches the animation-paced tune');
   const stalled = controller.scriptMoveTo(3.2, 0, 1.6);
   for (let i = 0; i < 180 && controller._script; i++) controller.update(16);
   assert.equal(await stalled, false, 'collider stall falsely reported authored-mark arrival');

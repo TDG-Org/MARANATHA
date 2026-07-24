@@ -24,20 +24,44 @@ export const BETRAYAL_MARCH_CAMERA = Object.freeze({
 });
 export const BETRAYAL_FALL_CAMERA = Object.freeze({
   angleOffset: 2.0,
-  portraitDistance: 10,
-  wideDistance: 4.8,
-  height: 1.7,
-  uprightLookHeight: 0.95,
-  flatLookHeight: 0,
-  orbit: 0.035,
+  // The lens lives INSIDE the 1.85–2.05u cistern wall. The old responsive
+  // distance reached 10u in portrait, placing the camera outside the masonry
+  // and guaranteeing that the wall hid Joseph.
+  interiorRadius: 1.18,
+  startY: -0.35,
+  endY: -2.25,
+  uprightLookHeight: 0.78,
+  subjectHeight: 0.82,
+  orbit: 0.08,
 });
-export function betrayalFallDistance(aspect = 16 / 9) {
-  const t = Math.max(0, Math.min(1, (aspect - 0.65) / 0.55));
-  return BETRAYAL_FALL_CAMERA.portraitDistance
-    + (
-      BETRAYAL_FALL_CAMERA.wideDistance
-      - BETRAYAL_FALL_CAMERA.portraitDistance
-    ) * t;
+export function betrayalFallFov(aspect = 16 / 9, baseFov = 46) {
+  if (!Number.isFinite(aspect) || aspect >= 0.75) return baseFov;
+  const portraitK = Math.max(0, Math.min(1, (0.75 - aspect) / 0.3));
+  return baseFov + portraitK * 10;
+}
+export function writeBetrayalFallCameraPose(
+  pose,
+  { pit, joseph, yaw, progress },
+) {
+  const k = Math.max(0, Math.min(1, progress));
+  const a = yaw + BETRAYAL_FALL_CAMERA.angleOffset
+    + k * BETRAYAL_FALL_CAMERA.orbit;
+  // Follow the actor's pitched torso. Tracking an upright world-Y point made
+  // his face drift sideways off portrait as the body rotated flat.
+  const pitch = -Math.PI * 0.5 * k;
+  const subjectForward = Math.sin(pitch) * BETRAYAL_FALL_CAMERA.subjectHeight;
+  pose.pos.set(
+    pit.x - Math.sin(a) * BETRAYAL_FALL_CAMERA.interiorRadius,
+    BETRAYAL_FALL_CAMERA.startY
+      + (BETRAYAL_FALL_CAMERA.endY - BETRAYAL_FALL_CAMERA.startY) * k,
+    pit.z - Math.cos(a) * BETRAYAL_FALL_CAMERA.interiorRadius,
+  );
+  pose.look.set(
+    joseph.x + Math.sin(yaw) * subjectForward,
+    joseph.y + Math.cos(pitch) * BETRAYAL_FALL_CAMERA.subjectHeight,
+    joseph.z + Math.cos(yaw) * subjectForward,
+  );
+  return pose;
 }
 export const BETRAYAL_PROWL_ORBIT = Object.freeze({
   amplitude: 0.03,

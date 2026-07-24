@@ -6,8 +6,9 @@ import {
   BETRAYAL_MARCH_CAMERA,
   BETRAYAL_PROWL_ORBIT,
   BETRAYAL_STRIP_CAMERA,
-  betrayalFallDistance,
+  betrayalFallFov,
   planGroupCamera,
+  writeBetrayalFallCameraPose,
 } from './helpers.js';
 
 // SCENE 1 — Joseph, Genesis 37:1–11. The story is DATA + gates; this act's
@@ -30,6 +31,11 @@ export function makeColdOpen(ctx, h) {
     const jRoot = ctx.joseph.root;
     const B = ['reuben', 'judah', 'simeon', 'levi'].map((k) => ctx.cast[k]);
     const homes = B.map((n) => ({ x: n.pos.x, z: n.pos.z }));
+    // The remaining brothers are already real rigged cast members. Three wait
+    // at the distant meal fire in shot 5, restoring the wider story context
+    // without waking or rendering the entire 62u-away camp.
+    const MEAL_BROTHERS = ['brother0', 'brother1', 'brother2'].map((k) => ctx.cast[k]);
+    const mealHomes = MEAL_BROTHERS.map((n) => ({ x: n.pos.x, z: n.pos.z }));
     // NOBODY may ever stand over the hole (D8: Reuben's old "ahead" slot put
     // him ON AIR over the shaft) — every brother placement is clamped radially
     // out past the rim. Joseph is moved via jRoot directly and is exempt.
@@ -385,56 +391,55 @@ export function makeColdOpen(ctx, h) {
         // Front three-quarter, not directly behind his skull. Aligning the
         // lens to fallYaw collapsed the rotating body into one giant head.
         const a0 = fallYaw + BETRAYAL_FALL_CAMERA.angleOffset;
-        const fallDistance = betrayalFallDistance(ctx.camera.camera?.aspect);
+        const fallLens = ctx.camera.camera;
+        const baseFallFov = fallLens.fov;
+        fallLens.fov = betrayalFallFov(fallLens.aspect, baseFallFov);
+        fallLens.updateProjectionMatrix();
         const recoilStarts = [
           { x: B[1].pos.x, z: B[1].pos.z },
           { x: B[2].pos.x, z: B[2].pos.z },
         ];
         let fallK = 0;
         let followThroughDone = false;
-        ctx.camera.cinematicMoveTo({
+        // Hard cut from the rim shot to a lens already inside the mouth. The
+        // live pose driver takes over on the very next scene frame.
+        ctx.camera.cutTo({
           angle: a0,
-          target: { x: x0, y: y0, z: z0 },
-          distance: fallDistance,
-          height: BETRAYAL_FALL_CAMERA.height,
+          target: { x: P.PIT.x, y: 0, z: P.PIT.z },
+          distance: BETRAYAL_FALL_CAMERA.interiorRadius,
+          height: BETRAYAL_FALL_CAMERA.startY,
           lookHeight: BETRAYAL_FALL_CAMERA.uprightLookHeight,
-          duration: 1,
         });
         ctx.camera.setPoseDriver((pose) => {
-          const a = a0 + fallK * BETRAYAL_FALL_CAMERA.orbit;
-          const lookHeight = BETRAYAL_FALL_CAMERA.uprightLookHeight
-            + (
-              BETRAYAL_FALL_CAMERA.flatLookHeight
-              - BETRAYAL_FALL_CAMERA.uprightLookHeight
-            ) * fallK;
-          pose.pos.set(
-            jRoot.position.x - Math.sin(a) * fallDistance,
-            jRoot.position.y + BETRAYAL_FALL_CAMERA.height,
-            jRoot.position.z - Math.cos(a) * fallDistance,
-          );
-          pose.look.set(
-            jRoot.position.x,
-            jRoot.position.y + lookHeight,
-            jRoot.position.z,
-          );
+          writeBetrayalFallCameraPose(pose, {
+            pit: P.PIT,
+            joseph: jRoot.position,
+            yaw: fallYaw,
+            progress: fallK,
+          });
         });
-        await ctx.motion.tween(D, (k, raw) => {
-          fallK = k;
-          jRoot.position.y = y0 - k * (y0 + 3.8);              // → -3.8 (pit floor)
-          jRoot.position.x = x0 + (P.PIT.x - x0) * k;
-          jRoot.position.z = z0 + (P.PIT.z - z0) * k;
-          jRoot.rotation.x = k * (-Math.PI / 2);               // back-first → FACE UP (yaw lives on root.y now)
-          P.shrinkSkyLight(k);                                 // daylight closes over him
-          const recoil = smooth(raw / 0.2);
-          put(B[1], recoilStarts[0].x + 0.5 * recoil, recoilStarts[0].z + 0.15 * recoil);
-          put(B[2], recoilStarts[1].x + 0.5 * recoil, recoilStarts[1].z - 0.15 * recoil);
-          P.coatProp.position.set(B[1].pos.x + 0.35, 0.85, B[1].pos.z);
-          if (!followThroughDone && raw >= 0.2) {
-            followThroughDone = true;
-            B[1].char.play('idle'); B[2].char.play('idle');
-          }
-        });
-        ctx.camera.setPoseDriver(null);
+        try {
+          await ctx.motion.tween(D, (k, raw) => {
+            fallK = k;
+            jRoot.position.y = y0 - k * (y0 + 3.8);              // → -3.8 (pit floor)
+            jRoot.position.x = x0 + (P.PIT.x - x0) * k;
+            jRoot.position.z = z0 + (P.PIT.z - z0) * k;
+            jRoot.rotation.x = k * (-Math.PI / 2);               // back-first → FACE UP (yaw lives on root.y now)
+            P.shrinkSkyLight(k);                                 // daylight closes over him
+            const recoil = smooth(raw / 0.2);
+            put(B[1], recoilStarts[0].x + 0.5 * recoil, recoilStarts[0].z + 0.15 * recoil);
+            put(B[2], recoilStarts[1].x + 0.5 * recoil, recoilStarts[1].z - 0.15 * recoil);
+            P.coatProp.position.set(B[1].pos.x + 0.35, 0.85, B[1].pos.z);
+            if (!followThroughDone && raw >= 0.2) {
+              followThroughDone = true;
+              B[1].char.play('idle'); B[2].char.play('idle');
+            }
+          });
+        } finally {
+          ctx.camera.setPoseDriver(null);
+          fallLens.fov = baseFallFov;
+          fallLens.updateProjectionMatrix();
+        }
         ctx.sound('sfx.pit_impact'); // the dull earth landing
       } },
       { t: 'wait', ms: 1500 },
@@ -446,6 +451,17 @@ export function makeColdOpen(ctx, h) {
       { t: 'fn', fn: () => {
         ctx.grading.set('ominous');
         P.setMealGlow(1);
+        const mealSlots = [
+          { x: P.MEAL.x - 1.5, z: P.MEAL.z + 0.6 },
+          { x: P.MEAL.x + 0.1, z: P.MEAL.z - 1.25 },
+          { x: P.MEAL.x + 1.45, z: P.MEAL.z + 0.45 },
+        ];
+        MEAL_BROTHERS.forEach((n, i) => {
+          put(n, mealSlots[i].x, mealSlots[i].z);
+          n.char.turnToward(P.MEAL.x - n.pos.x, P.MEAL.z - n.pos.z);
+          n.char.play(i === 1 ? 'kneel' : 'idle');
+          ctx.npcs.freeze(n, true);
+        });
         B.forEach((n, i) => { put(n, P.PIT.x + AWAY[i][0], P.PIT.z + AWAY[i][1]); n.char.turnToward(0.95, -0.32); n.char.play('walk'); });
         walkStarts = B.map((n) => ({ x: n.pos.x, z: n.pos.z }));
       } },
@@ -533,6 +549,13 @@ export function makeColdOpen(ctx, h) {
         ctx.camera.minGroundY = baseMinGroundY; // ground-clip back on
         // the brothers return to their camp-morning spots, alive again
         B.forEach((n, i) => { n.pos.x = homes[i].x; n.pos.z = homes[i].z; n.char.setPosition(homes[i].x, homes[i].z); n.char.play('idle'); ctx.npcs.freeze(n, false); });
+        MEAL_BROTHERS.forEach((n, i) => {
+          n.pos.x = mealHomes[i].x;
+          n.pos.z = mealHomes[i].z;
+          n.char.setPosition(mealHomes[i].x, mealHomes[i].z);
+          n.char.play('idle');
+          ctx.npcs.freeze(n, false);
+        });
         ctx.controller.bounds = ctx.bounds;
         ctx.joseph.setPosition(-7, -2.5); // by his tent in the camp
         ctx.setStage?.('camp');

@@ -9,7 +9,7 @@ import { CollisionGate } from './collision.js';
 // eased. The character turns toward its move direction and picks idle/walk/run.
 // Exposes moveVec so the 3rd-person camera can trail the movement.
 export class PlayerController3D {
-  constructor({ camera, character, bounds, walkSpeed = 3.4, runSpeed = 6.6, colliders = null, radius = 0.42, signal = null }) {
+  constructor({ camera, character, bounds, walkSpeed = 3.05, runSpeed = 5.4, colliders = null, radius = 0.42, signal = null }) {
     this.camera = camera;
     this.character = character;
     this.walkSpeed = walkSpeed;

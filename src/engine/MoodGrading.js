@@ -19,34 +19,34 @@ export const MOODS = {
   // goldenHour key light comes FROM the north-low morning sun the player can
   // SEE in the ridge saddle (D6 sunrise) — shading and sky agree on where the
   // light is. The warm hemi keeps camera-facing sides painterly, not backlit.
-  goldenHour: { skyTop: 0xefa45e, skyBottom: 0xffe4b6, fog: 0xffd6a2, fogNear: 44, key: 0xffe1ad, keyI: 1.05, hemi: 0.62, hemiSky: 0xffe4b6, sun: [2, 9, -12], ridge: [0xc9a184, 0xb08a8a, 0x74597a], tint: '#000000', tintA: 0 },
+  goldenHour: { skyTop: 0xefa45e, skyBottom: 0xffe4b6, fog: 0xffd6a2, fogNear: 44, key: 0xffe1ad, keyI: 1.18, hemi: 0.5, hemiSky: 0xffe4b6, sun: [2, 9, -12], ridge: [0xc9a184, 0xb08a8a, 0x74597a], tint: '#000000', tintA: 0 },
   // D11: the FIRST LIGHT after the pit — a deep warm daybreak the morning pan
   // eases into full goldenHour from (the straight gray→gold cut read "way too
   // white"). Sunrise, not a lightswitch.
-  dawn: { skyTop: 0xc9824f, skyBottom: 0xf2c68e, fog: 0xe6b98a, fogNear: 42, key: 0xf7d3a0, keyI: 0.8, hemi: 0.5, hemiSky: 0xf2c68e, sun: [2, 6, -12], ridge: [0xbd9078, 0xa27a80, 0x67506f], tint: '#000000', tintA: 0 },
+  dawn: { skyTop: 0xc9824f, skyBottom: 0xf2c68e, fog: 0xe6b98a, fogNear: 42, key: 0xf7d3a0, keyI: 0.92, hemi: 0.41, hemiSky: 0xf2c68e, sun: [2, 6, -12], ridge: [0xbd9078, 0xa27a80, 0x67506f], tint: '#000000', tintA: 0 },
   // The pit (cold open): trapped and airless in COLOR, not in visibility —
   // D8: fog pushed back (18→36) + a stronger key so every figure reads
   // clearly; the drained "future" PostFX carries the gloom instead.
-  pit: { skyTop: 0x3a3550, skyBottom: 0x6b5a63, fog: 0x6b6274, fogNear: 36, key: 0xa89dbc, keyI: 0.72, hemi: 0.46, hemiSky: 0x6b5a63, sun: [0, 12, 5], ridge: [0x8b8496, 0x776f84, 0x565064], tint: '#1c1830', tintA: 0.12 },
+  pit: { skyTop: 0x3a3550, skyBottom: 0x6b5a63, fog: 0x6b6274, fogNear: 36, key: 0xa89dbc, keyI: 0.82, hemi: 0.36, hemiSky: 0x6b5a63, sun: [0, 12, 5], ridge: [0x8b8496, 0x776f84, 0x565064], tint: '#1c1830', tintA: 0.12 },
   // D13 (Nate: the second cut of the cold open was WAY too gloomy — the FOG is
   // right, the darkness wasn't): the betrayal EXCHANGE is lit to read faces —
   // identical fog + fog distance to `pit`, but a brighter key/hemi, a lighter
   // sky and only a whisper of tint. The gloom returns for the throw + the fall.
-  pitTalk: { skyTop: 0x4c4668, skyBottom: 0x8b7885, fog: 0x6b6274, fogNear: 36, key: 0xd6cbe6, keyI: 1.02, hemi: 0.62, hemiSky: 0x8b7885, sun: [0, 12, 5], ridge: [0x9d95a8, 0x8a8296, 0x6a6478], tint: '#1c1830', tintA: 0.05 },
+  pitTalk: { skyTop: 0x4c4668, skyBottom: 0x8b7885, fog: 0x6b6274, fogNear: 36, key: 0xd6cbe6, keyI: 1.12, hemi: 0.48, hemiSky: 0x8b7885, sun: [0, 12, 5], ridge: [0x9d95a8, 0x8a8296, 0x6a6478], tint: '#1c1830', tintA: 0.05 },
   // D13 (Nate: "it shows night when the brothers are talking… then day… THEN
   // night"): DAYTIME TENSION. The envy scene, the telling and the close are
   // broad daylight in the story — `ominous` is a NIGHT palette and reading it
   // as nightfall was correct. This mood keeps the day (and the SAME sun
   // direction as goldenHour, so the light never flips mid-scene) while turning
   // the air cooler and harder: tense, not nocturnal.
-  tenseDay: { skyTop: 0x7f93b4, skyBottom: 0xe6d3ae, fog: 0xd3bd9d, fogNear: 40, key: 0xffe6c0, keyI: 0.92, hemi: 0.54, hemiSky: 0xe6d3ae, sun: [2, 9, -12], ridge: [0xb09a94, 0x998290, 0x655a74], tint: '#2b2b3d', tintA: 0.07 },
+  tenseDay: { skyTop: 0x7f93b4, skyBottom: 0xe6d3ae, fog: 0xd3bd9d, fogNear: 40, key: 0xffe6c0, keyI: 1.04, hemi: 0.43, hemiSky: 0xe6d3ae, sun: [2, 9, -12], ridge: [0xb09a94, 0x998290, 0x655a74], tint: '#2b2b3d', tintA: 0.07 },
   // Jacob's tent interior: warm lamplight raking from one side.
-  tentWarm: { skyTop: 0x4a4e8f, skyBottom: 0xe88d67, fog: 0x2e2118, fogNear: 11, key: 0xffc888, keyI: 1.0, hemi: 0.45, hemiSky: 0xe8a86a, sun: [-3.5, 5, 2.5], ridge: [0x8a6a7e, 0x74566e, 0x4e3a54], tint: '#2a1c10', tintA: 0.08 },
+  tentWarm: { skyTop: 0x4a4e8f, skyBottom: 0xe88d67, fog: 0x2e2118, fogNear: 11, key: 0xffc888, keyI: 1.12, hemi: 0.36, hemiSky: 0xe8a86a, sun: [-3.5, 5, 2.5], ridge: [0x8a6a7e, 0x74566e, 0x4e3a54], tint: '#2a1c10', tintA: 0.08 },
   // D8 deeper-mood push: dusk burns a touch deeper, ominous presses harder.
-  dusk: { skyTop: 0x3c4499, skyBottom: 0xf4854e, fog: 0xc08a70, fogNear: 38, key: 0xffb877, keyI: 0.82, hemi: 0.46, hemiSky: 0xf4854e, sun: [-15, 4.5, 3], ridge: [0xc08578, 0xa66a72, 0x6f4560], tint: '#3a2f55', tintA: 0.09 },
-  ominous: { skyTop: 0x363050, skyBottom: 0x675663, fog: 0x585264, fogNear: 26, key: 0xcab39a, keyI: 0.66, hemi: 0.4, hemiSky: 0x675663, sun: [-7, 8, 3], ridge: [0x77708a, 0x655e76, 0x484157], tint: '#251f33', tintA: 0.14 },
-  dream: { skyTop: 0x2b3a67, skyBottom: 0x9a8fd2, fog: 0x6f6ca4, fogNear: 34, key: 0xc8d4ff, keyI: 0.72, hemi: 0.5, hemiSky: 0x9a8fd2, sun: [7, 10, -7], ridge: [0x6a6fa6, 0x585d94, 0x3d426f], tint: '#1d2547', tintA: 0.1 },
-  night: { skyTop: 0x0b1026, skyBottom: 0x2b3a67, fog: 0x1b2340, fogNear: 30, key: 0x9fb6e0, keyI: 0.5, hemi: 0.36, hemiSky: 0x2b3a67, sun: [11, 7, -6], ridge: [0x333c66, 0x2a3258, 0x1c2340], tint: '#060a18', tintA: 0.12 },
+  dusk: { skyTop: 0x3c4499, skyBottom: 0xf4854e, fog: 0xc08a70, fogNear: 38, key: 0xffb877, keyI: 0.94, hemi: 0.36, hemiSky: 0xf4854e, sun: [-15, 4.5, 3], ridge: [0xc08578, 0xa66a72, 0x6f4560], tint: '#3a2f55', tintA: 0.09 },
+  ominous: { skyTop: 0x363050, skyBottom: 0x675663, fog: 0x585264, fogNear: 26, key: 0xcab39a, keyI: 0.76, hemi: 0.31, hemiSky: 0x675663, sun: [-7, 8, 3], ridge: [0x77708a, 0x655e76, 0x484157], tint: '#251f33', tintA: 0.14 },
+  dream: { skyTop: 0x2b3a67, skyBottom: 0x9a8fd2, fog: 0x6f6ca4, fogNear: 34, key: 0xc8d4ff, keyI: 0.82, hemi: 0.4, hemiSky: 0x9a8fd2, sun: [7, 10, -7], ridge: [0x6a6fa6, 0x585d94, 0x3d426f], tint: '#1d2547', tintA: 0.1 },
+  night: { skyTop: 0x0b1026, skyBottom: 0x2b3a67, fog: 0x1b2340, fogNear: 30, key: 0x9fb6e0, keyI: 0.58, hemi: 0.28, hemiSky: 0x2b3a67, sun: [11, 7, -6], ridge: [0x333c66, 0x2a3258, 0x1c2340], tint: '#060a18', tintA: 0.12 },
 };
 
 export class MoodGrading {

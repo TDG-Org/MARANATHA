@@ -61,12 +61,26 @@ globalThis.requestAnimationFrame = (fn) => setTimeout(fn, 0);
 const { makeAbortError, withAbort } = await import('../src/core/async.js');
 const { createDialogue } = await import('../src/ui/dialogue.js');
 const { createStoryHud } = await import('../src/ui/storyHud.js');
+const { createNameTags } = await import('../src/ui/nameTags.js');
 const { withObjectivePrepaint } = await import('../src/ui/objectivePrepaint.js');
 const { Interactables } = await import('../src/engine/Interactables.js');
 const baselineKeyListeners = fakeWindow.listenerCount('keydown');
 
 const click = (el) => el.dispatchEvent({ type: 'click', target: el });
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Cutscenes own a clean frame: projected gameplay labels hide as one layer
+// and reappear from fresh coordinates after the sequence.
+{
+  const nameTags = createNameTags();
+  nameTags.setVisible(false);
+  assert.equal(nameTags.layer.hidden, true, 'cinematic name-tag layer remained painted');
+  assert.equal(nameTags.layer.attributes.get('aria-hidden'), 'true');
+  nameTags.setVisible(true);
+  assert.equal(nameTags.layer.hidden, false, 'gameplay name-tag layer did not return');
+  assert.equal(nameTags.layer.attributes.get('aria-hidden'), 'false');
+  nameTags.destroy();
+}
 
 // Typewriter and speaker-handoff timers must sleep behind pause rather than
 // continuing DOM writes (or polling) under the frozen overlay.

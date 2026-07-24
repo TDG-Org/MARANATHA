@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { mulberry32 } from '../../engine/world.js';
+import { mulberry32, toonMat } from '../../engine/world.js';
 
 // --- the pit: the cold-open stage (Genesis 37:23–24) -------------------------
 // A dry cistern in the rocky country near Dothan. The cold open plays here with the
@@ -18,7 +18,7 @@ export function buildPitStage(tex = {}) {
   // was a black lid that hid him completely).
   const patchOpts = { color: 0xa89468, fog: true };
   if (tex.dirt) patchOpts.map = tex.dirt;
-  const patch = new THREE.Mesh(new THREE.RingGeometry(2.05, 10, 26, 1), new THREE.MeshBasicMaterial(patchOpts));
+  const patch = new THREE.Mesh(new THREE.RingGeometry(2.05, 10, 26, 1), toonMat(0xffffff, patchOpts));
   patch.rotation.x = -Math.PI / 2; patch.position.set(PIT.x, 0.02, PIT.z);
   group.add(patch);
   const rockGeo = new THREE.DodecahedronGeometry(0.5, 0); rockGeo.translate(0, 0.18, 0);
@@ -50,7 +50,7 @@ export function buildPitStage(tex = {}) {
       a + (i % 2 ? 0.16 : -0.12),
     ]);
   }
-  const rocks = new THREE.InstancedMesh(rockGeo, new THREE.MeshBasicMaterial({ color: 0x796d55, fog: true }), rspots.length);
+  const rocks = new THREE.InstancedMesh(rockGeo, toonMat(0x796d55), rspots.length);
   const rd = new THREE.Object3D();
   rspots.forEach((s, i) => {
     rd.position.set(s[0], s.length > 2 ? 0.04 : 0, s[1]);
@@ -64,6 +64,49 @@ export function buildPitStage(tex = {}) {
     rd.updateMatrix(); rocks.setMatrixAt(i, rd.matrix);
   });
   rocks.instanceMatrix.needsUpdate = true; group.add(rocks);
+
+  // A sparse Dothan tree line restores the cold-open's world scale. It is a
+  // pit-only static backdrop (two instanced draws), so the distant Hebron camp,
+  // sheep, particles, AI, and fire lights remain asleep. The east-southeast
+  // corridor stays open around the brothers' route and the meal fire.
+  const treeSpots = [];
+  const treeCorridor = CORRIDOR_A;
+  for (let i = 0; i < 34; i++) {
+    const a = (i / 34) * Math.PI * 2 + (rnd() - 0.5) * 0.12;
+    let da = a - treeCorridor;
+    while (da > Math.PI) da -= Math.PI * 2;
+    while (da < -Math.PI) da += Math.PI * 2;
+    if (Math.abs(da) < 0.32) continue;
+    const r = 12.5 + rnd() * 12;
+    treeSpots.push({
+      x: PIT.x + Math.cos(a) * r,
+      z: PIT.z + Math.sin(a) * r,
+      scale: 0.82 + rnd() * 0.48,
+      yaw: rnd() * Math.PI * 2,
+    });
+  }
+  const trunkGeo = new THREE.CylinderGeometry(0.24, 0.38, 3.6, 5);
+  trunkGeo.translate(0, 1.8, 0);
+  const crownGeo = new THREE.IcosahedronGeometry(1.65, 1);
+  crownGeo.translate(0, 4.0, 0);
+  const trunks = new THREE.InstancedMesh(trunkGeo, toonMat(0x49352d), treeSpots.length);
+  const crowns = new THREE.InstancedMesh(crownGeo, toonMat(0x344332), treeSpots.length);
+  const treeDummy = new THREE.Object3D();
+  const crownColor = new THREE.Color();
+  treeSpots.forEach((spot, i) => {
+    treeDummy.position.set(spot.x, 0, spot.z);
+    treeDummy.rotation.y = spot.yaw;
+    treeDummy.scale.set(spot.scale, spot.scale, spot.scale);
+    treeDummy.updateMatrix();
+    trunks.setMatrixAt(i, treeDummy.matrix);
+    crowns.setMatrixAt(i, treeDummy.matrix);
+    crownColor.set(i % 3 === 0 ? 0x3e4f39 : (i % 3 === 1 ? 0x2e4234 : 0x46523a));
+    crowns.setColorAt(i, crownColor);
+  });
+  trunks.instanceMatrix.needsUpdate = true;
+  crowns.instanceMatrix.needsUpdate = true;
+  crowns.instanceColor.needsUpdate = true;
+  group.add(trunks, crowns);
 
   // (D7: the old opaque "mouth" disc is GONE — the hole is real. Looking down
   // the shaft you now see the walls, the floor, and the boy on his back.)
@@ -118,12 +161,13 @@ export function buildPitStage(tex = {}) {
   // D11: deeper fire-red + smaller — it must read as a distant MEAL FIRE, never
   // as a sunrise on the horizon (the pit plays as night).
   const mealGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0xff8f4a, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
-  mealGlow.position.set(PIT.x + 30, 2.0, PIT.z - 9);
-  mealGlow.scale.set(7, 4.2, 1);
+  const MEAL = { x: PIT.x + 22, z: PIT.z - 6.5 };
+  mealGlow.position.set(MEAL.x, 1.6, MEAL.z);
+  mealGlow.scale.set(6.2, 3.8, 1);
   group.add(mealGlow);
 
   return {
-    group, PIT, coatProp, skyLight,
+    group, PIT, MEAL, coatProp, skyLight,
     setSkyLight(k) { skyLight.material.opacity = 0.9 * k; },
     setMealGlow(k) { mealGlow.material.opacity = 0.6 * k; },
     shrinkSkyLight(k) { skyLight.scale.setScalar(8 - 6.5 * k); }, // k 0→1 closes over him

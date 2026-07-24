@@ -7,7 +7,7 @@ import {
   BETRAYAL_MARCH_CAMERA,
   BETRAYAL_FALL_CAMERA,
   BETRAYAL_PROWL_ORBIT,
-  betrayalFallDistance,
+  betrayalFallFov,
   COAT_ENVY_SPECTATOR_KEYS,
   COAT_ENVY_SPECTATOR_SLOTS,
   DIALOGUE_FACE_SAFE,
@@ -22,6 +22,7 @@ import {
   projectedAnchorNdc,
   projectedHeadBounds,
   projectedHeadOcclusion,
+  writeBetrayalFallCameraPose,
   planGroupCamera,
 } from '../src/scenes/joseph3d/beats/helpers.js';
 import {
@@ -1694,32 +1695,42 @@ for (const aspect of [PORTRAIT, LANDSCAPE, DESKTOP]) {
   }
 }
 
-// Fall close-up: align the lens to the root yaw, then follow the pitched body.
-// Sample the complete silhouette instead of checking only the root target.
+// Fall close-up: the lens must descend INSIDE the cistern, not merely keep the
+// actor projected onscreen from outside the wall. It is intentionally close,
+// so hands/feet may crop; Joseph's head and torso must remain visible.
 let fallBodyMargin = Infinity;
 let fallShaftClearance = Infinity;
 let fallHeadBodySeparation = Infinity;
 for (const aspect of [PORTRAIT, LANDSCAPE, DESKTOP]) {
-  for (const yaw of [-2.4, -0.8, 0.8, 2.4]) {
+  // The authored exchange leaves Joseph facing Judah at ~0.27 rad. Certify a
+  // generous blocking tolerance around that real pose.
+  for (const yaw of [0.12, 0.27, 0.42]) {
     for (let sample = 0; sample <= 100; sample++) {
       const k = sample / 100;
-      const root = new THREE.Vector3(0, -3.8 * k, 0);
-      const rotation = new THREE.Euler(-Math.PI / 2 * k, yaw, 0, 'YXZ');
-      const angle = yaw + BETRAYAL_FALL_CAMERA.angleOffset
-        + k * BETRAYAL_FALL_CAMERA.orbit;
-      const lookHeight = BETRAYAL_FALL_CAMERA.uprightLookHeight
-        + (
-          BETRAYAL_FALL_CAMERA.flatLookHeight
-          - BETRAYAL_FALL_CAMERA.uprightLookHeight
-        ) * k;
-      const fallCamera = new THREE.PerspectiveCamera(46, aspect, 0.1, 300);
-      const fallDistance = betrayalFallDistance(aspect);
-      fallCamera.position.set(
-        root.x - Math.sin(angle) * fallDistance,
-        root.y + BETRAYAL_FALL_CAMERA.height,
-        root.z - Math.cos(angle) * fallDistance,
+      const y0 = 0.74;
+      const root = new THREE.Vector3(
+        PIT.x + 1.62 * (1 - k),
+        y0 - k * (y0 + 3.8),
+        PIT.z + 0.04 * (1 - k),
       );
-      fallCamera.lookAt(root.x, root.y + lookHeight, root.z);
+      const rotation = new THREE.Euler(-Math.PI / 2 * k, yaw, 0, 'YXZ');
+      const fallCamera = new THREE.PerspectiveCamera(
+        betrayalFallFov(aspect, 46),
+        aspect,
+        0.1,
+        300,
+      );
+      const pose = {
+        pos: fallCamera.position,
+        look: new THREE.Vector3(),
+      };
+      writeBetrayalFallCameraPose(pose, {
+        pit: PIT,
+        joseph: root,
+        yaw,
+        progress: k,
+      });
+      fallCamera.lookAt(pose.look);
       fallCamera.updateMatrixWorld();
       const fallHips = new THREE.Vector3(0, 0.55, 0).applyEuler(rotation).add(root).project(fallCamera);
       const fallHead = new THREE.Vector3(0, 1.5, 0).applyEuler(rotation).add(root).project(fallCamera);
@@ -1729,22 +1740,23 @@ for (const aspect of [PORTRAIT, LANDSCAPE, DESKTOP]) {
       );
       fallShaftClearance = Math.min(
         fallShaftClearance,
-        Math.hypot(fallCamera.position.x - root.x, fallCamera.position.z - root.z) - 2.05,
+        1.85 - Math.hypot(
+          fallCamera.position.x - PIT.x,
+          fallCamera.position.z - PIT.z,
+        ),
       );
       for (const local of [
-        [-0.28, 0, 0], [0.28, 0, 0],
-        [-0.3, 0.8, 0], [0.3, 0.8, 0],
-        [-0.3, 1.35, 0], [0.3, 1.35, 0],
-        [-0.3, 1.65, -0.12], [0.3, 1.65, 0.12],
+        [0, 0.55, 0],
+        [0, 1.5, 0],
       ]) {
         const point = new THREE.Vector3(...local).applyEuler(rotation).add(root);
         point.project(fallCamera);
         fallBodyMargin = Math.min(
           fallBodyMargin,
-          point.x - GROUP_FACE_SAFE.minX,
-          GROUP_FACE_SAFE.maxX - point.x,
-          point.y - GROUP_FACE_SAFE.minY,
-          GROUP_FACE_SAFE.maxY - point.y,
+          point.x + 0.98,
+          0.98 - point.x,
+          point.y + 0.96,
+          0.96 - point.y,
         );
       }
     }
@@ -1752,11 +1764,11 @@ for (const aspect of [PORTRAIT, LANDSCAPE, DESKTOP]) {
 }
 assert.ok(
   fallBodyMargin > 0,
-  `fall silhouette leaves a supported viewport (${fallBodyMargin.toFixed(3)} NDC)`,
+  `fall face/torso leaves the viewport (${fallBodyMargin.toFixed(3)} NDC)`,
 );
 assert.ok(
-  fallShaftClearance > 1.5,
-  `fall lens grazes the shaft lip (${fallShaftClearance.toFixed(3)}u)`,
+  fallShaftClearance > 0.5,
+  `fall lens leaves the shaft interior (${fallShaftClearance.toFixed(3)}u wall clearance)`,
 );
 assert.ok(
   fallHeadBodySeparation > 0.14,

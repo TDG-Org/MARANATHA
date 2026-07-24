@@ -720,6 +720,10 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
     if (campActive) ctx.sheep.update(dt, joseph.position, t);
     interactables.update();
     guide.update(dt, camera);
+    // Gameplay labels help navigation; cinema owns a clean frame. Hiding the
+    // whole DOM layer also removes six projection/style checks per cutscene
+    // frame, including the cold open and dream.
+    nameTags.setVisible(activeStage === 'camp' && !ctx.sequencer.running);
     nameTags.update(camera, dt);
 
     // fire crackle proximity — change-gated: an unconditional setGain queued

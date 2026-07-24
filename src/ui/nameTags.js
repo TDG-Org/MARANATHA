@@ -9,6 +9,7 @@ export function createNameTags() {
   document.body.append(layer);
 
   const tags = [];
+  let visible = true;
   let scratch = null; // reused Vector3 for projection (no per-frame alloc)
   function add(character, text, { maxDist = 42 } = {}) {
     const el = document.createElement('div');
@@ -32,6 +33,7 @@ export function createNameTags() {
   }
 
   function update(camera, dt = 16.7) {
+    if (!visible) return;
     const W = window.innerWidth, H = window.innerHeight;
     if (!scratch) scratch = new (camera.position.constructor)();
     const p = scratch;
@@ -75,6 +77,19 @@ export function createNameTags() {
     }
   }
 
+  function setVisible(on) {
+    const next = !!on;
+    if (next === visible) return;
+    visible = next;
+    layer.hidden = !next;
+    layer.setAttribute('aria-hidden', next ? 'false' : 'true');
+    // Reappearing labels snap to their live actors, never glide from a stale
+    // pre-cutscene screen coordinate.
+    if (next) {
+      for (const tag of tags) tag.lx = -1;
+    }
+  }
+
   function destroy() { layer.remove(); tags.length = 0; }
-  return { add, update, destroy, layer };
+  return { add, update, setVisible, destroy, layer };
 }
