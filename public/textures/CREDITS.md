@@ -1,11 +1,11 @@
 # /textures — credits & licenses
 
-All textures here are free to use commercially with no attribution required
-(CC0 / public-domain-equivalent). Sources logged per Nate's asset rule.
+Every texture source and license status is logged below. Only rows explicitly
+marked CC0 are currently cleared for unrestricted commercial use.
 
 | File | Source | License | Used for |
 |---|---|---|---|
-| `grass.jpg` | provided by Nate | (assumed royalty-free — confirm source) | camp ground (tiled + toon-shaded, blended with dirt paths) |
+| `grass.jpg` | **TO CONFIRM** — supplied by Nate as `poly_grass_texture.png`; runtime copy is centered, 512², compressed, and mirror-tiled | ? | camp + Home ground (toon-shaded, blended with dirt paths) |
 | `rock.jpg` | Poly Haven — "rock_boulder_dry" | **CC0** (polyhaven.com/license) | limestone boulders / rocky outcrops |
 | `dirt.jpg` | Poly Haven — "brown_mud_dry" | **CC0** (polyhaven.com/license) | dirt paths + the pit's rocky ground |
 

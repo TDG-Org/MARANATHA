@@ -518,13 +518,12 @@ export function makeColdOpen(ctx, h) {
         ctx.joseph.play('kneel');        // seated on the pit floor
         ctx.joseph.turnToward(0.35, -0.8);
         ctx.joseph.setGrief(true);       // head bows deep; small sobbing hitches
-        ctx.sound('sfx.boy_crying');     // 🔴 silent until Nate's file lands (NATE.md)
+        ctx.sound('sfx.boy_crying');     // Nate-supplied, optimized short mono sniffles
         // D11 (Nate): the pit is NIGHT-dark — the shrunken sky-disc above him
         // read as a rising sun from this camera; dim it to a faint memory.
         P.setSkyLight(0.16);
-        // …and the scene is no longer silent: a quiet GRIEF pad under the
-        // crying (real file slot music/pit_sad — see NATE.md).
-        ctx.setMusic('music.pit_sad');
+        // Keep the same dark ambience playing. The sniffles are SFX; starting
+        // another music bed here would muddy the moment and double the score.
         ctx.hud.emote('Joseph is sad');
       } },
       { t: 'cam', angle: -Math.PI * 0.2, target: { x: P.PIT.x, y: -4.0, z: P.PIT.z }, distance: 2.5, height: 1.05, lookHeight: 0.6, duration: 1, awaitMs: false },
@@ -567,7 +566,7 @@ export function makeColdOpen(ctx, h) {
         ctx.futureVignette(false);        // NOW — the gloom and drain lift
         ctx.setMusic('music.camp_warm');  // the warm theme rises WITH the morning
         ctx.setCampAmbience(1, 3.5);      // …and the camp wakes up with it (D14)
-        // (the open itself plays in silence — the state machine starts at null)
+        // dark_amb owns the opening; this is the single authored crossfade to day
         ctx.camera.cinematicMoveTo({ angle: Math.PI * 0.9, target: { x: -5, z: -3 }, distance: 14, height: 7, lookHeight: 1, duration: 1 });
       } },
       // D9 (Nate): the open said 'In the days to come' — this card answers it

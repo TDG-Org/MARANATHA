@@ -29,7 +29,9 @@ export function buildHome({ scene, camera, renderer, app, params = {}, signal = 
   } = loadOwnedTexture('textures/grass.jpg', {
     signal,
     configure: (texture) => {
-      texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+      // Nate's painterly polygon grass is not a baked seamless tile. Mirrored
+      // wrapping joins its edges without adding a second texture or shader.
+      texture.wrapS = texture.wrapT = THREE.MirroredRepeatWrapping;
       texture.repeat.set(16, 7); // wider tiles — home views the field at a shallow angle
       texture.colorSpace = THREE.SRGBColorSpace;
       texture.anisotropy = 4;

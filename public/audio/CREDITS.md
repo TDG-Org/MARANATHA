@@ -21,6 +21,7 @@ asset-pipeline rule: **no log line → the asset doesn't ship.**
 | `dusk_calm.mp3` | **TO CONFIRM** — added by Nate | ? | ? | ? |
 | `dream_wonder.mp3` | **TO CONFIRM** — added by Nate (note: contains baked-in vocals) | ? | ? | ? |
 | `ominous_turn.mp3` | **TO CONFIRM** — added by Nate | ? | ? | ? |
+| `dark_amb.mp3` | **TO CONFIRM** — supplied by Nate; original preserved privately as `nate-drop/dark_amb.mp3` | ? | ? | ? |
 
 ## Ambience (`ambient/`)
 
@@ -36,10 +37,11 @@ asset-pipeline rule: **no log line → the asset doesn't ship.**
 |---|---|---|---|---|
 | `men_laughing.mp3` | **TO CONFIRM** — added by Nate | ? | ? | ? |
 | `man_laugh.mp3` | **TO CONFIRM** — added by Nate | ? | ? | ? |
+| `boy_crying.mp3` | **TO CONFIRM** — supplied by Nate as `sniffling_sounds.mp3`; runtime copy is trimmed/mono/compressed | ? | ? | ? |
 
 ## Everything else
 
-All other sounds in the game (UI ticks, chimes, footsteps, stingers, the dread/sad music
+All other sounds in the game (UI ticks, chimes, footsteps, stingers, fallback music
 beds, bird calls, night ambience) are **synthesized in code at runtime** by
 `src/systems/AudioSystem.js` — no files, no third-party rights involved.
 

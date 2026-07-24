@@ -61,11 +61,11 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
   // readiness waits for all three images to decode. This prevents a cold-load
   // reveal from popping the ground/path textures in on the first visible frame.
   const textureReadiness = [];
-  const loadTiled = (url, rx, ry) => {
+  const loadTiled = (url, rx, ry, wrap = THREE.RepeatWrapping) => {
     const { texture: t, whenReady } = loadOwnedTexture(url, {
       signal,
       configure: (texture) => {
-        texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+        texture.wrapS = texture.wrapT = wrap;
         texture.repeat.set(rx, ry);
         texture.colorSpace = THREE.SRGBColorSpace;
         texture.anisotropy = Graphics.anisotropy;
@@ -74,7 +74,7 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
     textureReadiness.push(whenReady);
     return t;
   };
-  const grassTex = loadTiled('textures/grass.jpg', 26, 11);
+  const grassTex = loadTiled('textures/grass.jpg', 26, 11, THREE.MirroredRepeatWrapping);
   const rockTex = loadTiled('textures/rock.jpg', 1, 1);
   const dirtTex = loadTiled('textures/dirt.jpg', 2, 2);
   const worldTextures = { grass: grassTex, rock: rockTex, dirt: dirtTex };
@@ -255,15 +255,15 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
     // Callers never inspect decode state, so a slow stream cannot double beds.
   };
   // MUSIC STATE MACHINE (D8): the score is beat-driven, crossfade-only, and
-  // NEVER doubles. The cold open starts in silence (no warm camp theme under a
-  // betrayal); a checkpoint resume opens on the emotional state of its beat
+  // NEVER doubles. The cold open starts with its dedicated dark ambience (no
+  // warm camp theme under a betrayal); checkpoint resume opens on the emotional state of its beat
   // (tension holds from the envy scene until the dream — calm never sneaks
   // back in between). Same-key requests are no-ops, so a track can't restart
   // over itself.
-  // D9: the cold open carries a low DREAD bed (Nate heard silence and missed
-  // the tension — a real music/betrayal_dark.mp3 takes over when it lands)
+  // The cold open carries one continuous reusable dark ambience bed. Emotional
+  // beats may add SFX, but must not stack a second score transport over it.
   const MUSIC_BY_BEAT = {
-    0: 'music.betrayal_dark',
+    0: 'music.dark_amb',
     1: 'music.camp_warm',
     2: 'music.camp_warm',
     3: 'music.camp_warm',
@@ -272,8 +272,8 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
     6: 'music.camp_warm',
     7: 'music.ominous_turn',
   };
-  // (`in`, not `??` — beats 0 and 5 map to a DELIBERATE null = silence, which
-  // `??` would silently coalesce back into the warm theme)
+  // (`in`, not `??` — beat 5 maps to a DELIBERATE null = silence, which `??`
+  // would silently coalesce back into the warm theme)
   let musicKey = startBeat in MUSIC_BY_BEAT ? MUSIC_BY_BEAT[startBeat] : 'music.camp_warm';
   let music = null;
   const startMusic = () => {

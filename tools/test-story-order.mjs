@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { AUDIO_MANIFEST } from '../src/data/audioManifest.js';
 import { SCENE1_CANONICAL_ORDER, SCENE1_ROUTING, WEB } from '../src/data/versesWEB.js';
 import { nearestUnbowedBundle } from '../src/scenes/joseph3d/beats/helpers.js';
 import { finishNarratedHold } from '../src/scenes/joseph3d/beats/telling.js';
@@ -22,6 +23,7 @@ const [
   sceneSource,
   pitSource,
   textureLoaderSource,
+  homeSource,
 ] = await Promise.all([
   read('../src/scenes/joseph3d/beats/dream.js'),
   read('../src/scenes/joseph3d/beats/telling.js'),
@@ -31,6 +33,7 @@ const [
   read('../src/scenes/joseph3d/index.js'),
   read('../src/scenes/joseph3d/pit.js'),
   read('../src/engine/textureLoader.js'),
+  read('../src/screens/home.js'),
 ]);
 
 assert.deepEqual(SCENE1_CANONICAL_ORDER, [
@@ -54,6 +57,26 @@ assert.match(
   /list:\s*\[intro,\s*herd,\s*report,\s*coat,\s*dusk,\s*dream,\s*tell,\s*close\]/,
   'external beat/checkpoint indices changed',
 );
+
+const audioKeys = AUDIO_MANIFEST.map(({ key }) => key);
+assert.ok(audioKeys.includes('music.dark_amb'), 'reusable dark ambience is missing from the manifest');
+assert.ok(audioKeys.includes('sfx.boy_crying'), 'Nate-supplied pit sniffles are missing from the manifest');
+assert.equal(audioKeys.includes('music.betrayal_dark'), false, 'scene-specific dark music key returned');
+assert.equal(audioKeys.includes('music.pit_sad'), false, 'redundant pit music key returned');
+assert.match(sceneSource, /0:\s*'music\.dark_amb'/,
+  'the cold open does not enter on the reusable dark ambience');
+const cryingCueAt = coldOpenSource.indexOf("ctx.sound('sfx.boy_crying')");
+const cryingCueEnd = coldOpenSource.indexOf("ctx.hud.emote('Joseph is sad')", cryingCueAt);
+assert.ok(cryingCueAt >= 0 && cryingCueEnd > cryingCueAt, 'pit crying cue is missing');
+assert.doesNotMatch(
+  coldOpenSource.slice(cryingCueAt, cryingCueEnd),
+  /setMusic\(/,
+  'pit crying starts a second music bed instead of keeping dark ambience',
+);
+assert.match(sceneSource, /grassTex = loadTiled\([^;]+THREE\.MirroredRepeatWrapping\)/,
+  'Scene 1 grass no longer uses seam-safe mirrored wrapping');
+assert.match(homeSource, /texture\.wrapS = texture\.wrapT = THREE\.MirroredRepeatWrapping/,
+  'Home grass no longer uses seam-safe mirrored wrapping');
 assert.match(
   beatIndexSource,
   /if \(n >= 6\) stageTellingAmbient\(\)/,

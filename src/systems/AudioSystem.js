@@ -760,7 +760,7 @@ class AudioSystem {
   musicSadBed(gain = 1) { return this._musicHandle(0.062, [110.0, 164.81, 220.0, 261.63], gain); }
   // D9: the DREAD bed — a low, uneasy minor cluster under the cold open's
   // betrayal (the open used to play in total silence; Nate missed tension).
-  // A real music/betrayal_dark.mp3 takes over the moment it lands.
+  // A real music/dark_amb.mp3 takes over the moment it lands.
   // D11: louder still — "sometimes there is no music" = a bed nobody can hear.
   musicDreadBed(gain = 1) { return this._musicHandle(0.08, [55.0, 82.41, 110.0, 130.81], gain); }
 
