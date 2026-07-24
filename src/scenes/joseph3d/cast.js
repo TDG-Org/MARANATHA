@@ -21,7 +21,10 @@ const CAST = {
   // worn geometry on the spine bone) + a cream HEADBAND with a terracotta tail
   // (cared-for but humble; clearly the finest only once the coat is gifted).
   // The coat leads with a true DARK red among the earth dyes (D8).
-  joseph: { name: 'Joseph', base: 'robed', scale: 0.97, colors: { robe: 0xe2d3a9, robeShade: 0xbfb083, skin: 0xcf9a63, belt: 0x5f4128, headband: 0xe8dcc0, headbandTail: 0xc2703a, coat: [0x841b10, 0xcf8a2c, 0x2c3f78, 0x6b7038, 0xe8dcc0] } },
+  // The WEB calls it a coat of many colors without naming the dyes. Use a
+  // restrained earth-dye range—oxblood, madder, ochre, indigo, olive, muted
+  // blue-green, and undyed wool—never neon or a claim of exact archaeology.
+  joseph: { name: 'Joseph', base: 'robed', scale: 0.97, colors: { robe: 0xe2d3a9, robeShade: 0xbfb083, skin: 0xcf9a63, belt: 0x5f4128, headband: 0xe8dcc0, headbandTail: 0xc2703a, coat: [0x792a22, 0x9a4b34, 0xb57b3d, 0x39466d, 0x68704a, 0x52676b, 0xd7c9aa] } },
   jacob: { name: 'Jacob', base: 'robed', staff: true, elder: true, scale: 0.9, colors: { robe: 0x8b8177, robeShade: 0x6d645a, skin: 0xb98a55 } },
   reuben: { name: 'Reuben', base: 'hooded', scale: 1.06, colors: { robe: 0x4f627e, robeShade: 0x3c4d64, skin: 0xc98d5a } },
   judah: { name: 'Judah', base: 'robed', scale: 1.03, colors: { robe: 0x9c6a34, robeShade: 0x7d5228, skin: 0xc07d45 } },

@@ -61,6 +61,11 @@ assert.match(
 const audioKeys = AUDIO_MANIFEST.map(({ key }) => key);
 assert.ok(audioKeys.includes('music.dark_amb'), 'reusable dark ambience is missing from the manifest');
 assert.ok(audioKeys.includes('sfx.boy_crying'), 'Nate-supplied pit sniffles are missing from the manifest');
+assert.equal(
+  AUDIO_MANIFEST.find(({ key }) => key === 'sfx.boy_crying')?.seconds,
+  5.6,
+  'pit sniffles must remain within the requested 5–6 second window',
+);
 assert.equal(audioKeys.includes('music.betrayal_dark'), false, 'scene-specific dark music key returned');
 assert.equal(audioKeys.includes('music.pit_sad'), false, 'redundant pit music key returned');
 assert.match(sceneSource, /0:\s*'music\.dark_amb'/,
@@ -135,11 +140,26 @@ assert.ok(
   'summit objective is not cleared synchronously at its gate',
 );
 assert.doesNotMatch(tellingSource, /objectiveEl\.textContent/, 'telling still infers story state from DOM');
-assert.match(
-  tellingSource,
-  /Promise\.all\(\[[\s\S]*reserveTellingAmbient\(\)[\s\S]*TELL_RING\.map/,
-  'visible telling gather does not reserve its ambient lens corridor',
-);
+{
+  const gather = tellingSource.indexOf('async function gatherCircle');
+  const prompt = tellingSource.indexOf('ctx.interactables.addPrompt({', gather);
+  const commit = tellingSource.indexOf('committed = true', prompt);
+  const black = tellingSource.indexOf("{ t: 'fade', on: true, ms: 260 }", commit);
+  const reserve = tellingSource.indexOf('await reserveTellingAmbient()', black);
+  const seat = tellingSource.indexOf('for (const [key, angle] of TELL_RING)', reserve);
+  const camera = tellingSource.indexOf('ctx.camera.cutTo', seat);
+  const reveal = tellingSource.indexOf("{ t: 'fade', on: false, ms: 620 }", camera);
+  assert.ok(
+    gather >= 0 && prompt > gather && commit > prompt && black > commit
+      && reserve > black && seat > reserve && camera > seat && reveal > camera,
+    'telling no longer requires an explicit sit prompt before covered staging',
+  );
+  assert.match(
+    tellingSource.slice(prompt, commit),
+    /label: 'Sit and tell your dream'/,
+    'telling prompt does not clearly name the player action',
+  );
+}
 {
   const wakeStart = dreamSource.indexOf('async function wakeToCamp');
   const wakeBlack = dreamSource.indexOf("{ t: 'fade', on: true, ms: 650 }", wakeStart);
@@ -178,6 +198,27 @@ assert.equal(
   'the enacted report must carry the full Genesis 37:2 exactly once',
 );
 assert.doesNotMatch(coldOpenSource, /walk home|toward their camp/i);
+assert.doesNotMatch(
+  coldOpenSource,
+  /pitTalk|futureSoft|grading\.set\('ominous'\)/,
+  'cold-open cuts still swap to a different global exposure',
+);
+{
+  const heaveStart = coldOpenSource.indexOf('await ctx.motion.tween(1250');
+  const heaveEnd = coldOpenSource.indexOf('P.setSkyLight(1)', heaveStart);
+  const fallStart = coldOpenSource.indexOf('const D = 4600', heaveEnd);
+  assert.ok(
+    heaveStart >= 0 && heaveEnd > heaveStart && fallStart > heaveEnd,
+    'shaft glow returned to an exterior cold-open shot',
+  );
+  const walkOff = coldOpenSource.indexOf('// SHOT 5', fallStart);
+  const shaftOff = coldOpenSource.indexOf('P.setSkyLight(0)', walkOff);
+  const mealOn = coldOpenSource.indexOf('P.setMealGlow(1)', walkOff);
+  assert.ok(
+    walkOff > fallStart && shaftOff > walkOff && mealOn > shaftOff,
+    'walk-off can still paint the fall-only shaft disc',
+  );
+}
 assert.doesNotMatch(coldOpenSource, /throne, dreamer|who: 'Judah'.*becomes of your dreams/s);
 assert.match(coldOpenSource, /who: 'Brothers'[\s\S]*becomes of his dreams/);
 assert.doesNotMatch(pitSource, /camp they return to|CAMPFIRES|setCampGlow|campGlow/);
@@ -271,7 +312,7 @@ assert.match(
 );
 assert.match(
   sceneSource,
-  /const textureReadiness = \[\][\s\S]*loadOwnedTexture\(url,[\s\S]*textureReadiness\.push\(whenReady\)[\s\S]*await Promise\.all\(textureReadiness\)[\s\S]*renderer\.compile\(scene, camera\)[\s\S]*finally \{[\s\S]*dream\.group\.visible = wasDream/,
+  /const textureReadiness = \[\][\s\S]*loadOwnedTexture\(url,[\s\S]*textureReadiness\.push\(whenReady\)[\s\S]*await Promise\.all\(textureReadiness\)[\s\S]*new THREE\.WebGLRenderTarget\(32, 32,[\s\S]*renderer\.compile\(scene, warmCamera\)[\s\S]*renderer\.render\(scene, warmCamera\)[\s\S]*finally \{[\s\S]*renderer\.setRenderTarget\(priorTarget\)[\s\S]*warmTarget\.dispose\(\)[\s\S]*dream\.group\.visible = wasDream/,
   'texture readiness or prewarm visibility restoration is not owned by the loading gate',
 );
 assert.match(textureLoaderSource, /const image = new Image\(\)/,
@@ -387,30 +428,15 @@ assert.match(
 const gatherStart = tellingSource.indexOf('async function gatherCircle(');
 const gatherEnd = tellingSource.indexOf('// Genesis 37:5', gatherStart);
 const gatherSource = tellingSource.slice(gatherStart, gatherEnd);
-const gatherAll = gatherSource.indexOf('await Promise.all([');
-const josephWalk = gatherSource.indexOf(
-  'ctx.controller.scriptMoveTo(waypoint.x, waypoint.z, 1.45)',
-  gatherAll,
-);
-const brotherWalks = gatherSource.indexOf('...TELL_RING.map', gatherAll);
-assert.ok(
-  gatherAll >= 0 && josephWalk > gatherAll && brotherWalks > gatherAll,
-  'Joseph and the brothers no longer gather concurrently',
+assert.match(
+  gatherSource,
+  /\{ t: 'fade', on: true, ms: 260 \}[\s\S]*for \(const \[key, angle\] of TELL_RING\)[\s\S]*ctx\.joseph\.setPosition\(TELLING_JOSEPH_MARK\.x, TELLING_JOSEPH_MARK\.z\)[\s\S]*ctx\.camera\.cutTo\([\s\S]*\{ t: 'fade', on: false, ms: 620 \}/,
+  'telling circle is not staged and framed entirely under one covered cut',
 );
 assert.match(
   gatherSource,
-  /planTellingWalkRoute\(/,
-  'telling gather does not validate its route against the live ColliderWorld',
-);
-assert.match(
-  gatherSource,
-  /ctx\.colliderWorld/,
-  'telling gather does not pass the live ColliderWorld to its route planner',
-);
-assert.match(
-  gatherSource,
-  /if \(!josephArrived\) \{[\s\S]*fade\(true, 180\);[\s\S]*ctx\.joseph\.setPosition\([\s\S]*fade\(false, 220\);[\s\S]*\}/,
-  'a failed telling walk is not restored invisibly under a veil',
+  /n\.target = null;[\s\S]*n\.onArrive\?\.resolve\?\.\(false\);[\s\S]*n\.onArrive = null;/,
+  'covered telling staging leaves an older NPC walk owner active',
 );
 assert.match(
   gatherSource,
@@ -460,11 +486,29 @@ assert.match(
   'story completion bypasses debug save isolation',
 );
 
-assert.match(campSource, /ctx\.hud\.setObjective\('Rest in your tent\.'\);/);
-assert.doesNotMatch(
+assert.match(
   campSource,
-  /The night has turned cold with them\. Go to your tent and rest\./,
-  'dusk objective regressed to the long instruction',
+  /'The night has turned cold with your brothers\.'[\s\S]*'Go back to your tent and rest\.'/,
+  'dusk objective lost its emotional context or clear action hint',
+);
+{
+  const coatVerse = campSource.indexOf('WEB.gen_37_3');
+  const outsideBlack = campSource.indexOf("{ t: 'fade', on: true, ms: 300 }", coatVerse);
+  const hideTent = campSource.indexOf('T.group.visible = false', outsideBlack);
+  const showCamp = campSource.indexOf("ctx.setStage?.('camp')", hideTent);
+  const judah = campSource.indexOf("who: 'Judah', text: 'A special tunic", showCamp);
+  assert.ok(
+    outsideBlack >= 0 && hideTent > outsideBlack && showCamp > hideTent && judah > showCamp,
+    'Judah envy shot reveals before the exterior camp owns stage visibility',
+  );
+}
+assert.match(tellingSource, /Enough, Joseph\. What is this dream you have dreamed\?/);
+assert.match(dreamSource, /setNameTagSuppressed\?\.\(ctx\.joseph, true\)/);
+assert.match(dreamSource, /ctx\.sunSprite\.visible = false/);
+assert.match(
+  sceneSource,
+  /activeStage === 'camp' \|\| activeStage === 'dream'[\s\S]*!ctx\.sequencer\.running/,
+  'Joseph name tag is not available during interactive dream play',
 );
 
 const bakedSourceManifest = JSON.parse(await read('../public/audio/vo/source-manifest.json'));

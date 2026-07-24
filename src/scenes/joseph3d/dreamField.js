@@ -490,6 +490,7 @@ export function buildDreamField() {
   const setSummit = (on) => { summitGroup.visible = on; fieldEls.forEach((e) => { e.visible = !on; }); };
 
   let skyState = 0; // 0 idle · 1 descending (→mid) · 2 bowing (→low)
+  const dampStep = (dt, rate) => 1 - Math.exp(-Math.max(0, dt) * rate);
   const setOpacity = (k) => bodies.forEach((b) => {
     b.userData.halo.material.opacity = k * (b === sun ? 0.9 : b === moon ? 0.8 : 0.95);
     if (b.userData.core) b.userData.core.material.opacity = k * 0.9;
@@ -527,8 +528,8 @@ export function buildDreamField() {
           const tw = (1 + Math.sin(t * 2 + u.twinkle) * 0.08) * (1 + nearness * 0.4);
           if (u.core) u.core.material.rotation = t * 0.3 + u.twinkle;
           b.scale.setScalar(tw);
-          if (skyState === 1) b.position.lerp(u.mid, Math.min(dt * 0.00026, 1));
-          else if (skyState === 2) b.position.lerp(u.low, Math.min(dt * 0.00048, 1));
+          if (skyState === 1) b.position.lerp(u.mid, dampStep(dt, 0.00026));
+          else if (skyState === 2) b.position.lerp(u.low, dampStep(dt, 0.00048));
         });
         return;
       }
@@ -580,8 +581,8 @@ export function buildDreamField() {
         const tw = 1 + Math.sin(t * 2 + b.userData.twinkle) * 0.08;
         if (b.userData.core) b.userData.core.material.rotation = t * 0.3 + b.userData.twinkle;
         b.scale.setScalar(tw);
-        if (skyState === 1) b.position.lerp(b.userData.mid, Math.min(dt * 0.0006, 1));
-        else if (skyState === 2) b.position.lerp(b.userData.low, Math.min(dt * 0.0012, 1));
+        if (skyState === 1) b.position.lerp(b.userData.mid, dampStep(dt, 0.0006));
+        else if (skyState === 2) b.position.lerp(b.userData.low, dampStep(dt, 0.0012));
       });
     },
     setParticleScale(scale) {

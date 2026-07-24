@@ -74,7 +74,9 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
     textureReadiness.push(whenReady);
     return t;
   };
-  const grassTex = loadTiled('textures/grass.jpg', 26, 11, THREE.MirroredRepeatWrapping);
+  // Finer tiling keeps the supplied polygon grass from reading as a few giant
+  // facets across the landscape. UV repeats cost no extra draw or texture RAM.
+  const grassTex = loadTiled('textures/grass.jpg', 64, 28, THREE.MirroredRepeatWrapping);
   const rockTex = loadTiled('textures/rock.jpg', 1, 1);
   const dirtTex = loadTiled('textures/dirt.jpg', 2, 2);
   const worldTextures = { grass: grassTex, rock: rockTex, dirt: dirtTex };
@@ -149,7 +151,7 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
     scene.add(L);
     return { light: L, phase: e.x * 1.7 };
   });
-  const DARK_FIRE_MOODS = new Set(['dusk', 'night', 'dream', 'ominous', 'tentWarm', 'pit', 'pitTalk']);
+  const DARK_FIRE_MOODS = new Set(['dusk', 'night', 'dream', 'ominous', 'tentWarm', 'pit']);
   const FOOTSTEP_PATHS = [[0, -2.5, 3.6], [-5, -5, 3.3], [5.5, 3, 3.2], [10, 8, 3.1]];
   let fireLevel = 0.35; // 0..1 base intensity scale (grading raises it at night)
   let lastFireGain = -1; // change-gate for the crackle bed's proximity gain
@@ -163,7 +165,7 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
   const cinema = createCinema({
     isPaused: isScenePaused,
     signal,
-    // beat fades ride a soft blur swell (smooth cross-transitions — D6)
+    // The veil owns the dissolve; PostFX keeps this compatibility hook cheap.
     onFade: (toBlack, ms) => app.postFX.blurPulse(Math.min(ms * 1.3, 1400)),
   });
   // D8: the FIRST painted frame is black — the loader used to lift onto a
@@ -171,10 +173,9 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
   // cut at the very start"). The intro (or the resume path below) lifts it.
   cinema.fade(true, 0);
 
-  // FILTER LOOKS (D6): the app-wide PostFX owns the canvas grade now — the
-  // cold open asks for the named 'future' look (gloomy vignette + blur +
-  // drain), the dream asks for 'dream'. The always-on vibrance base grade
-  // lives in PostFX and scales with the Graphics preset.
+  // FILTER LOOKS: the app-wide PostFX owns the canvas grade. The cold open
+  // asks for a single soft-gloom `future` look; the dream asks for `dream`.
+  // The always-on vibrance base grade scales with the Graphics preset.
   const futureVignette = (on) => app.postFX.setFilter(on ? 'future' : 'none');
 
   const verseCard = createVerseCard({ signal, isPaused: isScenePaused });
@@ -389,15 +390,21 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
   const storyEvents = [];
   const onLifetimeAbort = () => motion.cancel(makeAbortError('Scene lifetime ended'));
   signal?.addEventListener('abort', onLifetimeAbort, { once: true });
+  const SCENE_SFX_GAIN = 1.06;
   const ctx = {
     scene, app, cinema, verseCard, dialogue, hud, guide, grading, interactables, signal,
     camera: director, sequencer: null, setInput,
     isPaused: isScenePaused,
-    sound: (key, gain) => { if (!disposed) Audio.play(key, gain !== undefined ? { gain } : {}); },
+    sound: (key, gain) => {
+      if (disposed) return;
+      const authored = gain === undefined ? 1 : gain;
+      Audio.play(key, { gain: authored * SCENE_SFX_GAIN });
+    },
     setMusic, setCampAmbience, camp, dream, pit, tentInterior, bounds, motion, futureVignette, sunSprite,
-    postFX: app.postFX, // named filter looks (dream/future) + blur transitions
+    postFX: app.postFX, // named looks + opacity-only focus transitions
     get joseph() { return joseph; },
     get cast() { return cast; },
+    setNameTagSuppressed: (character, on) => nameTags.setSuppressed(character, on),
     npcs,
     colliderWorld: colliders,
     storyEvent: (event) => { storyEvents.push(event); },
@@ -505,7 +512,7 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
 
     // name tags for the named cast
     nameTags.add(joseph, 'Joseph');
-    nameTags.add(cast.jacob.char, 'Jacob (Israel) · your father');
+    nameTags.add(cast.jacob.char, 'Jacob · Father');
     nameTags.add(cast.reuben.char, 'Reuben');
     nameTags.add(cast.judah.char, 'Judah');
     nameTags.add(cast.simeon.char, 'Simeon');
@@ -544,6 +551,11 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
     const wasDream = dream.group.visible;
     const wasPit = pit.group.visible;
     const wasTent = tentInterior.mesh.visible;
+    const priorTarget = renderer.getRenderTarget();
+    const warmTarget = new THREE.WebGLRenderTarget(32, 32, {
+      depthBuffer: true,
+      stencilBuffer: false,
+    });
     try {
       dream.group.visible = true; pit.group.visible = true; tentInterior.mesh.visible = true;
       scene.traverse((o) => {
@@ -552,10 +564,22 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
           for (const k in m) { const v = m[k]; if (v && v.isTexture) renderer.initTexture(v); }
         }
       });
-      renderer.compile(scene, camera);
+      // `compile()` prepares programs but is not proof that a hidden stage has
+      // submitted a representative frame. Render the dream once to a tiny
+      // offscreen target behind the loader so first reveal owns no cold upload.
+      const warmCamera = new THREE.PerspectiveCamera(46, 1, 0.1, 500);
+      warmCamera.position.set(dream.FIELD.x, 5.2, dream.FIELD.z + 14);
+      warmCamera.lookAt(dream.FIELD.x, 1.2, dream.FIELD.z);
+      warmCamera.updateMatrixWorld(true);
+      renderer.compile(scene, warmCamera);
+      renderer.setRenderTarget(warmTarget);
+      renderer.clear();
+      renderer.render(scene, warmCamera);
     } catch (e) {
       console.warn('[joseph3d] stage pre-warm skipped', e);
     } finally {
+      renderer.setRenderTarget(priorTarget);
+      warmTarget.dispose();
       dream.group.visible = wasDream;
       pit.group.visible = wasPit;
       tentInterior.mesh.visible = wasTent;
@@ -720,10 +744,13 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
     if (campActive) ctx.sheep.update(dt, joseph.position, t);
     interactables.update();
     guide.update(dt, camera);
-    // Gameplay labels help navigation; cinema owns a clean frame. Hiding the
-    // whole DOM layer also removes six projection/style checks per cutscene
-    // frame, including the cold open and dream.
-    nameTags.setVisible(activeStage === 'camp' && !ctx.sequencer.running);
+    // Gameplay labels help navigation; cinema owns a clean frame. Joseph's tag
+    // remains available during dream exploration, then the celestial bow
+    // suppresses only his tag explicitly.
+    nameTags.setVisible(
+      (activeStage === 'camp' || activeStage === 'dream')
+      && !ctx.sequencer.running,
+    );
     nameTags.update(camera, dt);
 
     // fire crackle proximity — change-gated: an unconditional setGain queued

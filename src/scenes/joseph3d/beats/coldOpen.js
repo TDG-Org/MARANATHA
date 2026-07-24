@@ -233,9 +233,7 @@ export function makeColdOpen(ctx, h) {
         if (!prowlPlan.compositionSafe) {
           throw new Error('Betrayal exchange has no audience-safe group composition');
         }
-        // …and the GLOOM eases for this cut only: same fog, lit faces (D13).
-        ctx.grading.grade('pitTalk', 900);
-        ctx.postFX.setFilter('futureSoft', 900);
+        // One soft-gloom exposure owns every cut; only the camera changes.
         // Portrait needs a much wider prowl than landscape. A conservative
         // visible orbit took 10.5s before the first line; accelerating it
         // crossed faces. Land the responsive plan under one short dip.
@@ -282,10 +280,7 @@ export function makeColdOpen(ctx, h) {
         ctx.camera.setDrift(true);
         B.forEach((brother) => brother.char.play('idle'));
         ctx.joseph.play('idle');
-        // the talking is over — the cold, drained gloom closes back in for the
-        // strip, the throw and the fall (D13: it lifted only for the faces)
-        ctx.grading.grade('pit', 1200);
-        ctx.postFX.setFilter('future', 1200);
+        // The exchange, throw, fall, and aftermath remain one continuous night.
       } },
       // Dialogue timing can leave the prowl at any phase. Cover its exit, then
       // reveal one fixed audience-safe angle on Joseph and Judah; no visible
@@ -325,7 +320,6 @@ export function makeColdOpen(ctx, h) {
       },
       { t: 'fn', fn: async () => {
         ctx.sound('stinger.hatred');
-        P.setSkyLight(1); // NOW the mouth of the pit opens above him (D14)
         // Judah and Simeon visibly CLOSE the gap before the lift. Their normal
         // movers provide real walk velocity/foot cycles instead of teleporting.
         const jx = jRoot.position.x, jz = jRoot.position.z;
@@ -378,6 +372,10 @@ export function makeColdOpen(ctx, h) {
           put(B[3], bStarts[3].x + 0.22 * heave, bStarts[3].z + 0.12 * heave);
           P.coatProp.position.set(B[1].pos.x + 0.35, 0.85, B[1].pos.z);
         });
+        // The luminous opening belongs INSIDE the shaft. Turning this 8u
+        // additive sprite on during the exterior heave washed that one cut
+        // white and broke the shared night exposure.
+        P.setSkyLight(1);
       } },
       // SHOT 4 — CUT: the slow-motion fall. Camera CLOSE ON JOSEPH — it falls
       // and slowly circles WITH him (never the pit edge) as he turns flat onto
@@ -449,7 +447,10 @@ export function makeColdOpen(ctx, h) {
       // Framed from behind so no one ever looks back.
       { t: 'fade', on: true, ms: 500 },
       { t: 'fn', fn: () => {
-        ctx.grading.set('ominous');
+        // The meal fire is a warm accent inside the same soft-gloom grade.
+        // The shaft opening has finished its job and must not follow the camera
+        // outside as a stray white disc over the brothers' walk-off.
+        P.setSkyLight(0);
         P.setMealGlow(1);
         const mealSlots = [
           { x: P.MEAL.x - 1.5, z: P.MEAL.z + 0.6 },

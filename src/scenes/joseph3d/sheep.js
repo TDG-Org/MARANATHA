@@ -41,8 +41,10 @@ export class SheepFlock {
     face.translate(0, 0.52, 0.44);
     darkParts.push(face);
     darkParts.push(mk(0.075, 0, 0.46, 0.58, 1, 0.85, 1.15)); // the snout
-    darkParts.push(mk(0.085, 0.17, 0.5, 0.38, 0.45, 1.15, 0.75)); // droopy ears
-    darkParts.push(mk(0.085, -0.17, 0.5, 0.38, 0.45, 1.15, 0.75));
+    // Ears overlap the head volume at their roots. At ±0.17 they only touched
+    // its curved edge by a few millimetres and one read as a floating speck.
+    darkParts.push(mk(0.085, 0.135, 0.5, 0.42, 0.5, 1.15, 0.75)); // droopy ears
+    darkParts.push(mk(0.085, -0.135, 0.5, 0.42, 0.5, 1.15, 0.75));
     [-0.16, 0.16].forEach((x) => [-0.14, 0.16].forEach((z) => darkParts.push((() => {
       const g = new THREE.CylinderGeometry(0.045, 0.05, 0.3, 5); g.translate(x, 0.15, z); return g;
     })())));

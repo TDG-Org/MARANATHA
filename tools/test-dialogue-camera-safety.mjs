@@ -34,26 +34,12 @@ import {
   planHerdDirectionCamera,
 } from '../src/scenes/joseph3d/beats/camp.js';
 import {
-  planTellingWalkRoute,
-  TELLING_FIRE,
   TELLING_JOSEPH_MARK,
 } from '../src/scenes/joseph3d/beats/telling.js';
 
 const PORTRAIT = 390 / 844;
 const LANDSCAPE = 844 / 390;
 const DESKTOP = 1440 / 900;
-
-const segmentPointDistance = (a, b, p) => {
-  const dx = b.x - a.x;
-  const dz = b.z - a.z;
-  const lengthSq = dx * dx + dz * dz;
-  if (lengthSq <= 0.000001) return Math.hypot(a.x - p.x, a.z - p.z);
-  const t = Math.max(0, Math.min(
-    1,
-    ((p.x - a.x) * dx + (p.z - a.z) * dz) / lengthSq,
-  ));
-  return Math.hypot(a.x + dx * t - p.x, a.z + dz * t - p.z);
-};
 
 // The herd prompt accepts a whole 3.4u disc. One valid edge arc used to place
 // Joseph within 0.47u of a fixed brother, make every camera plan unsafe, then
@@ -107,43 +93,10 @@ const segmentPointDistance = (a, b, p) => {
   );
 }
 
-// The pure helper retains a small fire-only fallback for old tooling that does
-// not construct a world. The live ColliderWorld + PlayerController3D sweep is
-// intentionally in test-render-power.mjs; that is the authoritative route
-// proof because it includes firewood and stools as well as the fire.
 {
-  const trigger = { x: 0.8, z: -6.4, r: 3.2 };
-  const inflatedFire = 0.85 + 0.42;
-  let routes = 0;
-  let minClearance = Infinity;
-  for (let radius = 0; radius <= trigger.r + 0.001; radius += 0.1) {
-    for (let degree = 0; degree < 360; degree += 2) {
-      const angle = degree * Math.PI / 180;
-      const start = {
-        x: trigger.x + Math.cos(angle) * radius,
-        z: trigger.z + Math.sin(angle) * radius,
-      };
-      if (Math.hypot(start.x - TELLING_FIRE.x, start.z - TELLING_FIRE.z) < inflatedFire) {
-        continue; // the live collision system cannot place Joseph here
-      }
-      const route = planTellingWalkRoute(start);
-      assert.deepEqual(route.at(-1), TELLING_JOSEPH_MARK);
-      let previous = start;
-      for (const waypoint of route) {
-        const clearance = segmentPointDistance(previous, waypoint, TELLING_FIRE);
-        minClearance = Math.min(minClearance, clearance);
-        assert.ok(
-          clearance >= inflatedFire - 0.001,
-          `telling route crosses fire (${clearance.toFixed(3)}u)`,
-        );
-        previous = waypoint;
-      }
-      routes += 1;
-    }
-  }
-  const stalledStart = { x: -0.73, z: -7.04 };
-  assert.equal(planTellingWalkRoute(stalledStart).length, 3);
-
+  // Both tellings now begin only after the player presses the nearby sit
+  // prompt. All actors are seated under black, so the camera proof owns only
+  // the authored circle instead of a hidden pathfinder.
   const ringAngles = [3.4, 4.15, 5.0, 5.75];
   const closeActors = [
     { ...TELLING_JOSEPH_MARK, headHeight: 1.65 },
@@ -166,9 +119,7 @@ const segmentPointDistance = (a, b, p) => {
     });
     assert.ok(plan.compositionSafe, `telling close unsafe at aspect ${aspect}`);
   }
-  console.log(
-    `Telling fallback geometry: ${routes} entries, ${minClearance.toFixed(3)}u minimum fire clearance.`,
-  );
+  console.log('Telling covered circle: safe across portrait, landscape, and desktop.');
 }
 
 const fullHeadBounds = (plan, actor, headHeight, aspect) => {

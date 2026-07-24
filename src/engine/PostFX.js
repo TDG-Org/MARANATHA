@@ -6,8 +6,8 @@ import { Graphics } from '../systems/Graphics.js';
 // ONE instance owns the canvas; scenes ask for looks by NAME:
 //
 //   postFX.setFilter('none' | 'future' | 'dream')  — eased cross-fade
-//   postFX.blurPulse(ms)      — a soft blur swell for beat transitions
-//   postFX.eyeOpen(ms)        — long blur→clear reveal (waking INTO the dream)
+//   postFX.blurPulse(ms)      — compatibility hook; veil owns the dissolve
+//   postFX.eyeOpen(ms)        — opacity-wash reveal (waking INTO the dream)
 //   postFX.applyPreset()      — re-derive the base grade from Graphics
 //
 // The BASE GRADE scales with the Graphics preset (part of making presets
@@ -24,13 +24,10 @@ const BASE = {
 // Named filter looks, composed ON TOP of the base grade.
 const FILTERS = {
   none: '',
-  // the cold-open flash-forward: gloomy and drained, but CLEAR — the vignette
-  // + desaturation carry the "future" read; blur may never hide the action (D8).
-  future: 'saturate(0.4) contrast(1.08) brightness(0.87) blur(1px)',
-  // D13: the same flash-forward look with the GLOOM PULLED BACK — worn for the
-  // betrayal exchange, where faces and eyes have to read (no darkening, no
-  // blur, no vignette; still visibly drained of colour so the era-shift holds).
-  futureSoft: 'saturate(0.62) contrast(1.04) brightness(1.02)',
+  // One very soft, readable gloom across the whole cold open. No animated
+  // canvas blur: it was the transition's largest compositor cost and made the
+  // action look darker than its authored lighting.
+  future: 'saturate(0.78) contrast(1.015) brightness(1.055)',
   // the dream: cool, soft, faintly glowing (brightness lifts the additive glows)
   dream: 'saturate(1.12) contrast(0.98) brightness(1.08) hue-rotate(-8deg)',
 };
@@ -49,7 +46,7 @@ export class PostFX {
     this.vignette.style.cssText = [
       'position:fixed', 'inset:0', 'z-index:25', 'pointer-events:none', 'opacity:0',
       'transition:opacity 1200ms ease',
-      'background:radial-gradient(ellipse at center, rgba(0,0,0,0) 62%, rgba(8,8,14,0.28) 100%)',
+      'background:radial-gradient(ellipse at center, rgba(0,0,0,0) 66%, rgba(8,8,14,0.16) 100%)',
     ].join(';');
     document.body.append(this.vignette);
 
@@ -61,6 +58,16 @@ export class PostFX {
       'background:radial-gradient(ellipse at 50% 38%, rgba(140,150,220,0.18) 0%, rgba(80,90,160,0.06) 55%, rgba(0,0,0,0) 78%)',
     ].join(';');
     document.body.append(this.dreamGlow);
+
+    // Opacity-only focus wash. It preserves the sleepy eye-open cue without
+    // re-filtering the live WebGL canvas on every transition frame.
+    this.focusWash = document.createElement('div');
+    this.focusWash.style.cssText = [
+      'position:fixed', 'inset:0', 'z-index:26', 'pointer-events:none',
+      'opacity:0', 'background:rgba(35,43,79,0.34)',
+      'transition:opacity 0ms linear',
+    ].join(';');
+    document.body.append(this.focusWash);
 
     this.applyPreset();
     this._unsub = Graphics.subscribe(() => this.applyPreset());
@@ -84,32 +91,23 @@ export class PostFX {
     this._compose();
   }
 
-  // A soft blur swell (up then down) — the smooth cross-transition between
-  // beats; ride it under a dip-to-black for a cinematic dissolve.
-  blurPulse(ms = 900) {
+  // Compatibility hook for cinema fades; the opaque veil owns the dissolve.
+  blurPulse() {
     clearTimeout(this._blurT);
-    this.canvas.style.transition = `filter ${ms * 0.45}ms ease-in`;
-    this._compose('blur(1.6px)');
-    this._blurT = setTimeout(() => {
-      this.canvas.style.transition = `filter ${ms * 0.55}ms ease-out`;
-      this._compose();
-    }, ms * 0.45);
+    // The cinema veil already supplies the dissolve. A canvas blur under black
+    // is invisible work and can stall budget GPUs while a stage appears.
+    this.focusWash.style.transition = 'none';
+    this.focusWash.style.opacity = '0';
   }
 
-  // Waking INTO a place: start heavily blurred + dim, ease to clear — like
-  // eyes opening. (Dream v3 entry.)
+  // Waking into a place: a cheap cool wash eases clear like eyes opening.
   eyeOpen(ms = 2600) {
     clearTimeout(this._blurT);
-    this.canvas.style.transition = 'none';
-    // D13: 14px → 5px. A full-canvas blur is re-rasterized every frame it
-    // animates; at 14px that is the single heaviest compositor ask in the
-    // game (it read as lag). 5px + the brightness lift gives the same
-    // "eyes focusing" read for a fraction of the cost.
-    this._compose('blur(5px) brightness(0.72)');
-    // force the style to commit before easing out
-    void this.canvas.offsetWidth;
-    this.canvas.style.transition = `filter ${ms}ms cubic-bezier(0.25, 0.6, 0.35, 1)`;
-    this._compose();
+    this.focusWash.style.transition = 'none';
+    this.focusWash.style.opacity = '0.34';
+    void this.focusWash.offsetWidth;
+    this.focusWash.style.transition = `opacity ${ms}ms cubic-bezier(0.25, 0.6, 0.35, 1)`;
+    this.focusWash.style.opacity = '0';
   }
 
   // Scene exit: back to the plain base grade, overlays off.
@@ -118,6 +116,7 @@ export class PostFX {
     this.filter = 'none';
     this.vignette.style.opacity = '0';
     this.dreamGlow.style.opacity = '0';
+    this.focusWash.style.opacity = '0';
     this.canvas.style.transition = 'none';
     this._compose();
   }
@@ -126,6 +125,7 @@ export class PostFX {
     this._unsub?.();
     this.vignette.remove();
     this.dreamGlow.remove();
+    this.focusWash.remove();
     this.canvas.style.filter = 'none';
   }
 }

@@ -298,7 +298,7 @@ export class Character3D {
   // into noise there). No neon, no pink — period dye colors only.
   _coatMaterial(dyeColors) {
     const hex = (h) => `#${(h >>> 0).toString(16).padStart(6, '0')}`;
-    const dyes = (dyeColors && dyeColors.length ? dyeColors : [0xa8321f, 0xcf8a2c, 0x2c3f78, 0x6b7038, 0xe8dcc0]).map(hex);
+    const dyes = (dyeColors && dyeColors.length ? dyeColors : [0x792a22, 0x9a4b34, 0xb57b3d, 0x39466d, 0x68704a, 0x52676b, 0xd7c9aa]).map(hex);
     const cream = '#e9dcbf';
     const W = 192, H = 256;
     const c = document.createElement('canvas');

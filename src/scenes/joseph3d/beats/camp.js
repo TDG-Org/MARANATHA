@@ -416,6 +416,18 @@ export function makeCampBeats(ctx, h) {
       // outside, across the camp, the brothers watch the tent — dip-to-black
       // CUT (cutscene-director: clean transitions, never a glide through walls)
       { t: 'fade', on: true, ms: 300 },
+      { t: 'fn', fn: () => {
+        // This is an exterior camp shot. The old code left the isolated tent
+        // stage active until after Judah spoke, hiding the whole camp while
+        // the interior floated in the distance. Swap every owner under black.
+        T.group.visible = false;
+        ctx.setStage?.('camp');
+        ctx.controller.bounds = ctx.bounds;
+        jac.pos.x = jacHome.x; jac.pos.z = jacHome.z;
+        jac.char.setPosition(jacHome.x, jacHome.z);
+        // Father and son remain inside the real camp tent, outside this lens.
+        ctx.joseph.setPosition(-9.4, -5.4);
+      } },
       { t: 'cam', angle: Math.PI * 0.55, target: { x: 0.8, z: -7.6 }, distance: 5.4, height: 1.8, lookHeight: 1.3, duration: 1, awaitMs: false },
       // D13 (Nate): this is the SAME DAY, minutes after the coat — `ominous`
       // is a night palette and read as nightfall. Daytime tension instead.
@@ -614,6 +626,24 @@ export function makeCampBeats(ctx, h) {
       // D7 logic fix: no one can call him "dreamer" yet — the dreams come
       // later THIS NIGHT. The jeer mocks what they can see: the coat.
       { t: 'say', who: 'Judah', text: 'There he sits in the tunic father made especially for him.', color: J.Judah },
+      { t: 'fn', fn: () => {
+        jd.char.play('kneel');
+        ctx.joseph.turnToward(
+          jd.pos.x - ctx.joseph.position.x,
+          jd.pos.z - ctx.joseph.position.z,
+        );
+        ctx.joseph.play('talk');
+      } },
+      { t: 'say', who: 'Joseph', text: 'Brothers, I came only to sit beside you.', color: J.Joseph },
+      { t: 'fn', fn: () => {
+        ctx.joseph.play('kneel');
+        sm.char.turnToward(
+          ctx.joseph.position.x - sm.pos.x,
+          ctx.joseph.position.z - sm.pos.z,
+        );
+        sm.char.play('talk');
+      } },
+      { t: 'say', who: 'Simeon', text: 'Then sit in silence. We have heard enough.', color: J.Simeon },
       // D8: the laugh lands exactly ONCE in this scene, quiet — under the
       // moment, never over it. (It used to fire again on the walk-out.)
       { t: 'fn', fn: async () => {
@@ -646,7 +676,10 @@ export function makeCampBeats(ctx, h) {
     // walks with his head down (a light grief residual rides the walk).
     let rested = false;
     ctx.joseph.setGrief(true, 0.32);
-    ctx.hud.setObjective('Rest in your tent.');
+    ctx.hud.setObjective(
+      'The night has turned cold with your brothers.',
+      'Go back to your tent and rest.',
+    );
     const rest = { x: -8.6, z: -4.4 };
     ctx.guide.setTargetXZ(rest.x, rest.z);
     ctx.camera.release(1600);

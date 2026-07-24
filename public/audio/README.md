@@ -35,7 +35,7 @@ audio/
 |---|---|
 | `men_laughing.mp3` | the brothers mock/laugh together — group envy beats *(present)* |
 | `man_laugh.mp3` | ONE brother laughs alone — the herd sneer *(present)* |
-| `boy_crying.mp3` | Joseph's quiet sniffles at the pit bottom *(present; short mono one-shot)* |
+| `boy_crying.mp3` | Joseph's quiet sniffles at the pit bottom *(present; 5.6s mono one-shot)* |
 | `footstep_grass.mp3`, `footstep_dirt.mp3` | footfalls *(optional — procedural until added)* |
 | `cloth_equip.mp3` | the coat settles onto Joseph *(optional)* |
 | `sheep_bleat.mp3`, `pen_gate.mp3` | herding feedback *(optional — bleat is silent until added)* |

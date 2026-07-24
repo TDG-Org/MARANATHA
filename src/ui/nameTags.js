@@ -27,7 +27,10 @@ export function createNameTags() {
     // D9 perf: position via ONE composited transform (left/top writes forced a
     // layout pass per tag per frame), and skip DOM writes entirely when the
     // value hasn't meaningfully changed.
-    const tag = { character, el, maxDist, lx: -1, ly: -1, ls: -1, lo: '' };
+    const tag = {
+      character, el, maxDist, suppressed: false,
+      lx: -1, ly: -1, ls: -1, lo: '',
+    };
     tags.push(tag);
     return tag;
   }
@@ -43,6 +46,11 @@ export function createNameTags() {
     // still one composited transform, no layout.
     const k = 1 - Math.exp(-dt * 0.028);
     for (const tag of tags) {
+      if (tag.suppressed) {
+        if (tag.lo !== '0') { tag.el.style.opacity = '0'; tag.lo = '0'; }
+        tag.lx = -1;
+        continue;
+      }
       const c = tag.character;
       p.copy(c.position);
       p.y += (c.headHeight || 1.7) + 0.15;
@@ -90,6 +98,19 @@ export function createNameTags() {
     }
   }
 
+  function setSuppressed(character, on) {
+    const suppressed = !!on;
+    for (const tag of tags) {
+      if (tag.character !== character || tag.suppressed === suppressed) continue;
+      tag.suppressed = suppressed;
+      tag.lx = -1;
+      if (suppressed) {
+        tag.el.style.opacity = '0';
+        tag.lo = '0';
+      }
+    }
+  }
+
   function destroy() { layer.remove(); tags.length = 0; }
-  return { add, update, setVisible, destroy, layer };
+  return { add, update, setVisible, setSuppressed, destroy, layer };
 }

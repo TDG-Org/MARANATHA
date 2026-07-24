@@ -73,6 +73,13 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // and reappear from fresh coordinates after the sequence.
 {
   const nameTags = createNameTags();
+  const actor = { position: {} };
+  const josephTag = nameTags.add(actor, 'Joseph');
+  nameTags.setSuppressed(actor, true);
+  assert.equal(josephTag.suppressed, true, 'actor-specific cinematic tag suppression did not engage');
+  assert.equal(josephTag.el.style.opacity, '0');
+  nameTags.setSuppressed(actor, false);
+  assert.equal(josephTag.suppressed, false, 'actor-specific name tag did not restore');
   nameTags.setVisible(false);
   assert.equal(nameTags.layer.hidden, true, 'cinematic name-tag layer remained painted');
   assert.equal(nameTags.layer.attributes.get('aria-hidden'), 'true');

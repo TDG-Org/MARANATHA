@@ -39,12 +39,6 @@ const { Guidance } = await import('../src/engine/Guidance.js');
 const { PlayerController3D } = await import('../src/engine/PlayerController3D.js');
 const { makeMotes } = await import('../src/engine/world.js');
 const { makeSmoke } = await import('../src/engine/particles.js');
-const { disposeDeep } = await import('../src/core/dispose.js');
-const { buildCamp } = await import('../src/scenes/joseph3d/props.js');
-const {
-  planTellingWalkRoute,
-  TELLING_JOSEPH_MARK,
-} = await import('../src/scenes/joseph3d/beats/telling.js');
 
 // A guide target that passes close to the camera must never turn its 0.9u
 // world-space chevron into a screen-filling flash. Exercise the actual mesh,
@@ -298,70 +292,6 @@ let playerReduction = 0;
   assert.ok(character.position.x <= -2.42 || character.position.x >= -0.58,
     'teleported player remained inside the static AABB');
   controller.dispose();
-}
-
-// The telling trigger is a continuous disc, not a single authored entry. The
-// route must use the real camp ColliderWorld (including firewood/stools) and
-// the real PlayerController3D, so a green fire-only geometry test cannot hide a
-// visible stall. The 0.2u/4deg sweep is the signed-off 753-entry criterion.
-{
-  const world = new ColliderWorld();
-  const camp = buildCamp(world);
-  const trigger = { x: 0.8, z: -6.4, r: 3.2 };
-  let valid = 0;
-  let fallbackRoutes = 0;
-  let maxStep = 0;
-  let maxLegs = 0;
-  for (let radius = 0; radius <= trigger.r + 0.001; radius += 0.2) {
-    for (let degree = 0; degree < 360; degree += 4) {
-      const angle = degree * Math.PI / 180;
-      const start = {
-        x: trigger.x + Math.cos(angle) * radius,
-        z: trigger.z + Math.sin(angle) * radius,
-      };
-      if (world.overlaps(start.x, start.z, 0.42)) continue;
-      valid += 1;
-      const route = planTellingWalkRoute(start, world);
-      assert.ok(route.length > 0, `no collision-aware route from ${JSON.stringify(start)}`);
-      maxLegs = Math.max(maxLegs, route.length);
-      const character = makeCharacter(start.x, start.z);
-      const controller = new PlayerController3D({
-        camera: { getWorldDirection(out) { return out.set(0, 0, -1); } },
-        character,
-        colliders: world,
-        bounds: { minX: -20, maxX: 20, minZ: -20, maxZ: 20 },
-        radius: 0.42,
-      });
-      let previous = character.position.clone();
-      for (const waypoint of route) {
-        const move = controller.scriptMoveTo(waypoint.x, waypoint.z, 1.45);
-        let frames = 0;
-        while (controller._script && frames < 1000) {
-          controller.update(16);
-          maxStep = Math.max(maxStep, character.position.distanceTo(previous));
-          previous.copy(character.position);
-          frames += 1;
-        }
-        const arrived = await move;
-        if (!arrived) fallbackRoutes += 1;
-        assert.equal(arrived, true, `route stalled from ${JSON.stringify(start)}`);
-      }
-      assert.ok(
-        Math.hypot(character.position.x - TELLING_JOSEPH_MARK.x,
-          character.position.z - TELLING_JOSEPH_MARK.z) < 0.3,
-        `route did not reach Joseph's mark from ${JSON.stringify(start)}`,
-      );
-      controller.dispose();
-    }
-  }
-  assert.equal(valid, 753, 'telling trigger sweep changed its valid-entry count');
-  assert.equal(fallbackRoutes, 0, 'telling route required a covered fallback on a valid static entry');
-  assert.ok(maxStep < 0.03, `telling walk stepped ${maxStep.toFixed(4)}u in one frame`);
-  console.log(
-    `telling collider routes: ${valid} valid entries, ${maxLegs} max legs, `
-      + `${maxStep.toFixed(4)}u max step, ${fallbackRoutes} fallbacks`,
-  );
-  disposeDeep(camp.group);
 }
 
 // A collider-stalled scripted walk is a recovery, not an arrival. Returning

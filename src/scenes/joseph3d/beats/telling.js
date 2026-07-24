@@ -1,151 +1,7 @@
 import { WEB } from '../../../data/versesWEB.js';
+import { planGroupCamera } from './helpers.js';
 
 export const TELLING_JOSEPH_MARK = Object.freeze({ x: 0.9, z: -4.1 });
-export const TELLING_FIRE = Object.freeze({ x: 0, z: -6 });
-export const TELLING_ROUTE_RADIUS = 0.42;
-const TELLING_ROUTE_MARGIN = 0.01;
-
-function segmentPointDistance(a, b, p) {
-  const dx = b.x - a.x;
-  const dz = b.z - a.z;
-  const lengthSq = dx * dx + dz * dz;
-  if (lengthSq <= 0.000001) return Math.hypot(a.x - p.x, a.z - p.z);
-  const t = Math.max(0, Math.min(
-    1,
-    ((p.x - a.x) * dx + (p.z - a.z) * dz) / lengthSq,
-  ));
-  return Math.hypot(a.x + dx * t - p.x, a.z + dz * t - p.z);
-}
-
-function segmentClear(world, a, b, radius) {
-  const distance = Math.hypot(b.x - a.x, b.z - a.z);
-  const samples = Math.max(1, Math.ceil(distance / 0.05));
-  const clearance = radius + TELLING_ROUTE_MARGIN;
-  for (let i = 1; i < samples; i++) {
-    const t = i / samples;
-    if (world.overlaps(
-      a.x + (b.x - a.x) * t,
-      a.z + (b.z - a.z) * t,
-      clearance,
-    )) return false;
-  }
-  return !world.overlaps(b.x, b.z, clearance);
-}
-
-// Build a small visibility graph around the actual camp colliders. This is
-// deliberately a one-shot cutscene calculation, not a per-frame pathfinder.
-// The old fixed east lane cleared the fire but intersected the nearby firewood
-// stack; using the real world here keeps every valid trigger entry walkable.
-function collisionAwareRoute(start, world, radius) {
-  if (segmentClear(world, start, TELLING_JOSEPH_MARK, radius)) {
-    return [TELLING_JOSEPH_MARK];
-  }
-  const nodes = [
-    { x: start.x, z: start.z },
-    TELLING_JOSEPH_MARK,
-  ];
-  for (const collider of world.statics) {
-    if (collider.type === 'circle') {
-      if (collider.x < -4.5 || collider.x > 5.8
-        || collider.z < -10.5 || collider.z > -1.8) continue;
-      const ring = collider.r + radius + 0.08;
-      for (let i = 0; i < 24; i++) {
-        const angle = (i / 24) * Math.PI * 2;
-        const point = {
-          x: collider.x + Math.cos(angle) * ring,
-          z: collider.z + Math.sin(angle) * ring,
-        };
-        if (!world.overlaps(point.x, point.z, radius + TELLING_ROUTE_MARGIN)) {
-          nodes.push(point);
-        }
-      }
-    } else {
-      if (collider.maxX < -4.5 || collider.minX > 5.8
-        || collider.maxZ < -10.5 || collider.minZ > -1.8) continue;
-      const pad = radius + 0.08;
-      for (const point of [
-        { x: collider.minX - pad, z: collider.minZ - pad },
-        { x: collider.minX - pad, z: collider.maxZ + pad },
-        { x: collider.maxX + pad, z: collider.minZ - pad },
-        { x: collider.maxX + pad, z: collider.maxZ + pad },
-      ]) {
-        if (!world.overlaps(point.x, point.z, radius + TELLING_ROUTE_MARGIN)) {
-          nodes.push(point);
-        }
-      }
-    }
-  }
-
-  const distance = new Float64Array(nodes.length);
-  distance.fill(Infinity);
-  distance[0] = 0;
-  const previous = new Int32Array(nodes.length);
-  previous.fill(-1);
-  const visited = new Uint8Array(nodes.length);
-  for (let step = 0; step < nodes.length; step++) {
-    let current = -1;
-    let best = Infinity;
-    for (let i = 0; i < nodes.length; i++) {
-      if (!visited[i] && distance[i] < best) {
-        best = distance[i];
-        current = i;
-      }
-    }
-    if (current < 0 || current === 1) break;
-    visited[current] = 1;
-    for (let next = 1; next < nodes.length; next++) {
-      if (visited[next] || next === current) continue;
-      if (!segmentClear(world, nodes[current], nodes[next], radius)) continue;
-      const edge = Math.hypot(
-        nodes[next].x - nodes[current].x,
-        nodes[next].z - nodes[current].z,
-      );
-      const candidate = distance[current] + edge;
-      if (candidate < distance[next]) {
-        distance[next] = candidate;
-        previous[next] = current;
-      }
-    }
-  }
-  if (!Number.isFinite(distance[1])) return [];
-
-  const raw = [];
-  for (let cursor = 1; cursor >= 0; cursor = previous[cursor]) {
-    raw.push(nodes[cursor]);
-    if (cursor === 0) break;
-  }
-  raw.reverse();
-  const route = [];
-  let from = 0;
-  while (from < raw.length - 1) {
-    let next = raw.length - 1;
-    while (next > from + 1 && !segmentClear(world, raw[from], raw[next], radius)) next -= 1;
-    route.push(Object.freeze({ x: raw[next].x, z: raw[next].z }));
-    from = next;
-  }
-  return route;
-}
-
-// The fire's visual ring is also a real collider. A player can validly enter
-// either telling trigger from any side. Without a world (unit callers from
-// older tooling), retain the authored fire-only fallback; the live scene always
-// passes its ColliderWorld and therefore validates every nearby solid prop.
-export function planTellingWalkRoute(start, colliderWorld = null, radius = TELLING_ROUTE_RADIUS) {
-  if (colliderWorld?.overlaps && Array.isArray(colliderWorld.statics)) {
-    return collisionAwareRoute(start, colliderWorld, radius);
-  }
-  const from = { x: start.x, z: start.z };
-  if (segmentPointDistance(from, TELLING_JOSEPH_MARK, TELLING_FIRE) >= 2.0) {
-    return [TELLING_JOSEPH_MARK];
-  }
-  const side = from.x >= TELLING_FIRE.x ? 1 : -1;
-  const sideX = TELLING_FIRE.x + side * 2.0;
-  return [
-    Object.freeze({ x: sideX, z: from.z }),
-    Object.freeze({ x: sideX, z: TELLING_JOSEPH_MARK.z }),
-    TELLING_JOSEPH_MARK,
-  ];
-}
 
 export async function finishNarratedHold({
   verseResult,
@@ -175,98 +31,104 @@ export function makeTellingBeats(ctx, h) {
     hint,
   }) {
     const jac = ctx.cast.jacob;
+    let committed = false;
     ctx.setInput(true);
     ctx.hud.setObjective(objective, hint);
-    ctx.guide.setTargetXZ(0.8, -6.6);
+    ctx.guide.setTargetXZ(TELLING_JOSEPH_MARK.x, TELLING_JOSEPH_MARK.z);
     await gate(() => new Promise((resolve) => {
-      ctx.interactables.addTrigger({
-        id: triggerId, x: 0.8, z: -6.4, r: 3.2, once: true, onEnter: resolve,
+      ctx.interactables.addPrompt({
+        id: triggerId,
+        label: 'Sit and tell your dream',
+        x: TELLING_JOSEPH_MARK.x,
+        z: TELLING_JOSEPH_MARK.z,
+        r: 2.7,
+        lift: 0.7,
+        when: () => !committed,
+        onInteract: () => {
+          if (committed) return;
+          committed = true;
+          resolve();
+        },
       });
     }));
-    // Reaching the circle completes the gameplay goal. End its logical
-    // ownership before any letterbox/sequence can later restore stale text.
+    // The player explicitly chose to sit and tell. Only now may cinema take
+    // control; walking into a large invisible trigger no longer pulls Joseph.
     ctx.hud.clearObjective?.();
     ctx.guide.setTarget(null);
     ctx.setInput(false);
     ctx.grading.grade('goldenHour', 500);
-    const lensAspect = ctx.camera.camera?.aspect ?? 16 / 9;
-    const gatherDistance = lensAspect < 0.75 ? 18 : (lensAspect < 1.2 ? 10 : 6.6);
-
     await seq([
       { t: 'letterbox', on: true },
-      {
-        t: 'cam',
-        angle: Math.PI * 0.62,
-        target: { x: 0.4, z: -6.2 },
-        distance: gatherDistance,
-        height: 3.1,
-        lookHeight: 1.3,
-        duration: 1500,
-        awaitMs: false,
-        path: 'groupArc',
-        arcCenter: FIRE,
-        arcRadius: 6.6,
-      },
+      { t: 'fade', on: true, ms: 260 },
     ]);
-    // Joseph enters his speaking mark through the same controller-owned,
-    // per-frame walk as gameplay while the brothers gather. The former
-    // setPosition below was a visible ~2.3u teleport after everyone sat down.
-    let josephArrived = false;
+
     try {
-      const work = await Promise.all([
-        (async () => {
-          for (const waypoint of planTellingWalkRoute(
-            ctx.joseph.position,
-            ctx.colliderWorld,
-          )) {
-            if (!await ctx.controller.scriptMoveTo(waypoint.x, waypoint.z, 1.45)) {
-              return false;
-            }
-          }
-          return Math.hypot(
-            ctx.joseph.position.x - TELLING_JOSEPH_MARK.x,
-            ctx.joseph.position.z - TELLING_JOSEPH_MARK.z,
-          ) < 0.3;
-        })(),
-        // Reserve the lens corridor before dialogue. These background actors
-        // still walk, idle, and face the gathering; they simply cannot wander
-        // randomly between a speaker and the camera.
-        reserveTellingAmbient(),
-        ...TELL_RING.map(([k, a]) => {
-          const n = ctx.cast[k];
-          const p = ringXZ(a);
-          return ctx.npcs.sendTo(n, p.x, p.z, { speed: 1.7 }).then(() => {
-            n.char.setPosition(p.x, p.z); n.pos.x = p.x; n.pos.z = p.z;
-            ctx.npcs.freeze(n, true);
-            n.char.turnToward(FIRE.x - p.x, FIRE.z - p.z);
-            n.char.play('kneel');
-          });
-        }),
-      ]);
-      [josephArrived] = work;
+      await reserveTellingAmbient();
+      for (const [key, angle] of TELL_RING) {
+        const n = ctx.cast[key];
+        const p = ringXZ(angle);
+        n.target = null;
+        n.stuckT = 0;
+        n.onArrive?.resolve?.(false);
+        n.onArrive = null;
+        n.pos.x = p.x;
+        n.pos.z = p.z;
+        if (n.circle) { n.circle.x = p.x; n.circle.z = p.z; }
+        n.char.setPosition(p.x, p.z);
+        ctx.npcs.freeze(n, true);
+        n.char.turnToward(FIRE.x - p.x, FIRE.z - p.z);
+        n.char.play('kneel');
+      }
+      ctx.joseph.setPosition(TELLING_JOSEPH_MARK.x, TELLING_JOSEPH_MARK.z);
+      ctx.joseph.turnToward(
+        FIRE.x - TELLING_JOSEPH_MARK.x,
+        FIRE.z - TELLING_JOSEPH_MARK.z,
+      );
+      ctx.joseph.play('kneel');
     } finally {
       ctx.controller.cancelScriptMove();
       ctx.controller.vel.set(0, 0);
     }
-    if (!josephArrived) {
-      // An unexpected prop/NPC obstruction must not poison every later camera
-      // composition. Restore the exact authored mark under a short veil; no
-      // player ever sees a teleport and the scene cannot strand itself.
-      await ctx.cinema.fade(true, 180);
-      ctx.joseph.setPosition(TELLING_JOSEPH_MARK.x, TELLING_JOSEPH_MARK.z);
-      await ctx.cinema.fade(false, 220);
-    }
 
     if (withJacob) {
-      await ctx.npcs.sendTo(jac, -2.6, -4.4, { speed: 1.4 });
       jac.char.setPosition(-2.6, -4.4); jac.pos.x = -2.6; jac.pos.z = -4.4;
       ctx.npcs.freeze(jac, true);
       jac.char.turnToward(FIRE.x - jac.pos.x, FIRE.z - jac.pos.z);
     }
-    ctx.joseph.turnToward(
-      FIRE.x - ctx.joseph.position.x,
-      FIRE.z - ctx.joseph.position.z,
-    );
+
+    const lens = ctx.camera.camera;
+    const actors = [
+      {
+        x: TELLING_JOSEPH_MARK.x,
+        y: 0,
+        z: TELLING_JOSEPH_MARK.z,
+        headHeight: ctx.joseph.headHeight,
+      },
+      ...TELL_RING.map(([key, angle]) => {
+        const p = ringXZ(angle);
+        return {
+          x: p.x, y: 0, z: p.z,
+          headHeight: ctx.cast[key].char.headHeight,
+        };
+      }),
+    ];
+    const plan = planGroupCamera({
+      actors,
+      angle: Math.PI,
+      distance: 5.7,
+      height: 2.7,
+      look: 1.2,
+      fov: lens?.fov ?? 46,
+      aspect: lens?.aspect ?? 16 / 9,
+    });
+    if (!plan.compositionSafe) {
+      throw new Error('Telling circle has no audience-safe seated composition');
+    }
+    ctx.camera.cutTo({ ...plan, path: 'linear' });
+    await seq([
+      { t: 'fade', on: false, ms: 620 },
+      { t: 'wait', ms: 700 },
+    ]);
   }
 
   // Genesis 37:5–8 — Joseph tells the first dream to his brothers, and only
@@ -276,55 +138,43 @@ export function makeTellingBeats(ctx, h) {
       withJacob: false,
       triggerId: 'reach-brothers-first-dream',
       objective: 'Tell your brothers your dream.',
-      hint: 'Walk to your brothers by the fire.',
+      hint: 'Walk to the fire, then press the prompt to sit and tell.',
     });
 
     try {
       await seq([
-      groupShot(['joseph', ...BROTHERS], {
-        // South lens corridor: Joseph remains foreground, the brothers read
-        // across the fire, and portrait holds every head without crossing the
-        // conversation axis or shrinking the cast to a 30u speck.
-        angle: Math.PI,
-        distance: 5.7,
-        height: 2.7,
-        look: 1.2,
-        ms: 1600,
-      }),
       { t: 'fn', fn: () => {
         ctx.storyEvent?.('tell1');
         ctx.joseph.play('talk');
       } },
-      shot('joseph', 'judah', { side: 0.4, height: 2.15, look: 1.15 }),
       { t: 'say', who: 'Joseph', text: 'Brothers — hear this dream I dreamed.', color: J.Joseph },
       { t: 'say', who: 'Joseph', text: 'We bound sheaves — bundles of wheat. Mine stood, and yours bowed to it.', color: J.Joseph },
       { t: 'dialogueHide' },
-      // Keep the signed-off smooth orbit, now around the people Scripture says
-      // heard the first dream: the brothers, without Jacob presiding.
+      // Hold one seated composition, then let it breathe through a small,
+      // continuous arc while the verse is narrated.
       { t: 'fn', fn: async () => {
         ctx.joseph.play('talk');
-        const a0 = Math.PI * 0.55, RAD = 6.1, H = 2.7, T = 12500;
-        const orbitMoveMs = ctx.camera.cinematicMoveTo({
-          angle: a0,
-          target: { x: FIRE.x, z: FIRE.z },
-          distance: RAD,
-          // Match the pose driver's first frame exactly. The old 2.7 -> 3.05
-          // handoff jumped vertically even though both phases were smooth.
-          height: H + 0.35,
-          lookHeight: 1.15,
-          duration: 1200,
-          path: 'groupArc',
-          arcCenter: FIRE,
-          arcRadius: 6.4,
-        });
-        await wait(orbitMoveMs ?? 1200);
+        const live = ctx.camera.pose;
+        const a0 = Math.atan2(
+          FIRE.x - live.pos.x,
+          FIRE.z - live.pos.z,
+        );
+        const radius = Math.hypot(live.pos.x - FIRE.x, live.pos.z - FIRE.z);
+        const height = live.pos.y;
+        const lookHeight = live.look.y;
+        const T = 12500;
         let elapsed = 0;
         ctx.camera.setPoseDriver((pose, dt) => {
           elapsed = Math.min(T, elapsed + dt);
           const k = elapsed / T;
-          const a = a0 + (k * k * (3 - 2 * k)) * 3.4;
-          pose.pos.set(FIRE.x - Math.sin(a) * RAD, H + 0.35, FIRE.z - Math.cos(a) * RAD);
-          pose.look.set(FIRE.x, 1.15, FIRE.z);
+          const eased = k * k * (3 - 2 * k);
+          const a = a0 + eased * 0.72;
+          pose.pos.set(
+            FIRE.x - Math.sin(a) * radius,
+            height,
+            FIRE.z - Math.cos(a) * radius,
+          );
+          pose.look.set(FIRE.x, lookHeight, FIRE.z);
         });
         const verseResult = await ctx.verseCard.show(WEB.gen_37_5);
         ctx.verseCard.hide();
@@ -374,7 +224,7 @@ export function makeTellingBeats(ctx, h) {
       withJacob: false,
       triggerId: 'reach-brothers-second-dream',
       objective: 'Tell your brothers the second dream.',
-      hint: 'Walk to your brothers by the fire.',
+      hint: 'Walk to the fire, then press the prompt to sit and tell.',
     });
 
     await seq([
@@ -427,7 +277,7 @@ export function makeTellingBeats(ctx, h) {
         ctx.storyEvent?.('rebuke');
       } },
       shot('jacob', 'joseph', { side: -0.7, dist: 3.8, height: 2.1, look: 1.15 }),
-      { t: 'say', who: 'Jacob', text: 'Joseph — what is this dream?', color: J.Jacob },
+      { t: 'say', who: 'Jacob', text: 'Enough, Joseph. What is this dream you have dreamed?', color: J.Jacob },
       { t: 'dialogueHide' },
       { t: 'fn', fn: () => {
         jac.char.play('idle');

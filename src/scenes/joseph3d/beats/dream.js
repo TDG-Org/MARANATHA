@@ -20,6 +20,8 @@ export function makeDreamBeat(ctx, h, { firstTell } = {}) {
   async function wakeToCamp({ heading, objective, hint }) {
     const D = ctx.dream;
     ctx.postFX.setFilter('none', 1400);
+    ctx.setNameTagSuppressed?.(ctx.joseph, false);
+    ctx.sunSprite.visible = true;
     ctx.joseph.root.position.y = 0;
     D.group.visible = false;
     D.resetSky();
@@ -91,6 +93,7 @@ export function makeDreamBeat(ctx, h, { firstTell } = {}) {
     // slip into the dream field (behind the black). The campfire beat left the
     // camera HOLDING its authored ring shot — release the pose or the whole
     // dream plays on a camera locked 60u away (the review's softlock finding).
+    ctx.sunSprite.visible = false;
     ctx.setStage?.('dream');
     D.group.visible = true;
     D.resetSky();
@@ -101,16 +104,9 @@ export function makeDreamBeat(ctx, h, { firstTell } = {}) {
     await seq([
       { t: 'grade', mood: 'dream', ms: 30 },
       { t: 'fn', fn: () => { D.showMoon(1); ctx.postFX.setFilter('dream', 1800); } },
-      // EYES OPENING into the dream. D13 (Nate: "the intro to that dream seems
-      // a little choppy, and laggy") — three real causes, all fixed:
-      //   1. the blur was SET AFTER the black lifted, so the frame snapped
-      //      clear→blurred in one jump; it now starts UNDER the black and the
-      //      reveal shows it already clearing.
-      //   2. the reveal fade fired a competing blur PULSE that stomped the
-      //      ramp mid-flight — suppressed with `pulse: false`.
-      //   3. a 14px full-canvas blur is the most expensive thing this game can
-      //      ask a compositor for (power-efficiency kill-list); 5px reads the
-      //      same at this scale and costs a fraction.
+      // EYES OPENING into the dream. The old animated full-canvas blur was the
+      // transition's largest compositor cost. The stage is now pre-rendered
+      // behind loading, and a cheap opacity-only wash clears under the reveal.
       { t: 'fn', fn: () => ctx.postFX.eyeOpen(2600) },
       { t: 'fade', on: false, ms: 900, pulse: false },
       { t: 'wait', ms: 1500 },
@@ -186,6 +182,7 @@ export function makeDreamBeat(ctx, h, { firstTell } = {}) {
       ctx.npcs.freeze(ctx.cast[k], false);
       ctx.cast[k].char.play('idle');
     });
+    ctx.sunSprite.visible = false;
     ctx.setStage?.('dream');
     D.group.visible = true;
     D.resetSky();
@@ -228,6 +225,10 @@ export function makeDreamBeat(ctx, h, { firstTell } = {}) {
       { t: 'letterbox', on: true },
       { t: 'fade', on: true, ms: 900 },
     ]);
+    // The celestial bow owns a clean silhouette: no gameplay name tag and no
+    // second world-sun sprite beneath the vision's authored sun.
+    ctx.setNameTagSuppressed?.(ctx.joseph, true);
+    ctx.sunSprite.visible = false;
     D.showSummit(true);
     D.showSky(0);
     ctx.joseph.setPosition(D.FIELD.x, D.FIELD.z);

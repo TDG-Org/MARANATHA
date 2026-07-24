@@ -44,7 +44,7 @@ Where everything lives. One line per module; folders ordered by how often you'll
 - `Guidance.js` — the golden waypoint arrow + ground ring
 - `particles.js` — pooled smoke/embers/fireflies
 - `textureLoader.js` — abortable owned Image/decode readiness for scene textures
-- `PostFX.js` — canvas grade + named looks (future/dream) + blur pulses (app-owned)
+- `PostFX.js` — canvas grade + named looks (future/dream) + cheap focus washes (app-owned)
 - `layoutAudit.js` — the level-layout overlap/flatness audit (`debug.audit()`)
 - `ThirdPersonCamera.js` — playground-only (story scenes use CameraDirector)
 - `legacy2d/` — the frozen 2D-era engine for `#legacy-joseph` (see its README)

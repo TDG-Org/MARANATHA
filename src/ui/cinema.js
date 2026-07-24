@@ -52,11 +52,9 @@ export function createCinema({ isPaused = null, onFade = null, signal = null } =
     },
 
     // fade(true, ms) dips to black; fade(false, ms) lifts. ms 0 = instant.
-    // D6: an optional onFade hook lets PostFX ride a soft blur swell under the
-    // dip — the smooth cross-transition between beats.
-    // `pulse: false` suppresses the blur swell — for fades that reveal INTO an
-    // effect that already owns the canvas filter (the dream's eye-open), where
-    // a competing blur pulse stomps the ramp mid-flight (D13).
+    // Optional app-owned transition hook. It remains for compatibility, but
+    // PostFX now leaves the live WebGL canvas unblurred for power efficiency.
+    // `pulse: false` keeps an authored focus-wash reveal fully independent.
     fade(toBlack, ms = 600, pulse = true) {
       fadeEl.style.transition = ms > 0 ? `opacity ${ms}ms ease` : 'none';
       fadeEl.style.opacity = toBlack ? '1' : '0';
