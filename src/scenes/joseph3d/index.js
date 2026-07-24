@@ -34,10 +34,12 @@ import { ContactShadowPool } from '../../engine/ContactShadowPool.js';
 import { loadOwnedTexture } from '../../engine/textureLoader.js';
 import { isAbortError, makeAbortError } from '../../core/async.js';
 import {
+  createCheckpointPersistence,
   createInputGate,
   isInteractiveCheckpoint,
   runInteractiveCheckpointEntry,
 } from './checkpointEntry.js';
+import { planGroupCamera } from './beats/helpers.js';
 
 // JOSEPH — SCENE 1 in full 3D (Genesis 37:1–11): the GOLD TEMPLATE. A living
 // golden-hour camp near Hebron, real rigged characters, authored camera,
@@ -202,12 +204,33 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
   // silence and the morning can bring it back. `amb.camp_wind` carries
   // BIRDSONG, so this is also what keeps birds out of the night wilderness.
   const CAMP_BED_GAIN = { wind: 1, sheepPen: 0.5, chatter: 0.4 };
-  const savedBeat = Number(getCheckpoint('joseph3d'));
+  // A bounded debug-only checkpoint override lets QA replay one late beat
+  // without mutating a player's real save (`?beat=6#debug`). Normal routes
+  // never inspect or honor it.
+  const debugBeatValue = /debug/.test(window.location.hash)
+    ? new URLSearchParams(window.location.search).get('beat')
+    : null;
+  const debugBeat = debugBeatValue !== null && debugBeatValue !== ''
+    ? Number(debugBeatValue)
+    : NaN;
+  const debugBeatReplay = Number.isInteger(debugBeat) && debugBeat >= 0 && debugBeat <= 7;
+  const savedBeat = debugBeatReplay
+    ? debugBeat
+    : Number(getCheckpoint('joseph3d'));
+  const persistence = createCheckpointPersistence({
+    isolated: debugBeatReplay,
+    saveBeat: (beat) => setCheckpoint('joseph3d', beat),
+    saveCompletion: () => {
+      setSceneProgress('joseph', 1);
+      clearCheckpoint('joseph3d');
+    },
+  });
   // A hand-edited/corrupt localStorage value must never turn the story loop
   // into `for (let i = NaN; ...)` and leave the player in an empty camp.
   const startBeat = Number.isFinite(savedBeat)
     ? Math.max(0, Math.min(7, Math.floor(savedBeat)))
     : 0; // also picks the opening music below
+  let liveBeat = startBeat;
   const silentLoop = () => ({ stop() {}, setGain() {} });
   let audioActivated = false;
   let campAmbienceLevel = 0;
@@ -376,6 +399,7 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
     get joseph() { return joseph; },
     get cast() { return cast; },
     npcs,
+    colliderWorld: colliders,
     storyEvent: (event) => { storyEvents.push(event); },
     sheep: null,
     sparkle: (n) => Audio.sparkle(n),
@@ -383,8 +407,7 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
     onDawn: () => fireflies.setFade(0),
     finish: () => {
       if (disposed) return; // a zombie close beat must not touch saves or nav
-      setSceneProgress('joseph', 1);
-      clearCheckpoint('joseph3d');
+      persistence.complete();
       app.navigate('home');
     },
   };
@@ -587,7 +610,7 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
           holdInput: () => inputGate.hold(),
           prepare: () => {
             beats.applyState(from, ctx);
-            setCheckpoint('joseph3d', from);
+            persistence.checkpoint(from);
           },
           invokeBeat: () => beats.list[from](ctx),
           reveal: () => cinema.fade(false, 800),
@@ -603,24 +626,44 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
           // Establish the close's opening composition while the checkpoint
           // veil is still opaque. Previously the veil lifted for ~800ms onto
           // the generic follow camera before the authored shot took ownership.
-          ctx.camera.cinematicMoveTo({
+          const closeActors = [
+            ctx.joseph,
+            ctx.cast.judah,
+            ctx.cast.reuben,
+            ctx.cast.simeon,
+            ctx.cast.levi,
+            ctx.cast.jacob,
+          ].map((entry) => {
+            const position = entry.position ?? entry.pos;
+            const character = entry.char ?? entry;
+            return {
+              x: position.x,
+              y: position.y ?? 0,
+              z: position.z,
+              headHeight: character.headHeight,
+            };
+          });
+          const closePlan = planGroupCamera({
+            actors: closeActors,
             angle: 0.35,
-            target: { x: 0.2, z: -6.6 },
             distance: 4.5,
             height: 2.2,
-            lookHeight: 1.3,
-            duration: 1,
-            path: 'groupArc',
-            arcCenter: { x: 0, z: -6 },
-            arcRadius: 6.4,
+            look: 1.3,
+            fov: camera.fov,
+            aspect: camera.aspect,
           });
+          if (!closePlan.compositionSafe) {
+            throw new Error('Checkpoint close has no audience-safe group composition');
+          }
+          ctx.camera.cutTo(closePlan);
           await cinema.letterbox(true);
           await cinema.fade(false, 800);
         }
       }
       for (let i = loopFrom; i < beats.list.length; i++) {
         if (disposed || signal?.aborted) return; // exited mid-story: no more beats/checkpoints
-        setCheckpoint('joseph3d', i);
+        liveBeat = i;
+        persistence.checkpoint(i);
         await beats.list[i](ctx);
       }
       if (disposed || signal?.aborted) return;
@@ -763,9 +806,20 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
     }
     return false;
   };
+  const q2 = (value) => Math.round(value * 100) / 100;
+  const debugSnapshot = () => ({
+    stage: activeStage,
+    beat: liveBeat,
+    player: [q2(joseph.position.x), q2(joseph.position.z)],
+    straysLeft: ctx.sheep.straysLeft,
+    strays: ctx.sheep.sheep
+      .filter((sheep) => !sheep.counted)
+      .map((sheep) => [q2(sheep.x), q2(sheep.z), sheep.state]),
+  });
 
   return {
     update, dispose,
+    debugSnapshot,
     // D12 power governor hint: TRUE whenever this scene can move fast — the
     // app renders at full 60 then, and drops the pure ambient idle (standing
     // in the camp, nothing scripted running) to eco-30. Broad on purpose:

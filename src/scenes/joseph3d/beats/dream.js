@@ -11,7 +11,7 @@ import { nearestUnbowedBundle } from './helpers.js';
 // summit where the sky bows. NOTE: the finale descent is signed off by Nate
 // ("PERFECT! dont touch it more") — do not restage it.
 export function makeDreamBeat(ctx, h, { firstTell } = {}) {
-  const { seq, wait, gate } = h;
+  const { seq, wait, gate, stageTellingAmbient } = h;
   const BROTHERS = ['judah', 'reuben', 'simeon', 'levi'];
 
   // Both dreams wake through the same authored tent-to-camp handoff. Every
@@ -53,6 +53,10 @@ export function makeDreamBeat(ctx, h, { firstTell } = {}) {
     // The visible camp replaces the isolated tent stage only under black.
     T.group.visible = false;
     ctx.setStage?.('camp');
+    // The next beat is a conversation. Place the ambient spectator arc while
+    // the veil is still fully black, then keep its actors quietly alive there;
+    // no visible gather may snap a blocked wanderer across the camp.
+    stageTellingAmbient();
     ctx.controller.bounds = ctx.bounds;
     ctx.joseph.setPosition(-8.2, -4.2);
     ctx.joseph.turnToward(1, 0.3);
@@ -142,7 +146,7 @@ export function makeDreamBeat(ctx, h, { firstTell } = {}) {
             ctx.sound('sfx.sheaf_bow');
             bowed += 1;
             ctx.hud.flashCount('🌾', bowed, D.outer.length);
-            ctx.hud.setObjective(`The wheat bundles bow — ${bowed} of ${D.outer.length}.`);
+            ctx.hud.setObjective(`Walk to the wheat bundles — ${bowed} of ${D.outer.length}.`);
             retargetBundleGuide();
             if (bowed >= D.outer.length) resolve();
           },

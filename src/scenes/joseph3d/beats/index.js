@@ -21,7 +21,7 @@ export function createBeats(ctx) {
   const { herd, report, coat, dusk } = makeCampBeats(ctx, h);
   const { firstTell, tell, close } = makeTellingBeats(ctx, h);
   const { dream } = makeDreamBeat(ctx, h, { firstTell });
-  const { FIRE, TELL_RING, ringXZ } = h;
+  const { FIRE, TELL_RING, ringXZ, stageTellingAmbient } = h;
 
   // ---------- checkpoint resume: enter beat N fresh ----------
   function applyState(n, c) {
@@ -46,6 +46,7 @@ export function createBeats(ctx) {
     c.camera.snap();
     // resuming INTO the close (beat 7): the telling already happened, so seat the
     // brothers in their frozen circle round the fire (beat 6 does this live).
+    if (n >= 6) stageTellingAmbient();
     if (n >= 7) {
       TELL_RING.forEach(([k, a]) => {
         const npc = c.cast[k]; const p = ringXZ(a);

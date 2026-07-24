@@ -1,4 +1,5 @@
 import { pausableWait } from '../../../engine/Sequencer.js';
+import { CINEMATIC_DRIFT_ANGLE } from '../../../engine/CameraDirector.js';
 import { NAME_COLOR } from '../cast.js';
 import { withAbort } from '../../../core/async.js';
 
@@ -13,6 +14,63 @@ export const BETRAYAL_STRIP_CAMERA = Object.freeze({
   height: 2.25,
   lookHeight: 1.15,
 });
+export const BETRAYAL_MARCH_CAMERA = Object.freeze({
+  angle: -Math.PI / 3,
+  nearDistance: 4.2,
+  wideDistance: 4.8,
+  height: 1.55,
+  wideHeight: 1.9,
+  lookHeight: 1.05,
+});
+export const BETRAYAL_FALL_CAMERA = Object.freeze({
+  angleOffset: 2.0,
+  portraitDistance: 10,
+  wideDistance: 4.8,
+  height: 1.7,
+  uprightLookHeight: 0.95,
+  flatLookHeight: 0,
+  orbit: 0.035,
+});
+export function betrayalFallDistance(aspect = 16 / 9) {
+  const t = Math.max(0, Math.min(1, (aspect - 0.65) / 0.55));
+  return BETRAYAL_FALL_CAMERA.portraitDistance
+    + (
+      BETRAYAL_FALL_CAMERA.wideDistance
+      - BETRAYAL_FALL_CAMERA.portraitDistance
+    ) * t;
+}
+export const BETRAYAL_PROWL_ORBIT = Object.freeze({
+  amplitude: 0.03,
+  rate: 0.00035,
+});
+export const TELLING_AMBIENT_KEYS = Object.freeze([
+  'brother0', 'brother1', 'brother2', 'brother3', 'brother4', 'brother5',
+  'worker1', 'worker2', 'child',
+]);
+// A collision-audited spectator arc 11u north of the fire. It keeps ambient
+// life visible in the camp without letting a random wander cross the 6.4u
+// dialogue-camera orbit or Joseph's face.
+export const TELLING_AMBIENT_SLOTS = Object.freeze([
+  Object.freeze({ x: 10.66, z: -3.28 }),
+  Object.freeze({ x: 9.2, z: 0.03 }),
+  Object.freeze({ x: 6.75, z: 2.69 }),
+  Object.freeze({ x: 3.57, z: 4.41 }),
+  Object.freeze({ x: 0, z: 5 }),
+  Object.freeze({ x: -3.57, z: 4.41 }),
+  Object.freeze({ x: -6.75, z: 2.69 }),
+  Object.freeze({ x: -9.2, z: 0.03 }),
+  Object.freeze({ x: -10.66, z: -3.28 }),
+]);
+export const COAT_ENVY_SPECTATOR_KEYS = Object.freeze([
+  ...TELLING_AMBIENT_KEYS,
+  'simeon',
+  'levi',
+]);
+export const COAT_ENVY_SPECTATOR_SLOTS = Object.freeze([
+  ...TELLING_AMBIENT_SLOTS,
+  Object.freeze({ x: -12, z: -4.5 }),
+  Object.freeze({ x: 12, z: -4.5 }),
+]);
 
 export function nearestUnbowedBundle(bundles, from) {
   let nearest = null;
@@ -115,8 +173,51 @@ export function projectedAnchorNdc({
 const dialogueHeadRadius = (headHeight) =>
   Math.min(0.36, Math.max(0.26, (Number.isFinite(headHeight) ? headHeight : 1.65) * 0.18));
 
+export function projectedHeadBounds({
+  cameraPos,
+  cameraLook,
+  actor,
+  headHeight = 1.65,
+  fov = 46,
+  aspect = 16 / 9,
+}) {
+  const safeHeadHeight = Number.isFinite(headHeight) ? headHeight : 1.65;
+  const radius = dialogueHeadRadius(safeHeadHeight);
+  const face = projectedAnchorNdc({
+    cameraPos,
+    cameraLook,
+    point: {
+      x: actor.x,
+      y: (actor.y ?? 0) + safeHeadHeight - radius,
+      z: actor.z,
+    },
+    fov,
+    aspect,
+  });
+  const safeFov = Number.isFinite(fov) && fov > 1 ? fov : 46;
+  const safeAspect = Number.isFinite(aspect) && aspect > 0 ? aspect : 1;
+  const tanHalfV = Math.tan((safeFov * Math.PI) / 360);
+  const tanHalfH = tanHalfV * safeAspect;
+  const safeDepth = Math.max(0.001, face.depth - radius);
+  return {
+    left: face.x - radius / (safeDepth * tanHalfH),
+    right: face.x + radius / (safeDepth * tanHalfH),
+    bottom: face.y - radius / (safeDepth * tanHalfV),
+    top: face.y + radius / (safeDepth * tanHalfV),
+    depth: face.depth,
+  };
+}
+
+const isDialogueHeadSafe = (bounds) => (
+  bounds.left >= DIALOGUE_FACE_SAFE.minX
+  && bounds.right <= DIALOGUE_FACE_SAFE.maxX
+  && bounds.bottom >= DIALOGUE_FACE_SAFE.minY
+  && bounds.top <= DIALOGUE_FACE_SAFE.maxY
+);
+
 const cameraPlan = ({
-  angle, target, distance, height, lookHeight, listener, listenerHeadHeight,
+  angle, target, distance, height, lookHeight, speaker, speakerHeadHeight,
+  listener, listenerHeadHeight,
   fov, aspect, kind,
 }) => {
   const cameraPos = {
@@ -136,8 +237,18 @@ const cameraPlan = ({
     y: (listener.y ?? 0) + safeListenerHeadHeight - headRadius,
     z: listener.z,
   };
+  const speakerBounds = projectedHeadBounds({
+    cameraPos,
+    cameraLook,
+    actor: speaker,
+    headHeight: speakerHeadHeight,
+    fov,
+    aspect,
+  });
   return {
     angle, target, distance, height, lookHeight, path: 'arc', kind,
+    speakerBounds,
+    speakerFaceSafe: isDialogueHeadSafe(speakerBounds),
     foregroundOccupancy: projectedHeadOccupancy({
       cameraPos, cameraLook, headCenter, headRadius, fov, aspect,
     }),
@@ -174,13 +285,19 @@ export function planDialogueCamera({
     distance: safeDist,
     height: safeHeight,
     lookHeight: look,
+    speaker,
+    speakerHeadHeight,
     listener,
     listenerHeadHeight,
     fov,
     aspect,
     kind: 'ots',
   });
-  if (!forceSingle && ots.foregroundOccupancy <= MAX_DIALOGUE_FOREGROUND) {
+  if (
+    !forceSingle
+    && ots.speakerFaceSafe
+    && ots.foregroundOccupancy <= MAX_DIALOGUE_FOREGROUND
+  ) {
     ots.otsOccupancy = ots.foregroundOccupancy;
     return ots;
   }
@@ -211,6 +328,8 @@ export function planDialogueCamera({
         distance,
         height: singleHeight,
         lookHeight: singleLook,
+        speaker,
+        speakerHeadHeight,
         listener,
         listenerHeadHeight,
         fov,
@@ -218,8 +337,18 @@ export function planDialogueCamera({
         kind: 'single',
       });
       plan.otsOccupancy = ots.foregroundOccupancy;
-      if (!best || plan.foregroundOccupancy < best.foregroundOccupancy) best = plan;
-      if (plan.foregroundOccupancy <= MAX_DIALOGUE_FOREGROUND) return plan;
+      if (
+        !best
+        || (plan.speakerFaceSafe && !best.speakerFaceSafe)
+        || (
+          plan.speakerFaceSafe === best.speakerFaceSafe
+          && plan.foregroundOccupancy < best.foregroundOccupancy
+        )
+      ) best = plan;
+      if (
+        plan.speakerFaceSafe
+        && plan.foregroundOccupancy <= MAX_DIALOGUE_FOREGROUND
+      ) return plan;
     }
   }
   return best;
@@ -326,6 +455,147 @@ export function planTwoShotCamera({
   });
 }
 
+export const GROUP_FACE_SAFE = Object.freeze({
+  minX: -0.82, maxX: 0.82,
+  minY: -0.7, maxY: 0.72,
+});
+export const MAX_GROUP_HEAD_OCCLUSION = 0.08;
+export const MAX_VISIBLE_DIALOGUE_ROUTE_MS = 3200;
+export const MAX_VISIBLE_GROUP_ROUTE_MS = 4200;
+
+export function projectedHeadOcclusion(a, b) {
+  const near = a.depth <= b.depth ? a : b;
+  const far = near === a ? b : a;
+  const width = Math.max(0, Math.min(near.right, far.right) - Math.max(near.left, far.left));
+  const height = Math.max(0, Math.min(near.top, far.top) - Math.max(near.bottom, far.bottom));
+  const farArea = Math.max(0.000001, (far.right - far.left) * (far.top - far.bottom));
+  return (width * height) / farArea;
+}
+
+export function maxProjectedHeadOcclusion(bounds) {
+  let max = 0;
+  for (let i = 0; i < bounds.length; i++) {
+    for (let j = i + 1; j < bounds.length; j++) {
+      max = Math.max(max, projectedHeadOcclusion(bounds[i], bounds[j]));
+    }
+  }
+  return max;
+}
+
+export function planGroupCamera({
+  actors,
+  angle,
+  distance = 6,
+  height = 2.7,
+  look = 1.2,
+  fov = 46,
+  aspect = 16 / 9,
+  maxDistance = 30,
+}) {
+  const visible = (actors || []).filter(Boolean);
+  if (!visible.length) throw new Error('planGroupCamera requires at least one actor');
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+  for (const actor of visible) {
+    minX = Math.min(minX, actor.x);
+    maxX = Math.max(maxX, actor.x);
+    minZ = Math.min(minZ, actor.z);
+    maxZ = Math.max(maxZ, actor.z);
+  }
+  const target = {
+    x: (minX + maxX) / 2,
+    y: 0,
+    z: (minZ + maxZ) / 2,
+  };
+  const angleOffsets = [0];
+  // Search only inside the same screen axis. If this window cannot separate
+  // the cast, the blocking—not a surprise reverse angle—must be re-authored.
+  for (let offset = 0.06; offset <= 1.08 + 0.001; offset += 0.06) {
+    angleOffsets.push(offset, -offset);
+  }
+  let last = null;
+  let bestSafe = null;
+  // Preserve the authored side of the axis first. Widening a group shot is
+  // preferable to reversing everybody's screen direction just to stay close;
+  // oversized responsive moves are already protected by a covered reframe.
+  for (const offset of angleOffsets) {
+    for (
+      let candidate = Math.max(3.2, distance);
+      candidate <= Math.max(distance, maxDistance) + 0.001;
+      candidate += 0.4
+    ) {
+      const candidateAngle = angle + offset;
+      const cameraLook = { x: target.x, y: look, z: target.z };
+      let bounds = null;
+      let faceSafe = true;
+      let headOcclusion = 0;
+      // Certify the whole bounded drift envelope, not only the centre pose.
+      // Slow readers may hold this frame for a minute.
+      for (const driftScale of [-1, -0.5, 0, 0.5, 1]) {
+        const driftAngle = candidateAngle + driftScale * CINEMATIC_DRIFT_ANGLE;
+        const cameraPos = {
+          x: target.x - Math.sin(driftAngle) * candidate,
+          y: height,
+          z: target.z - Math.cos(driftAngle) * candidate,
+        };
+        const driftBounds = visible.map((actor) => projectedHeadBounds({
+          cameraPos,
+          cameraLook,
+          actor,
+          headHeight: actor.headHeight ?? 1.65,
+          fov,
+          aspect,
+        }));
+        if (driftScale === 0) bounds = driftBounds;
+        faceSafe &&= driftBounds.every((box) => (
+          box.left >= GROUP_FACE_SAFE.minX
+          && box.right <= GROUP_FACE_SAFE.maxX
+          && box.bottom >= GROUP_FACE_SAFE.minY
+          && box.top <= GROUP_FACE_SAFE.maxY
+        ));
+        headOcclusion = Math.max(
+          headOcclusion,
+          maxProjectedHeadOcclusion(driftBounds),
+        );
+      }
+      const plan = {
+        angle: candidateAngle,
+        authoredAngle: angle,
+        angleOffset: offset,
+        target,
+        distance: candidate,
+        height,
+        lookHeight: look,
+        bounds,
+        faceSafe,
+        headOcclusion,
+        compositionSafe: faceSafe && headOcclusion <= MAX_GROUP_HEAD_OCCLUSION,
+      };
+      if (plan.compositionSafe) {
+        // A modest same-axis angle adjustment is preferable to pulling the
+        // portrait camera so far back that the family becomes tiny.
+        plan.compositionScore = candidate + Math.abs(offset) * 10 + headOcclusion * 2;
+        if (!bestSafe || plan.compositionScore < bestSafe.compositionScore) {
+          bestSafe = plan;
+        }
+      }
+      if (
+        !last
+        || (plan.faceSafe && !last.faceSafe)
+        || (
+          plan.faceSafe === last.faceSafe
+          && plan.headOcclusion < last.headOcclusion - 0.001
+        )
+        || (
+          plan.faceSafe === last.faceSafe
+          && Math.abs(plan.headOcclusion - last.headOcclusion) <= 0.001
+          && Math.abs(plan.angleOffset) < Math.abs(last.angleOffset)
+        )
+      ) last = plan;
+    }
+  }
+  return bestSafe || last;
+}
+
 // The shared vocabulary every act speaks: sequencing, the fire ring, and the
 // dialogue-camera grammar (dialogue-cinematography skill). Built once per
 // scene and handed to each act as `h`.
@@ -343,6 +613,128 @@ export function makeHelpers(ctx) {
   const FIRE = { x: 0, z: -6 };
   const TELL_RING = [['judah', 3.4], ['reuben', 4.15], ['simeon', 5.0], ['levi', 5.75]];
   const ringXZ = (a) => ({ x: FIRE.x + Math.cos(a) * 2.2, z: FIRE.z + Math.sin(a) * 2.2 });
+  const placeCameraSpectator = (npc, slot, focus = FIRE) => {
+    npc.target = null;
+    npc.stuckT = 0;
+    npc.onArrive?.resolve?.(false);
+    npc.onArrive = null;
+    npc.pos.x = slot.x;
+    npc.pos.z = slot.z;
+    npc.circle.x = slot.x;
+    npc.circle.z = slot.z;
+    npc.char.setPosition(slot.x, slot.z);
+    ctx.npcs.freeze(npc, true);
+    npc.char.turnToward(focus.x - slot.x, focus.z - slot.z);
+    npc.char.play('idle');
+  };
+  const stageTellingAmbient = () => {
+    TELLING_AMBIENT_KEYS.forEach((key, index) => {
+      const npc = ctx.cast[key];
+      if (npc) placeCameraSpectator(npc, TELLING_AMBIENT_SLOTS[index]);
+    });
+  };
+  const reserveTellingAmbient = async () => {
+    TELLING_AMBIENT_KEYS.forEach((key) => {
+      const npc = ctx.cast[key];
+      if (npc) ctx.npcs.freeze(npc, true);
+    });
+  };
+  const releaseTellingAmbient = () => {
+    TELLING_AMBIENT_KEYS.forEach((key) => {
+      const npc = ctx.cast[key];
+      if (npc) ctx.npcs.freeze(npc, false);
+    });
+  };
+  const stageCoatEnvySpectators = () => {
+    COAT_ENVY_SPECTATOR_KEYS.forEach((key, index) => {
+      const npc = ctx.cast[key];
+      if (npc) placeCameraSpectator(
+        npc,
+        COAT_ENVY_SPECTATOR_SLOTS[index],
+        { x: 0.8, z: -7.6 },
+      );
+    });
+  };
+  const releaseCoatEnvySpectators = () => {
+    COAT_ENVY_SPECTATOR_KEYS.forEach((key) => {
+      const npc = ctx.cast[key];
+      if (npc) ctx.npcs.freeze(npc, false);
+    });
+  };
+  const moveCameraSafely = async (spec, {
+    authoredMs,
+    maxVisibleMs,
+  }) => {
+    const moveMs = ctx.camera.cinematicMoveTo(spec) ?? authoredMs;
+    if (moveMs <= maxVisibleMs) {
+      await wait(moveMs);
+      return { covered: false, moveMs };
+    }
+
+    // Responsive portrait wides can sit 18u+ from the circle. Orbiting all
+    // that way at a calm speed produced 16-second "stalls"; accelerating the
+    // same route made it whip past heads. Cover only those exceptional scale
+    // changes with a short cinematic dip, land the composition under black,
+    // then reveal the exact authored endpoint.
+    await ctx.cinema.fade(true, 180);
+    ctx.camera.cutTo({
+      ...spec,
+      path: 'linear',
+      arcCenter: null,
+      arcRadius: 0,
+      arcDirection: 0,
+    });
+    await ctx.cinema.fade(false, 220);
+    return { covered: true, moveMs: 400 };
+  };
+  const groupShot = (names, {
+    angle,
+    distance = 6,
+    height = 2.7,
+    look = 1.2,
+    ms = 1600,
+    arcRadius = 6.4,
+    arcDirection = 0,
+  }) => ({
+    t: 'fn',
+    fn: async () => {
+      const lens = ctx.camera.camera;
+      const actors = names.map((who) => {
+        const position = posOf(who);
+        return {
+          x: position.x,
+          y: position.y ?? 0,
+          z: position.z,
+          headHeight: charOf(who).headHeight,
+        };
+      });
+      const plan = planGroupCamera({
+        actors,
+        angle,
+        distance,
+        height,
+        look,
+        fov: lens?.fov ?? 46,
+        aspect: lens?.aspect ?? 16 / 9,
+      });
+      if (!plan.compositionSafe) {
+        throw new Error(
+          `No audience-safe group composition (${(plan.headOcclusion * 100).toFixed(1)}% head overlap)`,
+        );
+      }
+      await moveCameraSafely({
+        ...plan,
+        duration: ms,
+        path: 'groupArc',
+        arcCenter: FIRE,
+        arcRadius,
+        arcDirection,
+      }, {
+        authoredMs: ms,
+        maxVisibleMs: MAX_VISIBLE_GROUP_ROUTE_MS,
+      });
+    },
+  });
 
   // Dialogue cinematography: an over-the-shoulder SHOT computed from LIVE
   // positions — camera behind the listener's shoulder, speaker favored on the
@@ -352,14 +744,23 @@ export function makeHelpers(ctx) {
   // skull can never fill the lens or turn its back to it.
   const posOf = (who) => (who === 'joseph' ? ctx.joseph.position : ctx.cast[who].pos);
   const charOf = (who) => (who === 'joseph' ? ctx.joseph : ctx.cast[who].char);
-  const shot = (speaker, listener, { side = 0.42, dist = 3.2, height = 1.75, look = 1.25, ms = 850 } = {}) => ({
+  const shot = (speaker, listener, {
+    side = 0.42,
+    dist = 3.2,
+    height = 1.75,
+    look = 1.25,
+    ms = 850,
+    speakerAnim = 'talk',
+    arcRadius = 6.4,
+    arcDirection = 0,
+  } = {}) => ({
     t: 'fn',
     fn: async () => {
       const sp = posOf(speaker), li = posOf(listener);
       // the two face each other; the speaker plays the calm talk gesture
       // (never a walk/run cycle) — cutscene facing is always correct.
       charOf(speaker).turnToward(li.x - sp.x, li.z - sp.z);
-      charOf(speaker).play('talk');
+      if (speakerAnim) charOf(speaker).play(speakerAnim);
       charOf(listener).turnToward(sp.x - li.x, sp.z - li.z);
       const speakerChar = charOf(speaker);
       const listenerChar = charOf(listener);
@@ -378,7 +779,10 @@ export function makeHelpers(ctx) {
       });
       const groupArc = Math.hypot(sp.x - FIRE.x, sp.z - FIRE.z) < 5.5
         && Math.hypot(li.x - FIRE.x, li.z - FIRE.z) < 5.5;
-      ctx.camera.cinematicMoveTo({
+      // A line never begins while its speaker is still outside the safe
+      // frame. Small moves land normally; very large reverse angles use the
+      // covered reframe above instead of making dialogue wait in darkness.
+      await moveCameraSafely({
         angle: plan.angle,
         target: plan.target,
         distance: plan.distance,
@@ -387,9 +791,12 @@ export function makeHelpers(ctx) {
         duration: ms,
         path: groupArc ? 'groupArc' : plan.path,
         arcCenter: groupArc ? FIRE : null,
-        arcRadius: groupArc ? 6.4 : 0,
+        arcRadius: groupArc ? arcRadius : 0,
+        arcDirection: groupArc ? arcDirection : 0,
+      }, {
+        authoredMs: ms,
+        maxVisibleMs: MAX_VISIBLE_DIALOGUE_ROUTE_MS,
       });
-      await wait(ms * 0.6); // the cut lands as the line starts
     },
   });
 
@@ -446,5 +853,11 @@ export function makeHelpers(ctx) {
 
   const pointToGate = (pen) => ({ x: pen.minX + 0.6, z: (pen.gate.z0 + pen.gate.z1) / 2 });
 
-  return { seq, wait, gate, J, FIRE, TELL_RING, ringXZ, posOf, charOf, shot, twoShot, pointToGate };
+  return {
+    seq, wait, gate, J, FIRE, TELL_RING, ringXZ,
+    TELLING_AMBIENT_KEYS, TELLING_AMBIENT_SLOTS,
+    posOf, charOf, shot, twoShot, groupShot, pointToGate,
+    reserveTellingAmbient, releaseTellingAmbient, stageTellingAmbient,
+    stageCoatEnvySpectators, releaseCoatEnvySpectators,
+  };
 }

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
+import { AUDIO_MANIFEST } from '../src/data/audioManifest.js';
 
 async function withWatchdog(promise, ms, message) {
   let timer = null;
@@ -322,6 +323,36 @@ stalledMedia.dispatch('error');
 assert.deepEqual(stalledFallbackEvents, [{ type: 'start', gain: 0.33 }],
   'late media events duplicated the fallback');
 stalledHandle.stop(0);
+stalledFallbackEvents.length = 0;
+const stalledMediaCountAfterTimeout = MediaFake.instances.length;
+const cachedStalledHandle = stalledAudio.playLoop('loop.stalled-load', { gain: 0.21 });
+assert.equal(MediaFake.instances.length, stalledMediaCountAfterTimeout,
+  'a timed-out streamed loop repeated media/network setup in the same session');
+assert.deepEqual(stalledFallbackEvents, [{ type: 'start', gain: 0.21 }],
+  'a timed-out streamed loop did not start its authored fallback immediately on replay');
+cachedStalledHandle.stop(0);
+
+// Retiring a pending transport is not evidence that its URL is unavailable.
+// Its readiness deadline must stand down, and a later authored use must probe.
+const stoppedBeforeTimeoutAudio = new AudioSystem();
+stoppedBeforeTimeoutAudio.testFallback = () => ({ setGain() {}, stop() {} });
+stoppedBeforeTimeoutAudio.registerManifest([{
+  key: 'loop.stop-before-timeout', bus: 'sfx', loop: true,
+  file: 'ambient/stop-before-timeout', format: 'mp3',
+  fallback: 'testFallback', available: true,
+}]);
+stoppedBeforeTimeoutAudio.unlock();
+stoppedBeforeTimeoutAudio._mediaReadyTimeoutMs = 12;
+const stoppedPending = stoppedBeforeTimeoutAudio.playLoop('loop.stop-before-timeout', { gain: 0.2 });
+stoppedPending.stop(0);
+await new Promise((resolve) => setTimeout(resolve, 20));
+assert.equal(stoppedBeforeTimeoutAudio._unavailableLoopKeys.has('loop.stop-before-timeout'), false,
+  'stopping a pending loop poisoned the page-session availability cache');
+const stoppedMediaCount = MediaFake.instances.length;
+const stoppedRetry = stoppedBeforeTimeoutAudio.playLoop('loop.stop-before-timeout', { gain: 0.2 });
+assert.equal(MediaFake.instances.length, stoppedMediaCount + 1,
+  'a stopped pending loop was not probed on its next authored use');
+stoppedRetry.stop(0);
 
 // Reuse the decoded fixture to exercise a music-routed transient without
 // adding another network/decode concern to this ownership-focused harness.
@@ -564,6 +595,41 @@ assert.deepEqual(fallbackEvents[0], { type: 'start', gain: 0.3 });
 knownMissingHandle.stop(0);
 fallbackEvents.length = 0;
 
+const mediaCountBeforeCachedFallback = MediaFake.instances.length;
+const cachedMissingHandle = audio.playLoop('loop.known-missing', { gain: 0.25 });
+assert.equal(MediaFake.instances.length, mediaCountBeforeCachedFallback,
+  'a loop proven missing must not repeat media/network setup in the same session');
+assert.deepEqual(fallbackEvents[0], { type: 'start', gain: 0.25 },
+  'a loop proven missing must start its authored fallback immediately');
+cachedMissingHandle.stop(0);
+fallbackEvents.length = 0;
+
+// The negative cache is deliberately page-instance scoped. A fresh app/page
+// must probe again so a later deploy or recovered connection can restore audio.
+const freshPageAudio = new AudioSystem();
+const freshPageFallback = [];
+freshPageAudio.testFallback = (gain) => {
+  freshPageFallback.push(gain);
+  return { setGain() {}, stop() {} };
+};
+freshPageAudio.registerManifest([{
+  key: 'loop.known-missing', bus: 'music', loop: true,
+  file: 'music/known-missing', format: 'mp3',
+  fallback: 'testFallback', available: true,
+}]);
+freshPageAudio.unlock();
+const freshPageMediaCount = MediaFake.instances.length;
+const freshPageHandle = freshPageAudio.playLoop('loop.known-missing', { gain: 0.18 });
+assert.equal(MediaFake.instances.length, freshPageMediaCount + 1,
+  'a fresh AudioSystem inherited another page instance’s negative cache');
+const freshPageMedia = MediaFake.instances.at(-1);
+assert.deepEqual(freshPageMedia.srcHistory.filter(Boolean), ['audio/music/known-missing.mp3'],
+  'a fresh AudioSystem did not retry the authored media URL');
+freshPageMedia.dispatch('error');
+assert.deepEqual(freshPageFallback, [0.18],
+  'fresh-page retry did not retain its authored fallback');
+freshPageHandle.stop(0);
+
 zeroHandle.stop(0);
 autoplayHandle.stop(0);
 assert.equal(audio._liveLoops.size, 0, 'all loop transports release their key ownership');
@@ -681,6 +747,48 @@ assert.match(generatorSource, /\.previous-/, 'VO generation must preserve a reco
 assert.doesNotMatch(generatorSource, /rm\(outFile,\s*\{\s*force:\s*true\s*\}\)/,
   'VO generation must not delete the last-good file before replacement succeeds');
 
+const availableFileLoops = AUDIO_MANIFEST.filter((entry) => (
+  entry.available && entry.loop && entry.file
+));
+assert.ok(availableFileLoops.length > 0, 'audio manifest has no available file loops to audit');
+for (const entry of availableFileLoops) {
+  assert.ok(Number.isFinite(entry.seconds) && entry.seconds > 0,
+    `${entry.key} is missing probed duration metadata`);
+  assert.ok(entry.channels === 1 || entry.channels === 2,
+    `${entry.key} is missing probed channel metadata`);
+}
+const formerLoopPcmMiB = availableFileLoops.reduce(
+  (sum, entry) => sum + (entry.seconds * 48000 * entry.channels * 4) / 1048576,
+  0,
+);
+const physicallyPresentLoops = [];
+const physicallyMissingLoops = [];
+let physicallyPresentLoopBytes = 0;
+for (const entry of availableFileLoops) {
+  const extension = entry.format ?? 'mp3';
+  const assetUrl = new URL(`../public/audio/${entry.file}.${extension}`, import.meta.url);
+  try {
+    const assetStat = await stat(assetUrl);
+    physicallyPresentLoops.push(entry);
+    physicallyPresentLoopBytes += assetStat.size;
+  } catch {
+    physicallyMissingLoops.push(entry);
+  }
+}
+const presentLoopPcmMiB = physicallyPresentLoops.reduce(
+  (sum, entry) => sum + (entry.seconds * 48000 * entry.channels * 4) / 1048576,
+  0,
+);
+
 console.log('audio power tests: PASS');
-console.log('decoded loop PCM: ~177.1 MiB -> 0 explicit AudioBuffer MiB at 48 kHz');
+console.log(
+  `decoded-equivalent loop PCM: ${formerLoopPcmMiB.toFixed(3)} MiB`
+  + ` across ${availableFileLoops.length} manifest entries; locally present subset `
+  + `${presentLoopPcmMiB.toFixed(3)} MiB across ${physicallyPresentLoops.length} files; `
+  + `actual compressed disk bytes ${(physicallyPresentLoopBytes / 1048576).toFixed(3)} MiB`
+  + ' -> runtime explicit loop AudioBuffer allocation 0 MiB at 48 kHz',
+);
+if (physicallyMissingLoops.length) {
+  console.log(`missing optional loop files: ${physicallyMissingLoops.map((entry) => entry.key).join(', ')}`);
+}
 console.log('narrator PCM: all lines retained -> at most 2 decoded lines; compressed bytes remain prefetched');

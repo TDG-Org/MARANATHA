@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+
+export const CINEMATIC_DRIFT_ANGLE = 0.025;
 import { clamp, lerp, easeInOut } from './world.js';
 
 // ── CAMERA COMFORT KNOBS ────────────────────────────────────────────────────
@@ -94,6 +96,8 @@ export class CameraDirector {
     this._arcToY = 0;
     this._arcCenter = new THREE.Vector3();
     this._arcSafeRadius = 0;
+    this._arcOutEnd = 0.2;
+    this._arcOrbitEnd = 0.8;
   }
 
   setDrift(on) { this.drift = !!on; }
@@ -230,7 +234,8 @@ export class CameraDirector {
     const breath = this.still ? 0 : Math.sin(this._t * 0.0009) * 0.045;
     if (this.pose && this.poseK > 0) {
       const kk = easeInOut(this.poseK);
-      const moveK = easeInOut(this._poseMoveK);
+      const rawMoveK = this._poseMoveK;
+      const moveK = easeInOut(rawMoveK);
       let posePos = this.pose.pos;
       let poseLook = this.pose.look;
       if (this._poseMoveK < 1) {
@@ -242,16 +247,22 @@ export class CameraDirector {
           // dialogue circle and never rises over it.
           let angle;
           let radius;
-          if (moveK < 0.2) {
-            const u = easeInOut(moveK / 0.2);
+          if (rawMoveK < this._arcOutEnd) {
+            const u = easeInOut(rawMoveK / Math.max(0.0001, this._arcOutEnd));
             angle = this._arcFromAngle;
             radius = lerp(this._arcFromRadius, this._arcSafeRadius, u);
-          } else if (moveK < 0.8) {
-            const u = easeInOut((moveK - 0.2) / 0.6);
+          } else if (rawMoveK < this._arcOrbitEnd) {
+            const u = easeInOut(
+              (rawMoveK - this._arcOutEnd)
+              / Math.max(0.0001, this._arcOrbitEnd - this._arcOutEnd),
+            );
             angle = this._arcFromAngle + this._arcAngleDelta * u;
             radius = this._arcSafeRadius;
           } else {
-            const u = easeInOut((moveK - 0.8) / 0.2);
+            const u = easeInOut(
+              (rawMoveK - this._arcOrbitEnd)
+              / Math.max(0.0001, 1 - this._arcOrbitEnd),
+            );
             angle = this._arcFromAngle + this._arcAngleDelta;
             radius = lerp(this._arcSafeRadius, this._arcToRadius, u);
           }
@@ -273,11 +284,12 @@ export class CameraDirector {
         }
         posePos = this._poseOutPos;
       }
-      // pose drift: orbit the held shot around its look target (~0.03 rad/s)
-      // + a slow rise — felt, never seen (cutscene-director NEVER-STATIC).
+      // Pose drift is a BOUNDED breath around the authored lens. The former
+      // monotonic orbit accumulated 17° in ten seconds and eventually carried
+      // a listener's head across the speaker on slow readers' dialogue holds.
       let px = posePos.x, py = posePos.y, pz = posePos.z;
       if (this.drift) {
-        const a = this._driftT * 0.00003;
+        const a = Math.sin(this._driftT * 0.00022) * CINEMATIC_DRIFT_ANGLE;
         const ox = px - poseLook.x, oz = pz - poseLook.z;
         const ca = Math.cos(a), sa = Math.sin(a);
         px = poseLook.x + ox * ca - oz * sa;
@@ -321,13 +333,18 @@ export class CameraDirector {
     this.still = false; // any new shot wakes the camera from a held still
     this._poseDriver = null; // a new authored shot supersedes any driver
     const replacing = !!this.pose && this.poseK > 0.001;
-    if (replacing) {
+    const requestedRoute = path === 'arc' || path === 'groupArc';
+    // A first cinematic move may begin from the live follow camera. Preserve
+    // those rendered pixels as the route origin too; otherwise an authored
+    // groupArc silently degrades to a straight chord on its most variable use.
+    const routeFromFollow = !replacing && requestedRoute && this._init;
+    const routedMove = replacing || routeFromFollow;
+    if (routedMove) {
       // Continue from the pixels that were actually rendered. Previously the
       // pose was replaced while poseK stayed at 1, causing multi-unit jumps.
       this._poseFromPos.copy(this.camera.position);
       this._poseFromLook.copy(this._renderLook);
       this._poseMoveK = 0;
-      this._poseMoveSpeed = 1 / Math.max(1, duration);
       this.poseK = 1;
       this._poseDir = 0;
     } else {
@@ -337,7 +354,8 @@ export class CameraDirector {
     const pos = new THREE.Vector3(t.x - Math.sin(angle) * distance, t.y + height, t.z - Math.cos(angle) * distance);
     const look = new THREE.Vector3(t.x, t.y + lookHeight, t.z);
     this.pose = { pos, look };
-    this._posePath = replacing && (path === 'arc' || path === 'groupArc') ? path : 'linear';
+    this._posePath = routedMove && requestedRoute ? path : 'linear';
+    let effectiveDuration = Math.max(1, duration);
     if (this._posePath === 'arc' || this._posePath === 'groupArc') {
       const center = this._posePath === 'groupArc'
         ? (arcCenter || look)
@@ -367,15 +385,75 @@ export class CameraDirector {
       );
       this._arcFromY = this._poseFromPos.y - this._poseFromLook.y;
       this._arcToY = pos.y - look.y;
+      if (this._posePath === 'groupArc') {
+        const outLength = Math.abs(this._arcSafeRadius - this._arcFromRadius);
+        const orbitLength = Math.abs(this._arcAngleDelta) * this._arcSafeRadius;
+        const inLength = Math.abs(this._arcSafeRadius - this._arcToRadius);
+        const totalLength = Math.max(0.001, outLength + orbitLength + inLength);
+        this._arcOutEnd = outLength / totalLength;
+        this._arcOrbitEnd = (outLength + orbitLength) / totalLength;
+        // Local smoothstep peaks at 1.5x average speed. Give every visible
+        // group route enough real time to stay below about 6 world-units/s.
+        // Callers that need a very large responsive reframing must cover it
+        // with a dip/cut instead of accelerating an orbit around the cast.
+        effectiveDuration = Math.max(effectiveDuration, totalLength * 250);
+      }
     }
+    if (routedMove) this._poseMoveSpeed = 1 / effectiveDuration;
     if (!replacing) {
-      this._poseDir = 1;
-      this._poseSpeed = 1 / Math.max(1, duration);
+      if (!routeFromFollow) {
+        this._poseDir = 1;
+        this._poseSpeed = 1 / effectiveDuration;
+      }
     }
     this._driftT = 0; // each shot's drift arc starts from ITS authored frame
+    return effectiveDuration;
   }
 
-  release(duration = 1400) { this.still = false; this._poseDriver = null; this._posePath = 'linear'; this._poseMoveK = 1; this._poseDir = -1; this._poseSpeed = 1 / Math.max(1, duration); }
+  cutTo({
+    angle = 0,
+    target = this.target,
+    distance = 4,
+    height = 1.6,
+    lookHeight = 1.3,
+  } = {}) {
+    this.still = false;
+    this._poseDriver = null;
+    const t = target.isVector3
+      ? target.clone()
+      : new THREE.Vector3(target.x, target.y ?? 0, target.z);
+    const pos = new THREE.Vector3(
+      t.x - Math.sin(angle) * distance,
+      t.y + height,
+      t.z - Math.cos(angle) * distance,
+    );
+    const look = new THREE.Vector3(t.x, t.y + lookHeight, t.z);
+    this.pose = { pos, look };
+    this.poseK = 1;
+    this._poseDir = 0;
+    this._posePath = 'linear';
+    this._poseMoveK = 1;
+    this._driftT = 0;
+    // Commit the lens synchronously. A wall-clock wait cannot guarantee even
+    // one rendered frame on a 10-20fps device; the next partially revealed
+    // browser paint must already contain this composition.
+    this.camera.position.copy(pos);
+    if (this.camera.position.y < this.minGroundY) this.camera.position.y = this.minGroundY;
+    this.camera.lookAt(look);
+    this._renderLook.copy(look);
+    return 0;
+  }
+
+  release(duration = 1400) {
+    this.still = false;
+    this._poseDriver = null;
+    // Release can legitimately arrive before a non-blocking move lands (for
+    // example when narration is skipped). Keep that in-flight path advancing
+    // while its influence blends out. Jumping moveK to one teleported to the
+    // unfinished endpoint; copying rendered pixels double-applied poseK/drift.
+    this._poseDir = -1;
+    this._poseSpeed = 1 / Math.max(1, duration);
+  }
   get inCinematic() { return this.poseK > 0.001 || this._poseDir > 0; }
 
   snap() { this._init = false; this.frame(0); }

@@ -1,5 +1,45 @@
 import { WEB } from '../../../data/versesWEB.js';
 import { isAbortError } from '../../../core/async.js';
+import { planGroupCamera } from './helpers.js';
+
+export const DUSK_FIRE = Object.freeze({ x: 0, z: -6 });
+export const DUSK_JOSEPH_MARK = Object.freeze({ x: 0.6, z: -4.4 });
+export const HERD_DIRECTION_MARKS = Object.freeze([
+  Object.freeze({ x: -0.7, z: -2.5 }),
+  Object.freeze({ x: 1.9, z: -2.5 }),
+]);
+export const HERD_DIRECTION_JOSEPH_MARK = Object.freeze({ x: 0.6, z: -4.7 });
+export function planHerdDirectionCamera({
+  fov = 46,
+  aspect = 16 / 9,
+  josephHeadHeight = 1.65,
+  brotherHeadHeights = [1.65, 1.65],
+} = {}) {
+  return planGroupCamera({
+    actors: [
+      { ...HERD_DIRECTION_JOSEPH_MARK, y: 0, headHeight: josephHeadHeight },
+      ...HERD_DIRECTION_MARKS.map((mark, index) => ({
+        ...mark,
+        y: 0,
+        headHeight: brotherHeadHeights[index] ?? 1.65,
+      })),
+    ],
+    // Shoot from behind Joseph: his small shoulder anchors the foreground
+    // while both speaking brothers face the audience across the frame.
+    angle: 0,
+    distance: 5.4,
+    height: 2.25,
+    look: 1.15,
+    fov,
+    aspect,
+  });
+}
+export const DUSK_RING = Object.freeze([
+  Object.freeze(['judah', 3.5]),
+  Object.freeze(['reuben', 4.2]),
+  Object.freeze(['simeon', 5.15]),
+  Object.freeze(['levi', 5.9]),
+]);
 
 // SCENE 1 — Joseph, Genesis 37:1–11. The story is DATA + gates; this act's
 // beats are plain async functions over the shared scene context (`ctx`) and the
@@ -8,7 +48,11 @@ import { isAbortError } from '../../../core/async.js';
 // ACT 1 — life in the camp: herd the strays, report to father, receive the
 // coat (Gen 37:3–4), and the dusk fire that ends with him sent to bed.
 export function makeCampBeats(ctx, h) {
-  const { seq, wait, gate, J, shot, twoShot, pointToGate } = h;
+  const {
+    seq, wait, gate, J, shot, twoShot, pointToGate,
+    stageTellingAmbient, releaseTellingAmbient,
+    stageCoatEnvySpectators, releaseCoatEnvySpectators,
+  } = h;
 
   // ---------- beat 1 · 🐑 herd the strays ----------
   async function herd() {
@@ -31,24 +75,152 @@ export function makeCampBeats(ctx, h) {
       when: () => herdActive,
       onEnter: () => {
         directionsBusy = (async () => {
+          // Genesis 37:2 identifies Joseph's flock companions as sons of
+          // Bilhah and Zilpah. Use unnamed brothers here instead of assigning
+          // that role to Simeon and Levi, who were Leah's sons.
+          const firstBrother = ctx.cast.brother5;
+          const secondBrother = ctx.cast.brother1;
+          const stagedBrothers = [firstBrother, secondBrother];
+          const backgroundActors = Object.values(ctx.cast).filter(
+            (actor) => actor && !stagedBrothers.includes(actor),
+          );
+          const brotherColor = '#b9a27d';
+          const originalJoseph = {
+            x: ctx.joseph.position.x,
+            z: ctx.joseph.position.z,
+          };
+          const originalBrothers = stagedBrothers.map((brother) => ({
+            x: brother.pos.x,
+            z: brother.pos.z,
+          }));
+          const originalBackground = backgroundActors.map((actor) => ({
+            x: actor.pos.x,
+            z: actor.pos.z,
+          }));
+          let covered = false;
           ctx.setInput(false);
-          const sim = ctx.cast.simeon, lev = ctx.cast.levi;
-          ctx.npcs.freeze(sim, true);
-          ctx.npcs.freeze(lev, true);
-          const j = ctx.joseph.position;
-          sim.char.turnToward(j.x - sim.pos.x, j.z - sim.pos.z);
-          sim.char.play('talk');
-          await ctx.dialogue.say('Simeon', 'Joseph — the flock is spreading into the camp.', { color: J.Simeon });
-          sim.char.play('idle');
-          lev.char.turnToward(j.x - lev.pos.x, j.z - lev.pos.z);
-          lev.char.play('talk');
-          await ctx.dialogue.say('Levi', 'Circle behind the strays, little brother. Bring them through the gate.', { color: J.Levi });
-          await wait(700);
-          sim.char.play('idle'); lev.char.play('idle');
-          ctx.dialogue.hide();
-          ctx.npcs.freeze(sim, false);
-          ctx.npcs.freeze(lev, false);
-          if (herdActive) ctx.setInput(true); // never re-arm input inside a later beat
+          ctx.hud.setCutscene?.(true);
+          stagedBrothers.forEach((brother) => ctx.npcs.freeze(brother, true));
+          backgroundActors.forEach((actor) => ctx.npcs.freeze(actor, true));
+          try {
+            // Joseph may enter anywhere in the 3.4u trigger disc. Stage all
+            // three on audited, separated marks under black; otherwise a valid
+            // edge entry can place Joseph inside one of the speaking brothers.
+            await ctx.cinema.fade(true, 180);
+            covered = true;
+            stagedBrothers.forEach((brother, index) => {
+              const mark = HERD_DIRECTION_MARKS[index];
+              brother.target = null;
+              brother.stuckT = 0;
+              brother.onArrive?.resolve?.(false);
+              brother.onArrive = null;
+              brother.pos.x = mark.x;
+              brother.pos.z = mark.z;
+              brother.circle.x = mark.x;
+              brother.circle.z = mark.z;
+              brother.char.setPosition(mark.x, mark.z);
+            });
+            // A living camp can wander anyone through the lens corridor. Move
+            // every non-speaking actor to an offstage holding line for this
+            // covered two-line vignette, then restore them exactly afterward.
+            backgroundActors.forEach((actor, index) => {
+              const x = 80 + index * 1.5;
+              const z = 80;
+              actor.target = null;
+              actor.stuckT = 0;
+              actor.onArrive?.resolve?.(false);
+              actor.onArrive = null;
+              actor.pos.x = x;
+              actor.pos.z = z;
+              actor.circle.x = x;
+              actor.circle.z = z;
+              actor.char.setPosition(x, z);
+            });
+            ctx.controller?.vel?.set?.(0, 0);
+            ctx.joseph.setPosition(
+              HERD_DIRECTION_JOSEPH_MARK.x,
+              HERD_DIRECTION_JOSEPH_MARK.z,
+            );
+            const j = ctx.joseph.position;
+            const lens = ctx.camera.camera;
+            const directionsPlan = planHerdDirectionCamera({
+              fov: lens?.fov ?? 46,
+              aspect: lens?.aspect ?? 16 / 9,
+              josephHeadHeight: ctx.joseph.headHeight,
+              brotherHeadHeights: stagedBrothers.map((brother) => brother.char.headHeight),
+            });
+            if (!directionsPlan.compositionSafe) {
+              throw new Error('Herd directions have no audience-safe three-shot');
+            }
+            ctx.camera.cutTo(directionsPlan);
+            await ctx.cinema.fade(false, 220);
+            covered = false;
+            ctx.joseph.turnToward(
+              ((firstBrother.pos.x + secondBrother.pos.x) / 2) - j.x,
+              ((firstBrother.pos.z + secondBrother.pos.z) / 2) - j.z,
+            );
+            firstBrother.char.turnToward(j.x - firstBrother.pos.x, j.z - firstBrother.pos.z);
+            firstBrother.char.play('talk');
+            await ctx.dialogue.say('One brother', 'Joseph — the flock is spreading into the camp.', { color: brotherColor });
+            firstBrother.char.play('idle');
+            secondBrother.char.turnToward(j.x - secondBrother.pos.x, j.z - secondBrother.pos.z);
+            secondBrother.char.play('talk');
+            await ctx.dialogue.say('Another brother', 'Circle behind the strays, little brother. Bring them through the gate.', { color: brotherColor });
+            await wait(700);
+            // Restore the live camp at the exact pre-dialogue positions under
+            // the same short veil. No actor snaps and no quest path is moved.
+            await ctx.cinema.fade(true, 180);
+            covered = true;
+          } catch (error) {
+            if (!isAbortError(error)) {
+              console.error('[herd directions]', error);
+              // A dialogue/camera failure after reveal still needs a covered
+              // restore; never visibly snap the staged actors back into camp.
+              if (!covered) {
+                try {
+                  await ctx.cinema.fade(true, 180);
+                  covered = true;
+                } catch (coverError) {
+                  if (!isAbortError(coverError)) console.error('[herd directions cover]', coverError);
+                }
+              }
+            }
+          } finally {
+            ctx.dialogue.hide();
+            stagedBrothers.forEach((brother, index) => {
+              const original = originalBrothers[index];
+              brother.char.play('idle');
+              brother.pos.x = original.x;
+              brother.pos.z = original.z;
+              brother.circle.x = original.x;
+              brother.circle.z = original.z;
+              brother.char.setPosition(original.x, original.z);
+              ctx.npcs.freeze(brother, false);
+            });
+            backgroundActors.forEach((actor, index) => {
+              const original = originalBackground[index];
+              actor.char.play('idle');
+              actor.pos.x = original.x;
+              actor.pos.z = original.z;
+              actor.circle.x = original.x;
+              actor.circle.z = original.z;
+              actor.char.setPosition(original.x, original.z);
+              ctx.npcs.freeze(actor, false);
+            });
+            ctx.joseph.setPosition(originalJoseph.x, originalJoseph.z);
+            ctx.camera.release(1);
+            ctx.camera.snap();
+            if (covered && !ctx.signal?.aborted) {
+              try {
+                await ctx.cinema.fade(false, 220);
+              } catch (error) {
+                if (!isAbortError(error)) console.error('[herd directions reveal]', error);
+              }
+            }
+            ctx.hud.setCutscene?.(false);
+            // Never re-arm input inside a later beat or after scene retirement.
+            if (herdActive && !ctx.signal?.aborted) ctx.setInput(true);
+          }
         })();
         return directionsBusy; // Interactables observes async trigger failures/abort
       },
@@ -250,12 +422,20 @@ export function makeCampBeats(ctx, h) {
       { t: 'grade', mood: 'tenseDay', ms: 10 },
       { t: 'sound', key: 'stinger.hatred' },
       // the TENSION music takes over while envy talks (D6: use the real track)
-      { t: 'fn', fn: () => { ctx.setMusic('music.ominous_turn'); ctx.npcs.freeze(ctx.cast.judah, true); ctx.npcs.freeze(ctx.cast.reuben, true); } },
+      { t: 'fn', fn: () => {
+        // The screen is fully black here. Put every non-speaking person on a
+        // collision-audited spectator mark; freezing a random wander position
+        // merely preserved stochastic heads in front of the lens.
+        stageCoatEnvySpectators();
+        ctx.setMusic('music.ominous_turn');
+        ctx.npcs.freeze(ctx.cast.judah, true);
+        ctx.npcs.freeze(ctx.cast.reuben, true);
+      } },
       { t: 'fade', on: false, ms: 420 },
       // D11 (Nate): raised further — heads were still clipping the lens here
       shot('judah', 'reuben', { side: 0.45, dist: 3.1, height: 2.15, look: 1.15 }),
       { t: 'anim', get char() { return ctx.cast.judah.char; }, state: 'talk' },
-      { t: 'say', who: 'Judah', text: 'A special tunic for Joseph — so all can see whom father loves most.', color: J.Judah },
+      { t: 'say', who: 'Judah', text: 'A special tunic for Joseph. Father loves him more than all of us.', color: J.Judah },
       { t: 'anim', get char() { return ctx.cast.judah.char; }, state: 'idle' },
       shot('reuben', 'judah', { side: -0.42, dist: 3.1, height: 2.15, look: 1.15 }),
       { t: 'anim', get char() { return ctx.cast.reuben.char; }, state: 'talk' },
@@ -268,7 +448,11 @@ export function makeCampBeats(ctx, h) {
       { t: 'dialogueHide' },
       { t: 'verse', verse: WEB.gen_37_4 },
       { t: 'verseHide' },
-      { t: 'fn', fn: () => { ctx.npcs.freeze(ctx.cast.judah, false); ctx.npcs.freeze(ctx.cast.reuben, false); } },
+      { t: 'fn', fn: () => {
+        ctx.npcs.freeze(ctx.cast.judah, false);
+        ctx.npcs.freeze(ctx.cast.reuben, false);
+        releaseCoatEnvySpectators();
+      } },
       // Joseph steps back out into the gold, wearing the coat. D8 state
       // machine: the hatred has BEGUN — the tension score persists from here
       // until the dream; the warm theme does not come back in between.
@@ -305,14 +489,18 @@ export function makeCampBeats(ctx, h) {
     // camp settles for the night (they're alive, not waiting on a trigger).
     // D7: they take the FAR (north) arc only — the south side, where the sit
     // prompt lives, stays Joseph's; they face him across the flames.
-    const ring = [['judah', 3.5], ['reuben', 4.2], ['simeon', 5.15], ['levi', 5.9]];
-    ring.forEach(([k, a]) => {
+    DUSK_RING.forEach(([k, a]) => {
       const n = ctx.cast[k];
-      ctx.npcs.sendTo(n, Math.cos(a) * 1.8, -6 + Math.sin(a) * 1.8, { speed: 1.4 })
+      ctx.npcs.sendTo(
+        n,
+        DUSK_FIRE.x + Math.cos(a) * 1.8,
+        DUSK_FIRE.z + Math.sin(a) * 1.8,
+        { speed: 1.4 },
+      )
         .then((arrived) => {
           if (!arrived || ctx.signal?.aborted) return;
           ctx.npcs.freeze(n, true);
-          n.char.turnToward(0 - n.pos.x, -6 - n.pos.z);
+          n.char.turnToward(DUSK_FIRE.x - n.pos.x, DUSK_FIRE.z - n.pos.z);
           n.char.play('kneel'); // Sit_Floor_Idle — seated by the firelight
         })
         .catch((e) => { if (!isAbortError(e)) console.error('[dusk gather]', e); });
@@ -326,7 +514,7 @@ export function makeCampBeats(ctx, h) {
     await gate(() => new Promise((resolve) => {
       ctx.interactables.addPrompt({
         id: 'sit-fire', label: 'Sit by the fire',
-        getPos: () => ({ x: 0.6, z: -4.4 }), r: 2.6, lift: 0.7,
+        x: 0.6, z: -4.4, r: 2.6, lift: 0.7,
         when: () => !sat,
         onInteract: async () => {
           if (sat) return;
@@ -334,23 +522,74 @@ export function makeCampBeats(ctx, h) {
           ctx.setInput(false);
           ctx.hud.clearObjective?.();
           ctx.guide.setTarget(null);
-          ctx.joseph.turnToward(0.2 - ctx.joseph.position.x, -6 - ctx.joseph.position.z);
+          ctx.joseph.turnToward(
+            DUSK_FIRE.x - ctx.joseph.position.x,
+            DUSK_FIRE.z - ctx.joseph.position.z,
+          );
           ctx.joseph.play('kneel'); // Joseph sits (Sit_Floor_Idle / kneel fallback)
           // cozy fireside camera settles in as the light dies + sparks rise
           await seq([
             { t: 'letterbox', on: true },
-            {
-              t: 'cam',
-              angle: Math.PI * 0.34,
-              target: { x: 0.25, z: -5.7 },
-              distance: 3.7,
-              height: 1.25,
-              lookHeight: 0.85,
-              duration: 2600,
-              path: 'groupArc',
-              arcCenter: { x: 0, z: -6 },
-              arcRadius: 5.2,
-            },
+            { t: 'fade', on: true, ms: 320 },
+            { t: 'fn', fn: () => {
+              ctx.joseph.setPosition(DUSK_JOSEPH_MARK.x, DUSK_JOSEPH_MARK.z);
+              ctx.joseph.turnToward(
+                DUSK_FIRE.x - DUSK_JOSEPH_MARK.x,
+                DUSK_FIRE.z - DUSK_JOSEPH_MARK.z,
+              );
+              ctx.joseph.play('kneel');
+              DUSK_RING.forEach(([key, angle]) => {
+                const npc = ctx.cast[key];
+                const x = DUSK_FIRE.x + Math.cos(angle) * 1.8;
+                const z = DUSK_FIRE.z + Math.sin(angle) * 1.8;
+                npc.target = null;
+                npc.stuckT = 0;
+                npc.onArrive?.resolve?.(false);
+                npc.onArrive = null;
+                npc.pos.x = x;
+                npc.pos.z = z;
+                if (npc.circle) {
+                  npc.circle.x = x;
+                  npc.circle.z = z;
+                }
+                npc.char.setPosition(x, z);
+                ctx.npcs.freeze(npc, true);
+                npc.char.turnToward(DUSK_FIRE.x - x, DUSK_FIRE.z - z);
+                npc.char.play('kneel');
+              });
+              stageTellingAmbient();
+              const lens = ctx.camera.camera;
+              const actors = [
+                {
+                  x: DUSK_JOSEPH_MARK.x,
+                  y: 0,
+                  z: DUSK_JOSEPH_MARK.z,
+                  headHeight: ctx.joseph.headHeight,
+                },
+                ...DUSK_RING.map(([key, angle]) => ({
+                  x: DUSK_FIRE.x + Math.cos(angle) * 1.8,
+                  y: 0,
+                  z: DUSK_FIRE.z + Math.sin(angle) * 1.8,
+                  headHeight: ctx.cast[key].char.headHeight,
+                })),
+              ];
+              const plan = planGroupCamera({
+                actors,
+                angle: Math.PI,
+                distance: 5.2,
+                height: 2.25,
+                look: 1.05,
+                fov: lens?.fov ?? 46,
+                aspect: lens?.aspect ?? 16 / 9,
+              });
+              if (!plan.compositionSafe) {
+                throw new Error('Dusk circle has no audience-safe group composition');
+              }
+              // Covered cut: the black veil owns this replacement, so its
+              // responsive endpoint may land in one frame without a flyover.
+              ctx.camera.cinematicMoveTo({ ...plan, duration: 1 });
+            } },
+            { t: 'fade', on: false, ms: 620 },
             { t: 'wait', ms: 1200 },
           ]);
           resolve();
@@ -363,18 +602,9 @@ export function makeCampBeats(ctx, h) {
     // audio). Joseph, stung, rises to sleep alone.
     const jd = ctx.cast.judah, sm = ctx.cast.simeon;
     await seq([
-      {
-        t: 'cam',
-        angle: -Math.PI * 0.62,
-        target: { x: 0.4, z: -6.4 },
-        distance: 3.4,
-        height: 1.35,
-        lookHeight: 0.95,
-        duration: 1200,
-        path: 'groupArc',
-        arcCenter: { x: 0, z: -6 },
-        arcRadius: 5.2,
-      },
+      shot('judah', 'joseph', {
+        side: -0.5, dist: 3.8, height: 2.1, look: 1.15, ms: 1500,
+      }),
       { t: 'fn', fn: () => {
         // (the tension score is already running — the state machine carried it
         // in from the envy scene; nothing restarts here)
@@ -397,18 +627,14 @@ export function makeCampBeats(ctx, h) {
       // D8: Joseph is visibly STUNG — he rises, and his head drops; the camera
       // stays with him a breath so the hurt is unmissable before the quest.
       { t: 'fn', fn: () => { ctx.joseph.play('idle'); ctx.joseph.setGrief(true, 0.55); ctx.hud.emote('Joseph is sad'); } },
-      {
-        t: 'cam',
-        angle: Math.PI * 0.3,
-        target: () => ({ x: ctx.joseph.position.x, z: ctx.joseph.position.z }),
-        distance: 3.2,
-        height: 1.55,
-        lookHeight: 1.05,
-        duration: 1500,
-        path: 'groupArc',
-        arcCenter: { x: 0, z: -6 },
-        arcRadius: 5.2,
-      },
+      shot('joseph', 'judah', {
+        side: 0.5,
+        dist: 3.8,
+        height: 2.1,
+        look: 1.15,
+        ms: 1600,
+        speakerAnim: 'idle',
+      }),
       { t: 'wait', ms: 1700 },
       { t: 'letterbox', on: false },
     ]);
@@ -423,7 +649,8 @@ export function makeCampBeats(ctx, h) {
     ctx.hud.setObjective('Rest in your tent.');
     const rest = { x: -8.6, z: -4.4 };
     ctx.guide.setTargetXZ(rest.x, rest.z);
-    ctx.camera.release(1);
+    ctx.camera.release(1600);
+    releaseTellingAmbient();
     ctx.setInput(true);
     await gate(() => new Promise((resolve) => {
       ctx.interactables.addPrompt({
@@ -442,7 +669,11 @@ export function makeCampBeats(ctx, h) {
           ctx.joseph.play('kneel'); // settle down to sleep
           await seq([
             { t: 'letterbox', on: true },
-            { t: 'cam', angle: Math.PI * 0.15, target: { x: rest.x - 0.3, z: rest.z - 0.4 }, distance: 3.0, height: 1.15, lookHeight: 0.6, duration: 2400 },
+            // Close his eyes, then reveal a clean east-side bedside angle.
+            // The old visible move ended physically inside Jacob's tent cloth.
+            { t: 'fade', on: true, ms: 420 },
+            { t: 'cam', angle: -Math.PI * 0.75, target: { x: rest.x - 0.3, z: rest.z - 0.4 }, distance: 3.4, height: 1.45, lookHeight: 0.72, duration: 1 },
+            { t: 'fade', on: false, ms: 620 },
             { t: 'wait', ms: 1200 },
             { t: 'fade', on: true, ms: 1600 }, // sleep — down to black; the dream follows
           ]);

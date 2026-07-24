@@ -91,6 +91,10 @@ class AudioSystem {
     this.onVoiceMuted = null; // narrator-channel zero owns the same teardown
     this.onVolume = null; // hook: DOM UI stays in sync
     this._liveLoops = new Map(); // key → live loop handle (double-start guard)
+    // A loop that has exhausted every media candidate should not repeat the
+    // same network/decoder work at every later story beat. Keep this scoped to
+    // the current page so a reload can discover newly deployed assets.
+    this._unavailableLoopKeys = new Set();
     this._retiringLoops = new Set(); // streamed loops completing an audible fade
     this._liveOneShots = 0;      // simultaneous one-shot cap (phones die past ~dozens)
     this._activeOneShots = new Set(); // real + procedural source ownership
@@ -376,7 +380,9 @@ class AudioSystem {
 
     // Only manifest-confirmed assets probe the network. Optional file slots
     // (`available:false`) must start their procedural fallback immediately.
-    const base = e.available ? (e.file || e.key) : null;
+    const base = e.available && !this._unavailableLoopKeys.has(key)
+      ? (e.file || e.key)
+      : null;
     // Create a real transport whenever the WebAudio graph exists, even when
     // Master or this channel currently starts at zero. The transport itself
     // stays paused until audible; an entry-time mute must not permanently
@@ -470,7 +476,11 @@ class AudioSystem {
     };
     const loadCandidate = () => {
       if (state === 'stopped') return;
-      if (candidate >= candidates.length) { activateFallback(); return; }
+      if (candidate >= candidates.length) {
+        this._unavailableLoopKeys.add(key);
+        activateFallback();
+        return;
+      }
       removeLoadListeners();
       media.addEventListener('canplay', onReady, { once: true });
       media.addEventListener('error', onError, { once: true });
@@ -554,7 +564,10 @@ class AudioSystem {
     // the authored fallback instead of leaving the scene silent.
     loadTimer = setTimeout(() => {
       loadTimer = null;
-      if (state === 'pending') activateFallback();
+      if (state === 'pending') {
+        this._unavailableLoopKeys.add(key);
+        activateFallback();
+      }
     }, this._mediaReadyTimeoutMs);
     loadCandidate();
     return handle;

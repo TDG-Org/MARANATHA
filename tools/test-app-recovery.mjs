@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { waitWithDeadline } from '../src/core/deadline.js';
 import { resolveLazyScreen } from '../src/core/lazyScreen.js';
-import { loadOwnedTexture } from '../src/engine/textureLoader.js';
+import { loadOwnedTexture, settleOptionalTexture } from '../src/engine/textureLoader.js';
 
 // A scene-aborted texture request must retire the real browser transport, not
 // merely ignore TextureLoader's eventual callback. A successful request must
@@ -40,10 +40,77 @@ import { loadOwnedTexture } from '../src/engine/textureLoader.js';
     assert.equal(readyImage.decodeCalls, 1, 'texture readiness skipped image decode');
     assert.ok(loaded.texture.version > 0, 'decoded texture was not marked upload-ready');
     loaded.texture.dispose();
+
+    const stalled = loadOwnedTexture('textures/owned-stall.jpg');
+    const stalledImage = images.at(-1);
+    let stalledDisposals = 0;
+    stalled.texture.addEventListener('dispose', () => { stalledDisposals += 1; });
+    const stalledMaterial = {
+      map: stalled.texture,
+      color: { value: null, set(value) { this.value = value; } },
+      needsUpdate: false,
+    };
+    assert.equal(
+      await settleOptionalTexture(stalled.whenReady, {
+        texture: stalled.texture,
+        material: stalledMaterial,
+        fallbackColor: 0x748048,
+        timeoutMs: 5,
+        timeoutMessage: 'test optional texture timed out',
+        onUnavailable: () => stalled.cancel(new DOMException('Optional texture retired', 'AbortError')),
+      }),
+      false,
+    );
+    assert.equal(stalledImage.src, '', 'optional texture timeout did not cancel its image transport');
+    assert.equal(stalledDisposals, 1, 'optional texture timeout did not dispose exactly once');
+    assert.equal(stalledMaterial.map, null, 'optional texture timeout kept a dead map attached');
+    assert.equal(stalledMaterial.color.value, 0x748048, 'optional texture timeout skipped fallback color');
+    assert.equal(stalledMaterial.needsUpdate, true, 'optional texture timeout skipped material recompile');
   } finally {
     if (previousImage === undefined) delete globalThis.Image;
     else globalThis.Image = previousImage;
   }
+}
+
+// Home is the shell's recovery surface. Its decorative grass file may fail,
+// but startup must still get a renderable material instead of rejecting
+// readiness and remaining behind the opaque veil.
+{
+  const texture = { id: 'failed-grass' };
+  const material = {
+    map: texture,
+    color: { value: null, set(value) { this.value = value; } },
+    needsUpdate: false,
+  };
+  let unavailable = null;
+  assert.equal(
+    await settleOptionalTexture(Promise.reject(new Error('grass 404')), {
+      texture,
+      material,
+      fallbackColor: 0x748048,
+      onUnavailable: (error) => { unavailable = error; },
+    }),
+    false,
+  );
+  assert.equal(material.map, null, 'failed optional texture stayed attached to the Home material');
+  assert.equal(material.color.value, 0x748048, 'Home did not receive its explicit grass fallback color');
+  assert.equal(material.needsUpdate, true, 'Home fallback did not request a material recompile');
+  assert.match(unavailable?.message || '', /grass 404/);
+
+  const lifetime = new AbortController();
+  const abortReason = new DOMException('Home retired', 'AbortError');
+  lifetime.abort(abortReason);
+  const retiredMaterial = { map: texture, needsUpdate: false };
+  await assert.rejects(
+    settleOptionalTexture(Promise.reject(abortReason), {
+      texture,
+      material: retiredMaterial,
+      signal: lifetime.signal,
+    }),
+    { name: 'AbortError' },
+  );
+  assert.equal(retiredMaterial.map, texture, 'a retired Home mutated its material during abort');
+  assert.equal(retiredMaterial.needsUpdate, false, 'a retired Home scheduled a material recompile');
 }
 
 assert.equal(await waitWithDeadline(Promise.resolve('ready'), 20, 'late'), 'ready');
@@ -108,6 +175,7 @@ await assert.rejects(
 
 const appSource = await readFile(new URL('../src/core/app.js', import.meta.url), 'utf8');
 const homeSource = await readFile(new URL('../src/screens/home.js', import.meta.url), 'utf8');
+const josephSource = await readFile(new URL('../src/scenes/joseph3d/index.js', import.meta.url), 'utf8');
 
 assert.match(
   appSource,
@@ -139,13 +207,33 @@ assert.match(
   /if \(current && !busy\)/,
   'the app loop can update/render an incomplete screen behind the loader',
 );
+assert.match(
+  appSource,
+  /const exposeDebugState = \/debug\/\.test\(window\.location\.hash\)[\s\S]*debugStateAcc >= 250[\s\S]*current\?\.instance\?\.debugSnapshot\?\.\(\)/,
+  'browser QA telemetry is not both #debug-only and cadence-bounded',
+);
+assert.match(
+  josephSource,
+  /const debugSnapshot = \(\) => \(\{[\s\S]*beat: liveBeat[\s\S]*straysLeft[\s\S]*filter\(\(sheep\) => !sheep\.counted\)/,
+  'Scene 1 browser telemetry omits the live beat or interaction state',
+);
 for (const recoveryText of ['role', 'Try again', 'Reload', 'app.navigate']) {
   assert.ok(homeSource.includes(recoveryText), `home recovery UI is missing ${recoveryText}`);
 }
+assert.match(
+  homeSource,
+  /loadOwnedTexture\('textures\/grass\.jpg',[\s\S]*signal[\s\S]*configure:[\s\S]*texture\.anisotropy[\s\S]*settleOptionalTexture\(grassReady,[\s\S]*fallbackColor: 0x748048[\s\S]*timeoutMs: 3500[\s\S]*cancelGrass\([\s\S]*if \(grassAvailable\) renderer\.initTexture\(grassTex\)[\s\S]*renderer\.compile\(scene, camera\)/,
+  'Home grass does not use abort-owned decode readiness and GPU pre-warm',
+);
+assert.doesNotMatch(
+  homeSource,
+  /new THREE\.TextureLoader\(\)/,
+  'Home bypassed the abort-owned texture loader',
+);
 {
   const activationIndex = homeSource.indexOf('const activate = () =>');
   const audioStartIndex = homeSource.indexOf('if (Audio.on) startBeds();');
-  const returnedIndex = homeSource.indexOf('return { update, dispose, activate }');
+  const returnedIndex = homeSource.indexOf('return { update, dispose, whenReady, activate }');
   assert.ok(
     activationIndex >= 0 && audioStartIndex > activationIndex && returnedIndex > audioStartIndex,
     'Home starts audio during build instead of post-reveal activation',

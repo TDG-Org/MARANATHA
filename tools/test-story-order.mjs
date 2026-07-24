@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { SCENE1_CANONICAL_ORDER, SCENE1_ROUTING, WEB } from '../src/data/versesWEB.js';
 import { nearestUnbowedBundle } from '../src/scenes/joseph3d/beats/helpers.js';
+import { finishNarratedHold } from '../src/scenes/joseph3d/beats/telling.js';
 import {
+  createCheckpointPersistence,
   createInputGate,
   isObjectivePrepaintActive,
   isInteractiveCheckpoint,
@@ -52,6 +54,11 @@ assert.match(
   /list:\s*\[intro,\s*herd,\s*report,\s*coat,\s*dusk,\s*dream,\s*tell,\s*close\]/,
   'external beat/checkpoint indices changed',
 );
+assert.match(
+  beatIndexSource,
+  /if \(n >= 6\) stageTellingAmbient\(\)/,
+  'telling checkpoint resume does not stage ambient actors behind its entry veil',
+);
 
 assert.equal(
   WEB.gen_37_2.text,
@@ -68,16 +75,34 @@ assert.equal(
 );
 assert.ok(WEB.gen_37_24.text.startsWith('and they took him,'), 'Genesis 37:24 casing is not canonical WEB');
 assert.deepEqual(SCENE1_ROUTING, [
-  { beat: 'cold-open', voice: 'NARRATOR', line: 'gen_37_24 (verse card + VO)' },
+  { beat: 'cold-open', voice: 'MIXED', line: 'Simeon/Joseph/brothers exchange (text) · gen_37_24 (verse card + VO)' },
   { beat: 'intro', voice: 'NARRATOR', line: 'gen_37_1 (verse card + VO)' },
-  { beat: 'herd', voice: 'CHARACTER', line: 'Simeon/Levi give practical flock directions (text; no verse)' },
+  { beat: 'herd', voice: 'CHARACTER', line: 'Two unnamed brothers give practical flock directions (text; no verse)' },
   { beat: 'report', voice: 'MIXED', line: 'Jacob/Joseph enact the report (text) · then full gen_37_2 (verse card + VO)' },
   { beat: 'coat', voice: 'MIXED', line: 'Jacob + brothers speak (text) · verses 37:3, 37:4 narrated — no line quotes its verse' },
-  { beat: 'dusk', voice: 'GAMEPLAY', line: 'objective + Sit prompt only (no spoken lines)' },
+  { beat: 'dusk', voice: 'CHARACTER', line: 'Judah mocks Joseph’s tunic by the fire (text) · Rest objective + Sit prompt' },
   { beat: 'dream-and-first-telling', voice: 'MIXED', line: 'dream 1: narr-dream-begins + 37:7 · Joseph tells only the brothers (text) · 37:5, 37:8 narrated · then dream 2' },
   { beat: 'second-telling', voice: 'MIXED', line: 'Joseph tells dream 2 to his brothers · 37:9 narrated · then tells his father and brothers · Jacob reacts · 37:10 narrated' },
   { beat: 'close', voice: 'NARRATOR', line: 'gen_37_11 (verse card + VO) + tease title' },
 ], 'Scene 1 routing table drifted from the current canonical verse placements');
+
+let skippedHoldElapsed = 0;
+let skippedHoldWaits = 0;
+await finishNarratedHold({
+  verseResult: { status: 'skipped' },
+  duration: 12500,
+  getElapsed: () => skippedHoldElapsed,
+  setElapsed: (value) => { skippedHoldElapsed = value; },
+  wait: async () => { skippedHoldWaits += 1; },
+});
+assert.equal(skippedHoldElapsed, 12500, 'Skip narration did not release the full orbit hold');
+assert.equal(skippedHoldWaits, 0, 'Skip narration still waited behind the hidden orbit');
+const narratedHoldCall = tellingSource.indexOf('await finishNarratedHold({');
+const narratedHoldRelease = tellingSource.indexOf('ctx.camera.setPoseDriver(null)', narratedHoldCall);
+assert.ok(
+  narratedHoldCall >= 0 && narratedHoldRelease > narratedHoldCall,
+  'first-dream camera driver is not released after the narrated hold',
+);
 
 const summitGate = dreamSource.indexOf("id: 'summit-reach'");
 const summitClear = dreamSource.indexOf('ctx.hud.clearObjective?.()', summitGate);
@@ -87,6 +112,21 @@ assert.ok(
   'summit objective is not cleared synchronously at its gate',
 );
 assert.doesNotMatch(tellingSource, /objectiveEl\.textContent/, 'telling still infers story state from DOM');
+assert.match(
+  tellingSource,
+  /Promise\.all\(\[[\s\S]*reserveTellingAmbient\(\)[\s\S]*TELL_RING\.map/,
+  'visible telling gather does not reserve its ambient lens corridor',
+);
+{
+  const wakeStart = dreamSource.indexOf('async function wakeToCamp');
+  const wakeBlack = dreamSource.indexOf("{ t: 'fade', on: true, ms: 650 }", wakeStart);
+  const stageAmbient = dreamSource.indexOf('stageTellingAmbient()', wakeBlack);
+  const wakeReveal = dreamSource.indexOf("{ t: 'fade', on: false, ms: 700 }", stageAmbient);
+  assert.ok(
+    wakeStart >= 0 && wakeBlack > wakeStart && stageAmbient > wakeBlack && wakeReveal > stageAmbient,
+    'ambient telling arc is not staged completely under black',
+  );
+}
 assert.match(tellingSource, /Genesis 37:12–17 — the road to Dothan/);
 assert.doesNotMatch(coldOpenSource, /1898 BC/);
 assert.doesNotMatch(coldOpenSource, /WEB\.gen_37_2\b/,
@@ -97,6 +137,13 @@ assert.equal(
   'intro must carry Genesis 37:1 exactly once',
 );
 const reportStart = campSource.indexOf('async function report()');
+const herdSource = campSource.slice(0, reportStart);
+assert.match(herdSource, /ctx\.cast\.brother5[\s\S]*ctx\.cast\.brother1/);
+assert.doesNotMatch(
+  herdSource,
+  /ctx\.cast\.(?:simeon|levi)|dialogue\.say\('(?:Simeon|Levi)'/,
+  'the flock beat assigns Bilhah/Zilpah-son staging to Leah’s named sons',
+);
 const reportLine = campSource.indexOf('I bring a bad report', reportStart);
 const reportVerse = campSource.indexOf('WEB.gen_37_2', reportStart);
 const coatStart = campSource.indexOf('async function coat()');
@@ -115,6 +162,16 @@ const preCoat = campSource.slice(0, coatStart);
 assert.doesNotMatch(preCoat, /father.s favorite|all you.re good for/i,
   'favoritism/hatred arrives before Genesis 37:3–4');
 assert.doesNotMatch(campSource, /prince|gift I did not look for|Let all of Hebron/i);
+assert.match(
+  dreamSource,
+  /setObjective\(`Walk to the wheat bundles — \$\{bowed\} of \$\{D\.outer\.length\}\.`\)/,
+  'the wheat objective loses its action verb after the first bundle',
+);
+assert.doesNotMatch(
+  dreamSource,
+  /setObjective\(`The wheat bundles bow/,
+  'a status sentence replaced the actionable wheat objective',
+);
 const tell1Marker = tellingSource.indexOf("storyEvent?.('tell1')");
 const tell1Line = tellingSource.indexOf('Brothers — hear this dream', tell1Marker);
 const tell2Brothers = tellingSource.indexOf("storyEvent?.('tell2_brothers')");
@@ -200,7 +257,9 @@ assert.match(textureLoaderSource, /signal\?\.addEventListener\('abort', onAbort/
   'texture image request no longer follows scene abort');
 assert.match(textureLoaderSource, /const fail = \(error\) => \{[\s\S]*texture\.dispose\(\)/,
   'failed or aborted textures are not disposed');
-assert.match(textureLoaderSource, /onAbort = \(\) => \{[\s\S]*image\.onload = null[\s\S]*image\.src = ''[\s\S]*fail\(/,
+assert.match(textureLoaderSource, /cancelOwned = \(reason = makeAbortError[\s\S]*?image\.onload = null[\s\S]*?image\.src = ''[\s\S]*?fail\(reason\)/,
+  'owned texture cancellation leaves download/decode work alive');
+assert.match(textureLoaderSource, /onAbort = \(\) => cancelOwned\(signal\?\.reason/,
   'texture abort ignores the callback but leaves download/decode work alive');
 assert.match(textureLoaderSource, /await image\.decode\(\)[\s\S]*texture\.needsUpdate = true/,
   'texture readiness resolves before image decode/upload preparation');
@@ -306,17 +365,76 @@ const gatherStart = tellingSource.indexOf('async function gatherCircle(');
 const gatherEnd = tellingSource.indexOf('// Genesis 37:5', gatherStart);
 const gatherSource = tellingSource.slice(gatherStart, gatherEnd);
 const gatherAll = gatherSource.indexOf('await Promise.all([');
-const josephWalk = gatherSource.indexOf('ctx.controller.scriptMoveTo(0.9, -4.1, 1.45)', gatherAll);
+const josephWalk = gatherSource.indexOf(
+  'ctx.controller.scriptMoveTo(waypoint.x, waypoint.z, 1.45)',
+  gatherAll,
+);
 const brotherWalks = gatherSource.indexOf('...TELL_RING.map', gatherAll);
 assert.ok(
   gatherAll >= 0 && josephWalk > gatherAll && brotherWalks > gatherAll,
   'Joseph and the brothers no longer gather concurrently',
 );
-assert.doesNotMatch(gatherSource, /ctx\.joseph\.setPosition\(/, 'gatherCircle restored Joseph’s visible teleport');
+assert.match(
+  gatherSource,
+  /planTellingWalkRoute\(/,
+  'telling gather does not validate its route against the live ColliderWorld',
+);
+assert.match(
+  gatherSource,
+  /ctx\.colliderWorld/,
+  'telling gather does not pass the live ColliderWorld to its route planner',
+);
+assert.match(
+  gatherSource,
+  /if \(!josephArrived\) \{[\s\S]*fade\(true, 180\);[\s\S]*ctx\.joseph\.setPosition\([\s\S]*fade\(false, 220\);[\s\S]*\}/,
+  'a failed telling walk is not restored invisibly under a veil',
+);
 assert.match(
   gatherSource,
   /finally \{[\s\S]*cancelScriptMove\(\);[\s\S]*vel\.set\(0, 0\);[\s\S]*\}/,
   'gatherCircle does not clean up its scripted walk on abort/stall',
+);
+assert.match(
+  sceneSource,
+  /debugBeatValue !== null && debugBeatValue !== ''[\s\S]*Number\.isInteger\(debugBeat\)[\s\S]*debugBeat >= 0 && debugBeat <= 7/,
+  'debug checkpoint replay is unbounded or treats a missing query as beat zero',
+);
+{
+  const writes = [];
+  const isolated = createCheckpointPersistence({
+    isolated: true,
+    saveBeat: (beat) => writes.push(['beat', beat]),
+    saveCompletion: () => writes.push(['complete']),
+  });
+  isolated.checkpoint(6);
+  isolated.complete();
+  assert.deepEqual(writes, [],
+    'debug beat replay mutated persistent checkpoint/progress');
+
+  const normal = createCheckpointPersistence({
+    isolated: false,
+    saveBeat: (beat) => writes.push(['beat', beat]),
+    saveCompletion: () => writes.push(['complete']),
+  });
+  normal.checkpoint(3);
+  normal.complete();
+  assert.deepEqual(writes, [['beat', 3], ['complete']],
+    'normal story persistence was disabled by debug isolation');
+}
+assert.match(
+  sceneSource,
+  /const persistence = createCheckpointPersistence\(\{[\s\S]*isolated: debugBeatReplay,[\s\S]*saveBeat: \(beat\) => setCheckpoint\('joseph3d', beat\),[\s\S]*setSceneProgress\('joseph', 1\);[\s\S]*clearCheckpoint\('joseph3d'\);/,
+  'Scene 1 persistence does not route through the debug-isolation boundary',
+);
+assert.equal(
+  (sceneSource.match(/\bsetCheckpoint\('joseph3d'/g) || []).length,
+  1,
+  'Scene 1 bypasses the persistence boundary for checkpoint writes',
+);
+assert.match(
+  sceneSource,
+  /finish: \(\) => \{[\s\S]*persistence\.complete\(\);[\s\S]*app\.navigate\('home'\)/,
+  'story completion bypasses debug save isolation',
 );
 
 assert.match(campSource, /ctx\.hud\.setObjective\('Rest in your tent\.'\);/);

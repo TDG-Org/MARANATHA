@@ -104,7 +104,10 @@ export class PlayerController3D {
       if (lp) { lp.x = pos.x; lp.z = pos.z; }
       else s._lp = { x: pos.x, z: pos.z };
       if (d < 0.16 || (s._stall || 0) > 1300) {
-        s.resolve(true);
+        // Arrival and recovery are different outcomes. Callers that require an
+        // exact camera/blocking mark must be able to cover + restage after a
+        // collider stall instead of believing the requested pose was reached.
+        s.resolve(d < 0.16);
         this._script = null;
       } else {
         this._moveDir.set(dx / d, 0, dz / d);

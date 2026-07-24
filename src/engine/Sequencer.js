@@ -131,8 +131,16 @@ export class Sequencer {
           break;
         case 'cam':
           // target may be a function — dialogue shots frame LIVE positions
-          c.camera.cinematicMoveTo(typeof s.target === 'function' ? { ...s, target: s.target() } : s);
-          if (s.awaitMs !== false) await wait(s.duration ?? 1400);
+          {
+            const spec = typeof s.target === 'function' ? { ...s, target: s.target() } : s;
+            const isCoveredCut = (spec.duration ?? 1400) <= 1 && c.camera.cutTo;
+            const moveMs = isCoveredCut
+              ? c.camera.cutTo(spec)
+              : c.camera.cinematicMoveTo(spec);
+            // CameraDirector may lengthen a group route to uphold its maximum
+            // travel speed. Never advance the story before the pixels arrive.
+            if (s.awaitMs !== false) await wait(moveMs ?? s.duration ?? 1400);
+          }
           break;
         case 'fade':
           await awaitWork(() => c.cinema.fade(s.on !== false, s.ms ?? 600, s.pulse !== false));

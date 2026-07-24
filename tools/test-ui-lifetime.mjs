@@ -249,6 +249,29 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   hud.destroy();
 }
 
+// Two adjacent story beats may reaffirm the same quest before the first call's
+// 180ms cross-fade paints. The second call must not cancel that timer and leave
+// the logically active objective permanently blank (dream wake -> telling).
+{
+  const hud = createStoryHud();
+  const objective = hud.objectiveEl;
+  const objectiveText = objective.children[0].children[1];
+  const objectiveHint = objective.children[1];
+  hud.setObjective('Tell your brothers your dream.', 'Walk to the fire.');
+  hud.setObjective('Tell your brothers your dream.', 'Walk to your brothers by the fire.');
+  assert.equal(hud.objectiveText, 'Tell your brothers your dream.');
+  assert.equal(objectiveText.textContent, 'Tell your brothers your dream.',
+    'a repeated pending objective canceled its only DOM paint');
+  assert.equal(objectiveHint.textContent, 'Walk to your brothers by the fire.',
+    'a repeated objective did not adopt the latest hint');
+  assert.equal(objective.style.opacity, '1');
+  assert.equal(objective.attributes.get('aria-hidden'), 'false');
+  await delay(220);
+  assert.equal(objectiveText.textContent, 'Tell your brothers your dream.',
+    'a canceled stale timer erased the recovered objective');
+  hud.destroy();
+}
+
 // A new objective may arrive while the previous completion check is visible.
 // It must atomically reclaim both the banner text and its normal gold chrome.
 {

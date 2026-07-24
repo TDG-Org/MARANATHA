@@ -199,13 +199,28 @@ export function createStoryHud({ onHome, signal = null, isPaused = null } = {}) 
   function setObjective(text, hint = '') {
     if (destroyed || signal?.aborted) return;
     activeCompletion?.cancel?.();
+    const repeatedPendingObjective = Boolean(text && text === current && objectiveTimer);
     clearLater(objectiveTimer);
     objectiveTimer = null;
     // A new quest can supersede a completion while its green check is still
     // visible. Reclaim all shared banner chrome before scheduling new text.
     resetObjectiveChrome();
     if (!text) { clearObjective(); return; }
-    if (text === current) { if (!inCutscene) pulse(); return; }
+    if (text === current) {
+      // Consecutive beats can reaffirm the same objective before its 180 ms
+      // cross-fade has painted (wakeToCamp -> gatherCircle is one real case).
+      // Cancelling that pending timer and returning used to leave a logically
+      // active but permanently blank banner. Complete the ownership handoff
+      // synchronously, and also honor a newer hint on repeated calls.
+      if (repeatedPendingObjective || objText.textContent !== text) {
+        objText.textContent = text;
+      }
+      objHint.textContent = hint;
+      objHint.style.display = hint ? 'block' : 'none';
+      applyVisible();
+      if (!inCutscene) pulse();
+      return;
+    }
     current = text;
     if (isObjectivePrepaintActive()) {
       objText.textContent = text;

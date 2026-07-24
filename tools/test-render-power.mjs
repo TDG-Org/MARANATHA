@@ -7,6 +7,11 @@ const ctx2d = {
   fillStyle: '',
   createRadialGradient() { return { addColorStop() {} }; },
   fillRect() {},
+  beginPath() {},
+  moveTo() {},
+  lineTo() {},
+  stroke() {},
+  arc() {},
   save() {},
   restore() {},
   translate() {},
@@ -30,9 +35,49 @@ globalThis.window = {
 const { ContactShadowPool } = await import('../src/engine/ContactShadowPool.js');
 const { AmbientNPCs } = await import('../src/scenes/joseph3d/cast.js');
 const { ColliderWorld } = await import('../src/engine/collision.js');
+const { Guidance } = await import('../src/engine/Guidance.js');
 const { PlayerController3D } = await import('../src/engine/PlayerController3D.js');
 const { makeMotes } = await import('../src/engine/world.js');
 const { makeSmoke } = await import('../src/engine/particles.js');
+const { disposeDeep } = await import('../src/core/dispose.js');
+const { buildCamp } = await import('../src/scenes/joseph3d/props.js');
+const {
+  planTellingWalkRoute,
+  TELLING_JOSEPH_MARK,
+} = await import('../src/scenes/joseph3d/beats/telling.js');
+
+// A guide target that passes close to the camera must never turn its 0.9u
+// world-space chevron into a screen-filling flash. Exercise the actual mesh,
+// camera projection, and update path at close/normal/far depths.
+let maxGuideScreenHeight = 0;
+{
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(46, 16 / 9, 0.1, 300);
+  camera.position.set(0, 2.5, 0);
+  camera.lookAt(0, 2.5, -1);
+  camera.updateMatrixWorld();
+  const guide = new Guidance(scene);
+
+  for (const depth of [0.5, 0.8, 1, 3, 14, 30]) {
+    guide.setTargetXZ(0, -depth);
+    guide.update(0, camera);
+    if (depth <= 0.75) {
+      assert.equal(guide.arrow.visible, false, `guide stayed visible at ${depth}u camera depth`);
+      continue;
+    }
+    assert.equal(guide.arrow.visible, true, `guide vanished at ${depth}u camera depth`);
+    const halfHeight = 0.45 * guide.arrow.scale.y;
+    const top = new THREE.Vector3(0, 2.5 + halfHeight, -depth).project(camera);
+    const bottom = new THREE.Vector3(0, 2.5 - halfHeight, -depth).project(camera);
+    const screenHeight = Math.abs(top.y - bottom.y) * 0.5;
+    maxGuideScreenHeight = Math.max(maxGuideScreenHeight, screenHeight);
+    assert.ok(
+      screenHeight <= 0.08,
+      `guide occupies ${(screenHeight * 100).toFixed(1)}% of screen height at ${depth}u`,
+    );
+  }
+  guide.dispose();
+}
 
 class CountingWorld extends ColliderWorld {
   constructor() {
@@ -255,6 +300,97 @@ let playerReduction = 0;
   controller.dispose();
 }
 
+// The telling trigger is a continuous disc, not a single authored entry. The
+// route must use the real camp ColliderWorld (including firewood/stools) and
+// the real PlayerController3D, so a green fire-only geometry test cannot hide a
+// visible stall. The 0.2u/4deg sweep is the signed-off 753-entry criterion.
+{
+  const world = new ColliderWorld();
+  const camp = buildCamp(world);
+  const trigger = { x: 0.8, z: -6.4, r: 3.2 };
+  let valid = 0;
+  let fallbackRoutes = 0;
+  let maxStep = 0;
+  let maxLegs = 0;
+  for (let radius = 0; radius <= trigger.r + 0.001; radius += 0.2) {
+    for (let degree = 0; degree < 360; degree += 4) {
+      const angle = degree * Math.PI / 180;
+      const start = {
+        x: trigger.x + Math.cos(angle) * radius,
+        z: trigger.z + Math.sin(angle) * radius,
+      };
+      if (world.overlaps(start.x, start.z, 0.42)) continue;
+      valid += 1;
+      const route = planTellingWalkRoute(start, world);
+      assert.ok(route.length > 0, `no collision-aware route from ${JSON.stringify(start)}`);
+      maxLegs = Math.max(maxLegs, route.length);
+      const character = makeCharacter(start.x, start.z);
+      const controller = new PlayerController3D({
+        camera: { getWorldDirection(out) { return out.set(0, 0, -1); } },
+        character,
+        colliders: world,
+        bounds: { minX: -20, maxX: 20, minZ: -20, maxZ: 20 },
+        radius: 0.42,
+      });
+      let previous = character.position.clone();
+      for (const waypoint of route) {
+        const move = controller.scriptMoveTo(waypoint.x, waypoint.z, 1.45);
+        let frames = 0;
+        while (controller._script && frames < 1000) {
+          controller.update(16);
+          maxStep = Math.max(maxStep, character.position.distanceTo(previous));
+          previous.copy(character.position);
+          frames += 1;
+        }
+        const arrived = await move;
+        if (!arrived) fallbackRoutes += 1;
+        assert.equal(arrived, true, `route stalled from ${JSON.stringify(start)}`);
+      }
+      assert.ok(
+        Math.hypot(character.position.x - TELLING_JOSEPH_MARK.x,
+          character.position.z - TELLING_JOSEPH_MARK.z) < 0.3,
+        `route did not reach Joseph's mark from ${JSON.stringify(start)}`,
+      );
+      controller.dispose();
+    }
+  }
+  assert.equal(valid, 753, 'telling trigger sweep changed its valid-entry count');
+  assert.equal(fallbackRoutes, 0, 'telling route required a covered fallback on a valid static entry');
+  assert.ok(maxStep < 0.03, `telling walk stepped ${maxStep.toFixed(4)}u in one frame`);
+  console.log(
+    `telling collider routes: ${valid} valid entries, ${maxLegs} max legs, `
+      + `${maxStep.toFixed(4)}u max step, ${fallbackRoutes} fallbacks`,
+  );
+  disposeDeep(camp.group);
+}
+
+// A collider-stalled scripted walk is a recovery, not an arrival. Returning
+// true here poisoned authored camera marks because cutscenes trusted a position
+// the actor never reached.
+{
+  const world = new CountingWorld();
+  world.addCircle(0, 0, 2.4);
+  const character = makeCharacter(-3.2, 0);
+  const camera = { getWorldDirection(out) { return out.set(0, 0, -1); } };
+  const controller = new PlayerController3D({
+    camera, character, colliders: world,
+    bounds: { minX: -10, maxX: 10, minZ: -10, maxZ: 10 },
+  });
+  const stalled = controller.scriptMoveTo(3.2, 0, 1.6);
+  for (let i = 0; i < 180 && controller._script; i++) controller.update(16);
+  assert.equal(await stalled, false, 'collider stall falsely reported authored-mark arrival');
+  assert.ok(
+    Math.hypot(character.position.x - 3.2, character.position.z) > 1,
+    'stall fixture unexpectedly reached its blocked target',
+  );
+
+  world.clear();
+  const arrived = controller.scriptMoveTo(character.position.x, 2, 1.6);
+  for (let i = 0; i < 180 && controller._script; i++) controller.update(16);
+  assert.equal(await arrived, true, 'unblocked scripted walk did not report arrival');
+  controller.dispose();
+}
+
 // A correction capped at three pushes is intentionally left dirty until a
 // later frame proves separation; the idle gate must not strand deep overlaps.
 {
@@ -349,5 +485,6 @@ let npcTotalReduction = 0;
 console.log(
   `render/power checks passed: player static scans -${(playerReduction * 100).toFixed(2)}%; `
   + `15-NPC static scans -${(npcStaticReduction * 100).toFixed(2)}%; `
-  + `all NPC collision candidates -${(npcTotalReduction * 100).toFixed(2)}%.`,
+  + `all NPC collision candidates -${(npcTotalReduction * 100).toFixed(2)}%; `
+  + `guide max ${(maxGuideScreenHeight * 100).toFixed(2)}% screen height.`,
 );

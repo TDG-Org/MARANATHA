@@ -7,6 +7,24 @@ export function isInteractiveCheckpoint(index) {
   return INTERACTIVE_CHECKPOINTS.has(index);
 }
 
+// A debug beat replay must exercise the exact story code without borrowing
+// ownership of the player's persistent checkpoint/progress. Keep that policy
+// at one boundary so normal play and isolated QA cannot accidentally diverge.
+export function createCheckpointPersistence({
+  isolated = false,
+  saveBeat = () => {},
+  saveCompletion = () => {},
+} = {}) {
+  return Object.freeze({
+    checkpoint(beat) {
+      if (!isolated) saveBeat(beat);
+    },
+    complete() {
+      if (!isolated) saveCompletion();
+    },
+  });
+}
+
 // Checkpoint entry temporarily owns input while an interactive beat executes
 // its synchronous objective/guide prefix behind black. The beat may request
 // control immediately, but the real controller stays disabled until reveal.

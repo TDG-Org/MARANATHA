@@ -36,6 +36,11 @@ export function createApp(container) {
   const camera = new THREE.PerspectiveCamera(46, safeAspect(), 0.1, 900);
   const hud = new DebugHud(renderer);
   Settings.bindHud(hud); // apply the player's saved HUD-visibility choice
+  // Browser QA runs in an isolated world that cannot read the app's harmless
+  // window debug handle. Expose a bounded, non-sensitive scene snapshot on
+  // the existing #debug HUD instead. Normal routes do zero telemetry work.
+  const exposeDebugState = /debug/.test(window.location.hash);
+  let debugStateAcc = 0;
 
   const veil = createVeil();
   const loader = createLoader();
@@ -98,6 +103,8 @@ export function createApp(container) {
     disposeDeep(current.scene);
     postFX.reset();
     current = null;
+    debugStateAcc = 0;
+    if (hud.el) delete hud.el.dataset.sceneState;
   }
 
   async function navigate(key, params) {
@@ -275,6 +282,15 @@ export function createApp(container) {
     // Same rule for the Graphics auto-tuner: it judges the machine on
     // full-rate frames alone, and only while the preset is still auto.
     if (!busy && !paused && fps >= 60) { quality.frame(dt); Graphics.sampleFrame(dt); }
+    if (exposeDebugState && hud.el) {
+      debugStateAcc += dt;
+      if (debugStateAcc >= 250) {
+        debugStateAcc = 0;
+        const snapshot = current?.instance?.debugSnapshot?.();
+        if (snapshot) hud.el.dataset.sceneState = JSON.stringify(snapshot);
+        else delete hud.el.dataset.sceneState;
+      }
+    }
     // D9: the perf HUD splits SCRIPT time vs RENDER-SUBMIT time — if fps is
     // low while both are tiny, the cost lives in the compositor/GPU (filters,
     // resolution), not in the game code. That split diagnoses any device.

@@ -4,6 +4,8 @@ import { STORIES } from '../data/stories.js';
 import { statusOf } from '../systems/SaveSystem.js';
 import { Audio } from '../systems/AudioSystem.js';
 import { openSettings } from '../ui/settings.js';
+import { loadOwnedTexture, settleOptionalTexture } from '../engine/textureLoader.js';
+import { makeAbortError } from '../core/async.js';
 
 // HOME — the calm HD-2D landing + story map. A golden-hour backdrop with a
 // gentle camera drift, over which a DOM overlay shows the title, the story
@@ -12,22 +14,32 @@ import { openSettings } from '../ui/settings.js';
 // Phase C note: entry is gated by "is this story's scene built" (registered in
 // the app) rather than by progression lock — so Joseph is playable now, before
 // the Creation prologue (Phase B) exists.
-export function buildHome({ scene, camera, app, params = {} }) {
+export function buildHome({ scene, camera, renderer, app, params = {}, signal = null }) {
+  let disposed = false;
   scene.fog = new THREE.Fog(0xffdfba, 46, 250);
 
   const sky = makeSky({ top: 0xf2b880, bottom: 0xffe9c9 });
   scene.add(sky.mesh);
   // D6: the home ground is REAL sunlit grass, never an untextured sheet
   // (world-density hard rule) — same texture + mottle language as the camp.
-  const grassTex = new THREE.TextureLoader().load('textures/grass.jpg');
-  grassTex.wrapS = grassTex.wrapT = THREE.RepeatWrapping;
-  grassTex.repeat.set(16, 7); // wider tiles — home views the field at a shallow angle
-  grassTex.colorSpace = THREE.SRGBColorSpace;
-  grassTex.anisotropy = 4;
+  const {
+    texture: grassTex,
+    whenReady: grassReady,
+    cancel: cancelGrass,
+  } = loadOwnedTexture('textures/grass.jpg', {
+    signal,
+    configure: (texture) => {
+      texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+      texture.repeat.set(16, 7); // wider tiles — home views the field at a shallow angle
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.anisotropy = 4;
+    },
+  });
   // vertex colors recentred on WHITE: the grass photo already carries the
   // green; a green vertex tint would multiply it into mud (the black-ground
   // bug). White base + near-white mottle = variety without the crush.
-  scene.add(makeGround({ color: 0xffffff, mottle: [0xeaf7c0, 0xd8b98a], map: grassTex }));
+  const homeGround = makeGround({ color: 0xffffff, mottle: [0xeaf7c0, 0xd8b98a], map: grassTex });
+  scene.add(homeGround);
   // home is always golden hour — a generous warm sun + hemi so the Lambert
   // grass reads sunlit (it rendered near-black unlit before — the gray bug)
   scene.add(new THREE.HemisphereLight(0xffe4b6, 0x6a7a44, 1.2));
@@ -38,6 +50,29 @@ export function buildHome({ scene, camera, app, params = {} }) {
   scene.add(makeSun());
   const motes = makeMotes({ count: 90 });
   scene.add(motes.points);
+  const whenReady = settleOptionalTexture(grassReady, {
+    texture: grassTex,
+    material: homeGround.material,
+    signal,
+    fallbackColor: 0x748048,
+    timeoutMs: 3500,
+    timeoutMessage: 'Home grass texture readiness timed out',
+    onUnavailable: (error) => {
+      cancelGrass(makeAbortError('Home grass texture retired after optional readiness failure'));
+      console.warn('[home] grass texture unavailable; using procedural ground', error);
+    },
+  }).then((grassAvailable) => {
+    if (disposed || signal?.aborted) {
+      throw signal?.reason || makeAbortError('Home left before texture readiness');
+    }
+    // Decode readiness prevents the texture pop; explicit upload + compile
+    // moves its first-frame GPU work behind the loader as well. Home is also
+    // the recovery surface, so a missing optional grass file uses a deliberate
+    // lit fallback instead of trapping first boot behind the black veil.
+    if (grassAvailable) renderer.initTexture(grassTex);
+    renderer.compile(scene, camera);
+    return true;
+  });
 
   // BIRDS over the vista (D7): a small flock crossing the golden sky — eased
   // orbits around a slowly drifting anchor, wings flapping. Same painted bird
@@ -116,7 +151,6 @@ export function buildHome({ scene, camera, app, params = {} }) {
   // Warm ambience + REAL soft looping music once audio is unlocked (D6 —
   // the camp theme at low gain; falls back to the procedural pad if missing).
   let homeMusic = null;
-  let disposed = false;
   let activated = false;
   let bedsStarted = false;
   const startBeds = () => {
@@ -509,5 +543,5 @@ export function buildHome({ scene, camera, app, params = {} }) {
     links.remove();
   }
 
-  return { update, dispose, activate };
+  return { update, dispose, whenReady, activate };
 }

@@ -10,6 +10,8 @@
 //   file:     path under /audio (folder/name, no ext) when a REAL file exists.
 //             Files are sorted into /audio/{music,sfx,ambient,vo}/. The KEY the
 //             game calls stays stable; the loader fetches `file` (or the key).
+//   seconds/channels on available loops are probed asset metadata. Tests derive
+//             the former decoded-PCM cost from these values; never hard-code it.
 export const AUDIO_MANIFEST = [
   // --- global UI ---
   { key: 'ui.click', bus: 'sfx', loop: false, seconds: 0.1, fallback: 'uiClick', available: false, purpose: 'button / confirm tick', scene: 'global' },
@@ -32,17 +34,17 @@ export const AUDIO_MANIFEST = [
   // --- Scene 1 (3D rebuild) — ambient beds (loop) -------------------------
   // Fallback policy: graceful SILENCE over junk placeholders — keys with
   // fallback:null are silent until Nate drops the real file in /audio.
-  { key: 'amb.camp_wind', bus: 'sfx', loop: true, seconds: 40, file: 'ambient/camp_wind', fallback: 'ambientCampBed', available: true, purpose: 'wind + distant birds bed', scene: 'joseph3d-1' },
-  { key: 'amb.fire_crackle', bus: 'sfx', loop: true, seconds: 25, file: 'ambient/fire_crackle', fallback: null, available: true, purpose: 'cook-fire crackle loop (played louder near fires)', scene: 'joseph3d-1' },
-  { key: 'amb.sheep_pen', bus: 'sfx', loop: true, seconds: 30, file: 'ambient/sheep_pen', fallback: null, available: true, purpose: 'distant flock: occasional bleats, bells', scene: 'joseph3d-1' },
+  { key: 'amb.camp_wind', bus: 'sfx', loop: true, seconds: 295.632, channels: 1, file: 'ambient/camp_wind', fallback: 'ambientCampBed', available: true, purpose: 'wind + distant birds bed', scene: 'joseph3d-1' },
+  { key: 'amb.fire_crackle', bus: 'sfx', loop: true, seconds: 79.536, channels: 1, file: 'ambient/fire_crackle', fallback: null, available: true, purpose: 'cook-fire crackle loop (played louder near fires)', scene: 'joseph3d-1' },
+  { key: 'amb.sheep_pen', bus: 'sfx', loop: true, seconds: 113.592, channels: 1, file: 'ambient/sheep_pen', fallback: null, available: true, purpose: 'distant flock: occasional bleats, bells', scene: 'joseph3d-1' },
   { key: 'amb.camp_chatter', bus: 'sfx', loop: true, seconds: 35, fallback: null, available: false, purpose: 'far-off camp murmur / activity', scene: 'joseph3d-1' },
   { key: 'amb.night_crickets', bus: 'sfx', loop: true, seconds: 40, fallback: 'ambientNightBed', available: false, purpose: 'dusk/night crickets bed', scene: 'joseph3d-1' },
 
   // --- Scene 1 (3D) — music (loop, crossfaded by mood) ---------------------
-  { key: 'music.camp_warm', bus: 'music', loop: true, seconds: 90, file: 'music/camp_warm', format: 'mp3', fallback: 'musicWarmBed', available: true, purpose: 'golden-hour belonging theme', scene: 'joseph3d-1' },
-  { key: 'music.dusk_calm', bus: 'music', loop: true, seconds: 70, file: 'music/dusk_calm', fallback: 'musicWonderBed', available: true, purpose: 'dusk quieting-down theme', scene: 'joseph3d-1' },
-  { key: 'music.dream_wonder', bus: 'music', loop: true, seconds: 70, file: 'music/dream_wonder', format: 'mp3', fallback: 'musicWonderBed', available: true, purpose: 'dream sequence — hushed awe', scene: 'joseph3d-1' },
-  { key: 'music.ominous_turn', bus: 'music', loop: true, seconds: 60, file: 'music/ominous_turn', fallback: null, available: true, purpose: 'the brothers’ hatred — warm → ominous shift', scene: 'joseph3d-1' },
+  { key: 'music.camp_warm', bus: 'music', loop: true, seconds: 126.03865, channels: 2, file: 'music/camp_warm', format: 'mp3', fallback: 'musicWarmBed', available: true, purpose: 'golden-hour belonging theme', scene: 'joseph3d-1' },
+  { key: 'music.dusk_calm', bus: 'music', loop: true, seconds: 148.035918, channels: 2, file: 'music/dusk_calm', fallback: 'musicWonderBed', available: true, purpose: 'dusk quieting-down theme', scene: 'joseph3d-1' },
+  { key: 'music.dream_wonder', bus: 'music', loop: true, seconds: 165.561236, channels: 2, file: 'music/dream_wonder', format: 'mp3', fallback: 'musicWonderBed', available: true, purpose: 'dream sequence — hushed awe', scene: 'joseph3d-1' },
+  { key: 'music.ominous_turn', bus: 'music', loop: true, seconds: 91.128, channels: 2, file: 'music/ominous_turn', fallback: null, available: true, purpose: 'the brothers’ hatred — warm → ominous shift', scene: 'joseph3d-1' },
   { key: 'music.sad_night', bus: 'music', loop: true, seconds: 60, file: 'music/sad_night', fallback: 'musicSadBed', available: false, purpose: 'SAD — the lonely walk to his tent after the jeer (procedural minor pad until a real file lands; D9 louder)', scene: 'joseph3d-1' },
   { key: 'music.betrayal_dark', bus: 'music', loop: true, seconds: 60, file: 'music/betrayal_dark', fallback: 'musicDreadBed', available: false, purpose: 'DREAD — the cold-open betrayal march + throw (D9: a low uneasy procedural cluster until a real dark tension track lands — 🔴 NATE.md)', scene: 'joseph3d-1' },
   { key: 'music.pit_sad', bus: 'music', loop: true, seconds: 60, file: 'music/pit_sad', fallback: 'musicSadBed', available: false, purpose: 'GRIEF — the boy crying alone at the pit bottom (D11, Nate: the shot had no music; a quiet minor pad until a real sorrow track lands — 🔴 NATE.md)', scene: 'joseph3d-1' },

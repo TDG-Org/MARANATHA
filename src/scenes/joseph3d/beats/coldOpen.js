@@ -1,7 +1,14 @@
 import { WEB } from '../../../data/versesWEB.js';
 import { Audio } from '../../../systems/AudioSystem.js';
 import { isAbortError } from '../../../core/async.js';
-import { BETRAYAL_STRIP_CAMERA } from './helpers.js';
+import {
+  BETRAYAL_FALL_CAMERA,
+  BETRAYAL_MARCH_CAMERA,
+  BETRAYAL_PROWL_ORBIT,
+  BETRAYAL_STRIP_CAMERA,
+  betrayalFallDistance,
+  planGroupCamera,
+} from './helpers.js';
 
 // SCENE 1 — Joseph, Genesis 37:1–11. The story is DATA + gates; this act's
 // beats are plain async functions over the shared scene context (`ctx`) and the
@@ -99,6 +106,8 @@ export function makeColdOpen(ctx, h) {
     ctx.joseph.play('walk');
     B.forEach((n) => n.char.play('walk'));
     let march = null;
+    let marchCameraElapsed = 0;
+    let fallYaw = 0;
     let walkStarts = null; // the march drives CONCURRENTLY — the group is already
     // moving when the black lifts (walk cycles must never tread in place)
     await seq([
@@ -106,8 +115,34 @@ export function makeColdOpen(ctx, h) {
       { t: 'letterbox', on: true },
       // open TIGHT on the procession — a clean, slow ease-in from black (D8:
       // the old open popped); the group trudges through the near frame
-      { t: 'cam', angle: Math.PI * 0.42, target: { x: from.x + dir.x * 0.12, z: from.z + dir.z * 0.12 }, distance: 3.2, height: 1.3, lookHeight: 1.05, duration: 1, awaitMs: false },
+      {
+        t: 'cam',
+        angle: BETRAYAL_MARCH_CAMERA.angle,
+        target: from,
+        distance: BETRAYAL_MARCH_CAMERA.nearDistance,
+        height: BETRAYAL_MARCH_CAMERA.height,
+        lookHeight: BETRAYAL_MARCH_CAMERA.lookHeight,
+        duration: 1,
+        awaitMs: false,
+      },
       { t: 'fn', fn: () => {
+        // Follow the moving formation. The previous fixed opening pose let
+        // Levi walk through the lens while the title card held.
+        ctx.camera.setPoseDriver((pose, dt) => {
+          marchCameraElapsed += dt;
+          const wideK = smooth((marchCameraElapsed - 1500) / 4300);
+          const distance = BETRAYAL_MARCH_CAMERA.nearDistance
+            + (BETRAYAL_MARCH_CAMERA.wideDistance - BETRAYAL_MARCH_CAMERA.nearDistance) * wideK;
+          const height = BETRAYAL_MARCH_CAMERA.height
+            + (BETRAYAL_MARCH_CAMERA.wideHeight - BETRAYAL_MARCH_CAMERA.height) * wideK;
+          const p = ctx.joseph.position;
+          pose.pos.set(
+            p.x - Math.sin(BETRAYAL_MARCH_CAMERA.angle) * distance,
+            height,
+            p.z - Math.cos(BETRAYAL_MARCH_CAMERA.angle) * distance,
+          );
+          pose.look.set(p.x, BETRAYAL_MARCH_CAMERA.lookHeight, p.z);
+        });
         march = (async () => {
           // five men on dry ground (🔴 slot — silent until Nate's file lands)
           const marchBed = Audio.playLoop('sfx.march_loop', { gain: 0.5 });
@@ -141,9 +176,15 @@ export function makeColdOpen(ctx, h) {
       // HOLD it (D11, Nate's brother was still confused: clearer sub + ~2x the
       // time on screen; the golden morning answers it with 'Present day')
       { t: 'title', heading: 'In the days to come', sub: 'Genesis 37', holdMs: 4800 },
-      // …the frame widens as the march closes on the pit
-      { t: 'cam', angle: Math.PI * 0.52, target: { x: to.x + 0.6, z: to.z }, distance: 5.0, height: 1.7, lookHeight: 0.95, duration: 5400, awaitMs: false },
-      { t: 'fn', fn: () => march }, // hold until the march lands at the rim
+      // The live driver has widened while remaining attached to Joseph. Join
+      // it before handing the now-stationary group to the betrayal prowl.
+      { t: 'fn', fn: async () => {
+        try {
+          await march;
+        } finally {
+          ctx.camera.setPoseDriver(null);
+        }
+      } },
       { t: 'wait', ms: 450 },
       // SHOT 2 — AT THE EDGE: the betrayal. D9 camera (Nate): RAISED and
       // looking DOWN, slowly circling the group while the lines are exchanged.
@@ -151,7 +192,7 @@ export function makeColdOpen(ctx, h) {
       // stepped visibly), and the talk is SMALL — three short lines only
       // (Nate: the invented "no blood" exchange strayed too far; Reuben's
       // canonical plea belongs to the real scene when we build it).
-      { t: 'fn', fn: () => {
+      { t: 'fn', fn: async () => {
         const g = { x: to.x - 0.3, z: to.z };
         // D13 (Nate: "the camera goes inside of the brother's heads"): the
         // prowl now flies ABOVE every skull — y 4.2 is more than double head
@@ -160,16 +201,56 @@ export function makeColdOpen(ctx, h) {
         // march ended in (measured from LIVE positions, not assumed).
         const R = Math.max(6.0, ...B.map((n) => Math.hypot(n.pos.x - g.x, n.pos.z - g.z) + 2.2));
         const H = 4.2;
+        const lens = ctx.camera.camera;
+        const prowlPlan = planGroupCamera({
+          actors: [
+            {
+              x: ctx.joseph.position.x,
+              y: ctx.joseph.position.y ?? 0,
+              z: ctx.joseph.position.z,
+              headHeight: ctx.joseph.headHeight,
+            },
+            ...B.map((brother) => ({
+              x: brother.pos.x,
+              y: 0,
+              z: brother.pos.z,
+              headHeight: brother.char.headHeight,
+            })),
+          ],
+          angle: Math.PI * 0.45,
+          distance: R,
+          height: H,
+          look: 1.0,
+          fov: lens?.fov ?? 46,
+          aspect: lens?.aspect ?? 16 / 9,
+        });
+        if (!prowlPlan.compositionSafe) {
+          throw new Error('Betrayal exchange has no audience-safe group composition');
+        }
         // …and the GLOOM eases for this cut only: same fog, lit faces (D13).
         ctx.grading.grade('pitTalk', 900);
         ctx.postFX.setFilter('futureSoft', 900);
-        ctx.camera.cinematicMoveTo({ angle: Math.PI * 0.45, target: g, distance: R, height: H, lookHeight: 1.0, duration: 1100 });
-        let a = Math.PI * 0.45, hold = 1100;
+        // Portrait needs a much wider prowl than landscape. A conservative
+        // visible orbit took 10.5s before the first line; accelerating it
+        // crossed faces. Land the responsive plan under one short dip.
+        await ctx.cinema.fade(true, 180);
+        ctx.camera.setDrift(false);
+        ctx.camera.cutTo(prowlPlan);
+        await ctx.cinema.fade(false, 220);
+        let prowlElapsed = 0;
         ctx.camera.setPoseDriver((pose, dt) => {
-          if ((hold -= dt) > 0) return;            // let the move-in land first
-          a += dt * 0.0000933;                     // the same slow prowl, now smooth
-          pose.pos.set(g.x - Math.sin(a) * R, H, g.z - Math.cos(a) * R);
-          pose.look.set(g.x, 1.0, g.z);
+          prowlElapsed += dt;
+          // Motion remains alive, but bounded inside the portrait-safe angle
+          // interval; an unbounded orbit re-covered a rear face after 1.65s.
+          const a = prowlPlan.angle
+            + Math.sin(prowlElapsed * BETRAYAL_PROWL_ORBIT.rate)
+              * BETRAYAL_PROWL_ORBIT.amplitude;
+          pose.pos.set(
+            prowlPlan.target.x - Math.sin(a) * prowlPlan.distance,
+            prowlPlan.height,
+            prowlPlan.target.z - Math.cos(a) * prowlPlan.distance,
+          );
+          pose.look.set(prowlPlan.target.x, prowlPlan.lookHeight, prowlPlan.target.z);
         });
       } },
       { t: 'fn', fn: () => { const sp = posOf('simeon'), li = posOf('joseph'); charOf('simeon').turnToward(li.x - sp.x, li.z - sp.z); charOf('simeon').play('talk'); charOf('joseph').turnToward(sp.x - li.x, sp.z - li.z); } },
@@ -192,6 +273,7 @@ export function makeColdOpen(ctx, h) {
       // his arms must never keep gesturing into the fall (D9)
       { t: 'fn', fn: () => {
         ctx.camera.setPoseDriver(null);
+        ctx.camera.setDrift(true);
         B.forEach((brother) => brother.char.play('idle'));
         ctx.joseph.play('idle');
         // the talking is over — the cold, drained gloom closes back in for the
@@ -221,7 +303,20 @@ export function makeColdOpen(ctx, h) {
       } },
       // SHOT 3 — THE THROW, from the rim: the dark mouth below, the boy still
       // fully lit as they seize and heave him over the edge.
-      { t: 'cam', angle: Math.PI * 0.15, target: { x: P.PIT.x, z: P.PIT.z }, distance: 3.1, height: 2.4, lookHeight: 0.4, duration: 1000 },
+      {
+        t: 'cam',
+        angle: Math.PI * 4 / 9,
+        target: { x: P.PIT.x + 0.8, z: P.PIT.z },
+        distance: 6,
+        height: 1.8,
+        lookHeight: 1.2,
+        duration: 1400,
+        // This replacement is visible. Travel around the stone rim at a fixed
+        // safe radius, never along the Cartesian chord over the open shaft.
+        path: 'groupArc',
+        arcCenter: P.PIT,
+        arcRadius: 6,
+      },
       { t: 'fn', fn: async () => {
         ctx.sound('stinger.hatred');
         P.setSkyLight(1); // NOW the mouth of the pit opens above him (D14)
@@ -251,6 +346,7 @@ export function makeColdOpen(ctx, h) {
         // always tips him onto his BACK regardless of who he was looking at
         // (the old fixed-sign root.rotation.x read face-down at some yaws).
         const yaw0 = ctx.joseph.facing.rotation.y;
+        fallYaw = yaw0;
         jRoot.rotation.order = 'YXZ';
         jRoot.rotation.y = yaw0;
         ctx.joseph.facing.rotation.y = 0;
@@ -284,7 +380,12 @@ export function makeColdOpen(ctx, h) {
         const D = 4600; // D8: slower than the old 3s fall
         ctx.sound('sfx.fall_whoosh'); // soft air rush under the slow-mo
         const x0 = jRoot.position.x, z0 = jRoot.position.z, y0 = jRoot.position.y;
-        const a0 = Math.PI * 0.3;
+        // Align the lens with Joseph's pitched body. A fixed world angle
+        // turned him sideways across portrait screens and hid his face.
+        // Front three-quarter, not directly behind his skull. Aligning the
+        // lens to fallYaw collapsed the rotating body into one giant head.
+        const a0 = fallYaw + BETRAYAL_FALL_CAMERA.angleOffset;
+        const fallDistance = betrayalFallDistance(ctx.camera.camera?.aspect);
         const recoilStarts = [
           { x: B[1].pos.x, z: B[1].pos.z },
           { x: B[2].pos.x, z: B[2].pos.z },
@@ -294,16 +395,28 @@ export function makeColdOpen(ctx, h) {
         ctx.camera.cinematicMoveTo({
           angle: a0,
           target: { x: x0, y: y0, z: z0 },
-          distance: 2.1, height: 0.55, lookHeight: 0.18, duration: 1,
+          distance: fallDistance,
+          height: BETRAYAL_FALL_CAMERA.height,
+          lookHeight: BETRAYAL_FALL_CAMERA.uprightLookHeight,
+          duration: 1,
         });
         ctx.camera.setPoseDriver((pose) => {
-          const a = a0 + fallK * 0.55;
+          const a = a0 + fallK * BETRAYAL_FALL_CAMERA.orbit;
+          const lookHeight = BETRAYAL_FALL_CAMERA.uprightLookHeight
+            + (
+              BETRAYAL_FALL_CAMERA.flatLookHeight
+              - BETRAYAL_FALL_CAMERA.uprightLookHeight
+            ) * fallK;
           pose.pos.set(
-            jRoot.position.x - Math.sin(a) * 2.1,
-            jRoot.position.y + 0.55,
-            jRoot.position.z - Math.cos(a) * 2.1,
+            jRoot.position.x - Math.sin(a) * fallDistance,
+            jRoot.position.y + BETRAYAL_FALL_CAMERA.height,
+            jRoot.position.z - Math.cos(a) * fallDistance,
           );
-          pose.look.set(jRoot.position.x, jRoot.position.y + 0.18, jRoot.position.z);
+          pose.look.set(
+            jRoot.position.x,
+            jRoot.position.y + lookHeight,
+            jRoot.position.z,
+          );
         });
         await ctx.motion.tween(D, (k, raw) => {
           fallK = k;
@@ -336,7 +449,16 @@ export function makeColdOpen(ctx, h) {
         B.forEach((n, i) => { put(n, P.PIT.x + AWAY[i][0], P.PIT.z + AWAY[i][1]); n.char.turnToward(0.95, -0.32); n.char.play('walk'); });
         walkStarts = B.map((n) => ({ x: n.pos.x, z: n.pos.z }));
       } },
-      { t: 'cam', angle: 1.9, target: { x: P.PIT.x + 6, z: P.PIT.z - 1 }, distance: 7.2, height: 2.2, lookHeight: 1.1, duration: 1, awaitMs: false },
+      {
+        t: 'cam',
+        angle: 1.9,
+        target: { x: P.PIT.x + 3.3, z: P.PIT.z + 0.3 },
+        distance: 11.5,
+        height: 2.6,
+        lookHeight: 1.1,
+        duration: 1,
+        awaitMs: false,
+      },
       { t: 'fade', on: false, ms: 700 },
       { t: 'fn', fn: async () => {
         // D13 (Nate: "they walk then they stop in place"): the walk runs right
@@ -344,7 +466,16 @@ export function makeColdOpen(ctx, h) {
         // travel loop and then stood there moon-walking for 900ms. Nobody
         // stops; the black takes them.
         const D = 6100; let fading = false; let exitFade = null; // slow — no one hurries, no one looks back
-        await ctx.motion.tween(D, (k, raw) => {
+        ctx.camera.setPoseDriver((pose) => {
+          let cx = 0, cz = 0;
+          B.forEach((n) => { cx += n.pos.x; cz += n.pos.z; });
+          cx /= B.length;
+          cz /= B.length;
+          pose.pos.set(cx - Math.sin(1.9) * 11.5, 2.6, cz - Math.cos(1.9) * 11.5);
+          pose.look.set(cx, 1.1, cz);
+        });
+        try {
+          await ctx.motion.tween(D, (k, raw) => {
           B.forEach((n, i) => put(n, walkStarts[i].x + k * 7.6, walkStarts[i].z - k * 2.6));
           P.coatProp.position.set(B[1].pos.x + 0.35, 0.85, B[1].pos.z); // Judah carries it off
           // the black starts falling WHILE they are still walking (not after)
@@ -353,8 +484,11 @@ export function makeColdOpen(ctx, h) {
             exitFade = ctx.cinema.fade(true, 700);
             exitFade.catch((e) => { if (!isAbortError(e)) console.error('[cold-open exit fade]', e); });
           }
-        });
-        if (exitFade) await exitFade; // observe abort; never leave a rejected fade behind
+          });
+          if (exitFade) await exitFade; // observe abort; never leave a rejected fade behind
+        } finally {
+          ctx.camera.setPoseDriver(null);
+        }
       } },
       // SHOT 6 — CUT: back down into the dark. The boy has pulled himself up
       // to sitting — head bowed into his knees, shoulders shaking. The verse

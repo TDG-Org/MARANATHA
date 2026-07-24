@@ -11,6 +11,8 @@ export class Guidance {
     this._t = 0;
     this.visible = false;
     this.target = new THREE.Vector3();
+    this._cameraForward = new THREE.Vector3();
+    this._cameraToArrow = new THREE.Vector3();
 
     // Downward chevron arrow (billboarded).
     const arrowTex = canvasTexture(64, 64, (ctx, w, h) => {
@@ -66,9 +68,17 @@ export class Guidance {
     this.target.copy(vec3);
     this.visible = true;
     this.group.visible = true;
+    // A retarget can put the marker beside the lens. Wait for update() to
+    // prove a safe camera-space size before showing the chevron.
+    this.arrow.visible = false;
   }
 
-  setTargetXZ(x, z) { this.target.set(x, 0, z); this.visible = true; this.group.visible = true; }
+  setTargetXZ(x, z) {
+    this.target.set(x, 0, z);
+    this.visible = true;
+    this.group.visible = true;
+    this.arrow.visible = false;
+  }
 
   update(dt, camera) {
     if (!this.visible) return;
@@ -80,6 +90,15 @@ export class Guidance {
     this.ring.material.opacity = 0.55 + Math.sin(t * 2.2) * 0.2;
 
     this.arrow.position.set(this.target.x, this.target.y + 2.5 + Math.sin(t * 2.0) * 0.18, this.target.z);
+    // Fixed world size became a screen-filling flash when a sheep passed close
+    // to the lens. Scale by camera-space depth for a stable ~7.6% screen
+    // height, cap it at the original size in the distance, and hide only
+    // inside the near-lens danger zone. The ground ring remains as context.
+    camera.getWorldDirection(this._cameraForward);
+    this._cameraToArrow.subVectors(this.arrow.position, camera.position);
+    const cameraDepth = this._cameraToArrow.dot(this._cameraForward);
+    this.arrow.visible = cameraDepth > 0.75;
+    this.arrow.scale.setScalar(Math.min(1, Math.max(0.02, cameraDepth / 14)));
     // Yaw-billboard the arrow to the camera.
     this.arrow.rotation.y = Math.atan2(
       camera.position.x - this.arrow.position.x,

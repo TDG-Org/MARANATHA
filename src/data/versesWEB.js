@@ -89,12 +89,12 @@ export const NARRATION = {
 // files (the 11 verses below + verse-37-24 for the cold open); character lines
 // are text only, so Nate records ONLY the verses.
 export const SCENE1_ROUTING = [
-  { beat: 'cold-open', voice: 'NARRATOR', line: 'gen_37_24 (verse card + VO)' },
+  { beat: 'cold-open', voice: 'MIXED', line: 'Simeon/Joseph/brothers exchange (text) · gen_37_24 (verse card + VO)' },
   { beat: 'intro', voice: 'NARRATOR', line: 'gen_37_1 (verse card + VO)' },
-  { beat: 'herd', voice: 'CHARACTER', line: 'Simeon/Levi give practical flock directions (text; no verse)' },
+  { beat: 'herd', voice: 'CHARACTER', line: 'Two unnamed brothers give practical flock directions (text; no verse)' },
   { beat: 'report', voice: 'MIXED', line: 'Jacob/Joseph enact the report (text) · then full gen_37_2 (verse card + VO)' },
   { beat: 'coat', voice: 'MIXED', line: 'Jacob + brothers speak (text) · verses 37:3, 37:4 narrated — no line quotes its verse' },
-  { beat: 'dusk', voice: 'GAMEPLAY', line: 'objective + Sit prompt only (no spoken lines)' },
+  { beat: 'dusk', voice: 'CHARACTER', line: 'Judah mocks Joseph’s tunic by the fire (text) · Rest objective + Sit prompt' },
   { beat: 'dream-and-first-telling', voice: 'MIXED', line: 'dream 1: narr-dream-begins + 37:7 · Joseph tells only the brothers (text) · 37:5, 37:8 narrated · then dream 2' },
   { beat: 'second-telling', voice: 'MIXED', line: 'Joseph tells dream 2 to his brothers · 37:9 narrated · then tells his father and brothers · Jacob reacts · 37:10 narrated' },
   { beat: 'close', voice: 'NARRATOR', line: 'gen_37_11 (verse card + VO) + tease title' },

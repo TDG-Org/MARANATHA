@@ -2,16 +2,16 @@ import * as THREE from 'three';
 import { mulberry32 } from '../../engine/world.js';
 
 // --- the pit: the cold-open stage (Genesis 37:23–24) -------------------------
-// A dry cistern in the Shechem wilderness. The cold open plays here with the
+// A dry cistern in the rocky country near Dothan. The cold open plays here with the
 // REAL rigged cast (the story runner starts only after the GLBs load — no
-// primitive stand-ins ever, level-layout law 8): the brothers carry Joseph in,
+// primitive stand-ins ever, level-layout law 8): the brothers march Joseph in,
 // tear off the tunic, and throw him down. Shown once, then never again.
 export function buildPitStage(tex = {}) {
   const group = new THREE.Group();
   const PIT = { x: -62, z: 6 };
   const rnd = mulberry32(37);
 
-  // harsh rocky ground around the pit (Shechem wilderness — paler, rougher).
+  // harsh rocky ground around the pit (country near Dothan — paler, rougher).
   // Real dirt texture, warm-tinted — never a flat gray disc (world-density law).
   // D7: the ground is a RING with a REAL hole — the camera must see straight
   // down the shaft to Joseph lying at the bottom (the old opaque "mouth" disc

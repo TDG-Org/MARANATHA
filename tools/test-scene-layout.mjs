@@ -6,6 +6,14 @@ import { ColliderWorld } from '../src/engine/collision.js';
 import { auditLayout } from '../src/engine/layoutAudit.js';
 import { makeGround } from '../src/engine/world.js';
 import { buildCamp } from '../src/scenes/joseph3d/props.js';
+import {
+  COAT_ENVY_SPECTATOR_SLOTS,
+  TELLING_AMBIENT_SLOTS,
+} from '../src/scenes/joseph3d/beats/helpers.js';
+import {
+  HERD_DIRECTION_JOSEPH_MARK,
+  HERD_DIRECTION_MARKS,
+} from '../src/scenes/joseph3d/beats/camp.js';
 
 // The camp builders only need this tiny surface for their procedural glow
 // textures. No browser or renderer is involved in the geometry/layout audit.
@@ -34,6 +42,53 @@ function testCampLayout() {
     decorations: camp.decorations,
   });
   assert.deepEqual(findings, [], `camp layout findings:\n${JSON.stringify(findings, null, 2)}`);
+  for (let i = 0; i < TELLING_AMBIENT_SLOTS.length; i++) {
+    const slot = TELLING_AMBIENT_SLOTS[i];
+    assert.equal(
+      colliders.overlaps(slot.x, slot.z, 0.45),
+      false,
+      `telling ambient slot ${i} overlaps a camp collider`,
+    );
+    assert.ok(
+      Math.hypot(slot.x, slot.z + 6) >= 10.95,
+      `telling ambient slot ${i} enters the 6.4u camera orbit`,
+    );
+    for (let j = 0; j < i; j++) {
+      const other = TELLING_AMBIENT_SLOTS[j];
+      assert.ok(
+        Math.hypot(slot.x - other.x, slot.z - other.z) >= 1,
+        `telling ambient slots ${i}/${j} merge actors`,
+      );
+    }
+  }
+  for (let i = 0; i < COAT_ENVY_SPECTATOR_SLOTS.length; i++) {
+    const slot = COAT_ENVY_SPECTATOR_SLOTS[i];
+    assert.equal(
+      colliders.overlaps(slot.x, slot.z, 0.45),
+      false,
+      `coat-envy spectator slot ${i} overlaps a camp collider`,
+    );
+    for (let j = 0; j < i; j++) {
+      const other = COAT_ENVY_SPECTATOR_SLOTS[j];
+      assert.ok(
+        Math.hypot(slot.x - other.x, slot.z - other.z) >= 1,
+        `coat-envy spectator slots ${i}/${j} merge actors`,
+      );
+    }
+  }
+  for (let i = 0; i < HERD_DIRECTION_MARKS.length; i++) {
+    const slot = HERD_DIRECTION_MARKS[i];
+    assert.equal(
+      colliders.overlaps(slot.x, slot.z, 0.42),
+      false,
+      `herd-direction speaking mark ${i} overlaps a camp collider`,
+    );
+  }
+  assert.equal(
+    colliders.overlaps(HERD_DIRECTION_JOSEPH_MARK.x, HERD_DIRECTION_JOSEPH_MARK.z, 0.42),
+    false,
+    'herd-direction Joseph mark overlaps a camp collider',
+  );
   camp.group.traverse((object) => {
     if (object.isInstancedMesh) object.dispose();
     object.geometry?.dispose?.();
