@@ -415,7 +415,7 @@ export function makeCampBeats(ctx, h) {
       { t: 'verseHide' },
       // outside, across the camp, the brothers watch the tent — dip-to-black
       // CUT (cutscene-director: clean transitions, never a glide through walls)
-      { t: 'fade', on: true, ms: 300 },
+      { t: 'fade', on: true, ms: 420 },
       { t: 'fn', fn: () => {
         // This is an exterior camp shot. The old code left the isolated tent
         // stage active until after Judah spoke, hiding the whole camp while
@@ -428,6 +428,13 @@ export function makeCampBeats(ctx, h) {
         // Father and son remain inside the real camp tent, outside this lens.
         ctx.joseph.setPosition(-9.4, -5.4);
       } },
+      // SETTLE BEHIND THE BLACK. Waking the camp stage is the heaviest single
+      // frame in the beat: particles, the flock, ambient AI, the fire lights
+      // and the ambience all come back at once, and the grade moves the sky,
+      // fog, key, hemi and ridges with them. Revealing on the very next frame
+      // shows the player that work as a hitch. Two settled frames cost nothing
+      // and the cut lands clean.
+      { t: 'wait', ms: 420 },
       { t: 'cam', angle: Math.PI * 0.55, target: { x: 0.8, z: -7.6 }, distance: 5.4, height: 1.8, lookHeight: 1.3, duration: 1, awaitMs: false },
       // D13 (Nate): this is the SAME DAY, minutes after the coat — `ominous`
       // is a night palette and read as nightfall. Daytime tension instead.
@@ -468,7 +475,7 @@ export function makeCampBeats(ctx, h) {
       // Joseph steps back out into the gold, wearing the coat. D8 state
       // machine: the hatred has BEGUN — the tension score persists from here
       // until the dream; the warm theme does not come back in between.
-      { t: 'fade', on: true, ms: 300 },
+      { t: 'fade', on: true, ms: 420 },
       { t: 'fn', fn: () => {
         T.group.visible = false;
         ctx.setStage?.('camp');
@@ -480,6 +487,13 @@ export function makeCampBeats(ctx, h) {
       } },
       { t: 'camRelease', ms: 1 },
       { t: 'fn', fn: () => ctx.camera.snap() },
+      // SETTLE BEHIND THE BLACK. Waking the camp stage is the heaviest single
+      // frame in the beat: particles, the flock, ambient AI, the fire lights
+      // and the ambience all come back at once, and the grade moves the sky,
+      // fog, key, hemi and ridges with them. Revealing on the very next frame
+      // shows the player that work as a hitch. Two settled frames cost nothing
+      // and the cut lands clean.
+      { t: 'wait', ms: 420 },
       { t: 'fade', on: false, ms: 700 },
       { t: 'letterbox', on: false },
       { t: 'fn', fn: () => ctx.npcs.freeze(jac, false) },

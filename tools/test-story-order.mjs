@@ -539,13 +539,21 @@ assert.match(
 );
 {
   const coatVerse = campSource.indexOf('WEB.gen_37_3');
-  const outsideBlack = campSource.indexOf("{ t: 'fade', on: true, ms: 300 }", coatVerse);
+  // The ORDER is the contract, not the fade's duration.
+  const outsideBlack = campSource.indexOf("{ t: 'fade', on: true,", coatVerse);
   const hideTent = campSource.indexOf('T.group.visible = false', outsideBlack);
   const showCamp = campSource.indexOf("ctx.setStage?.('camp')", hideTent);
+  const settle = campSource.indexOf("{ t: 'wait', ms:", showCamp);
   const judah = campSource.indexOf("who: 'Judah', text: 'A special tunic", showCamp);
   assert.ok(
     outsideBlack >= 0 && hideTent > outsideBlack && showCamp > hideTent && judah > showCamp,
     'Judah envy shot reveals before the exterior camp owns stage visibility',
+  );
+  // Waking the camp stage is the heaviest frame in the beat. It must land
+  // behind the black, not on the reveal, or the cut reads as a hitch.
+  assert.ok(
+    settle > showCamp && settle < judah,
+    'the camp stage is revealed without settling behind the black first',
   );
 }
 assert.match(tellingSource, /Enough, Joseph\. What is this dream you have dreamed\?/);
