@@ -480,6 +480,9 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
     // change, right on a cut. The count is constant; only intensity moves.
     if (!campOn) for (const f of fireLights) f.light.intensity = 0;
     pit.setShaft(name === 'pit' ? 1 : 0);
+    // Nobody runs through a dream. Joseph walks the wheat field; his waking
+    // body gets its legs back the moment the stage changes.
+    if (controller) controller.canRun = name !== 'dream';
     // The stage owns its soundscape too. Sheep/chatter/bird loops should not
     // keep streaming or leak into the pit, dream, or isolated tent interior.
     setCampAmbience(campOn ? 1 : 0, campOn ? 1.2 : 0.6);

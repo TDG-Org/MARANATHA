@@ -224,7 +224,7 @@ export function buildDreamField() {
   // sheaves own that space. The stones hang AROUND it and FURTHER out, and
   // there are FEW of them: a scattered halo past the border ring (r ≥ 17.5),
   // bigger and higher the farther they drift, so the dream feels wide.
-  const floatSpots = []; // [x, baseY, z, scale, phase, bobSpeed] — field-local
+  const floatSpots = []; // [x, baseY, z, scale, phase, bobSpeed, bobRise] — field-local
   for (let i = 0; i < 13; i++) {
     const a = (i / 13) * Math.PI * 2 + rnd() * 0.42;   // spread all the way around
     const r = 17.5 + rnd() * 11;                       // 17.5–28.5: outside the border
@@ -235,7 +235,8 @@ export function buildDreamField() {
       Math.sin(a) * r,
       0.95 + far * 1.5 + rnd() * 0.4,                  // and bigger, so they still read
       rnd() * Math.PI * 2,
-      0.45 + rnd() * 0.3,                              // visible but calm, unsynced bob
+      0.30 + rnd() * 0.22,                             // slower: a long swell, not a flutter
+      1.05 + rnd() * 0.75,                             // and each rides its own height
     ]);
   }
   const floatGeo = new THREE.DodecahedronGeometry(0.34, 0);
@@ -265,7 +266,9 @@ export function buildDreamField() {
   const frd = new THREE.Object3D();
   const writeFloatRocks = (t) => {
     floatSpots.forEach((s, i) => {
-      const bob = Math.sin(t * s[5] + s[4]) * 0.4;
+      // A dream, not a lawn ornament: the stones swell up and settle back
+      // through a real arc, each on its own height and its own slow phase.
+      const bob = Math.sin(t * s[5] + s[4]) * s[6];
       frd.position.set(s[0], s[1] + bob, s[2]);
       frd.scale.setScalar(s[3]);
       frd.rotation.x = Math.sin(t * 0.18 + s[4]) * 0.08;

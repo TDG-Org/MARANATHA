@@ -98,7 +98,12 @@ class AudioSystem {
     this._retiringLoops = new Set(); // streamed loops completing an audible fade
     this._liveOneShots = 0;      // simultaneous one-shot cap (phones die past ~dozens)
     this._activeOneShots = new Set(); // real + procedural source ownership
-    const unlock = () => this.unlock();
+    const unlock = () => {
+      // Already running? Then there is nothing to unlock, and a held
+      // movement key must not re-walk every audio handle 30 times a second.
+      if (this.ctx?.state === 'running' && !this.holdSuspend) return;
+      this.unlock();
+    };
     window.addEventListener('pointerdown', unlock);
     window.addEventListener('keydown', unlock);
     // Battery care: stop the audio clock entirely when the tab is hidden

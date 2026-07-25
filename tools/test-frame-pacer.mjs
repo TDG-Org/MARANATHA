@@ -57,23 +57,29 @@ for (const sourceHz of SOURCE_RATES) {
   const priorDoc = globalThis.document;
   const priorPerf = globalThis.performance;
 
-  const measure = async (displayHz, targetFps, seconds) => {
+  const measure = async (displayHz, targetFps, seconds, timerLateMs = 0) => {
     let clock = 0;
     let nextId = 1;
     const rafQueue = new Map();
     const timerQueue = new Map();
     let rafCallbacks = 0;
     let ticks = 0;
+    const tickTimes = [];
 
     globalThis.performance = { now: () => clock };
     globalThis.document = { hidden: false, addEventListener() {}, removeEventListener() {} };
     globalThis.requestAnimationFrame = (fn) => { const id = nextId++; rafQueue.set(id, fn); return id; };
     globalThis.cancelAnimationFrame = (id) => rafQueue.delete(id);
-    globalThis.setTimeout = (fn, ms = 0) => { const id = nextId++; timerQueue.set(id, { fn, at: clock + Math.max(0, ms) }); return id; };
+    // Real timers do not fire on time. `timerLateMs` reproduces Windows' slop.
+    globalThis.setTimeout = (fn, ms = 0) => {
+      const id = nextId++;
+      timerQueue.set(id, { fn, at: clock + Math.max(0, ms) + timerLateMs });
+      return id;
+    };
     globalThis.clearTimeout = (id) => timerQueue.delete(id);
 
-    const { startLoop } = await import(`../src/core/renderer.js?wake=${displayHz}-${targetFps}`);
-    const loop = startLoop(() => { ticks += 1; }, () => targetFps);
+    const { startLoop } = await import(`../src/core/renderer.js?wake=${displayHz}-${targetFps}-${timerLateMs}`);
+    const loop = startLoop(() => { ticks += 1; tickTimes.push(clock); }, () => targetFps);
 
     const frameStep = 1000 / displayHz;
     for (let f = 1; f <= seconds * displayHz; f++) {
@@ -88,14 +94,32 @@ for (const sourceHz of SOURCE_RATES) {
       for (const [, fn] of pending) { rafCallbacks += 1; fn(clock); }
     }
     loop.stop();
-    return { rafCallbacks: rafCallbacks / seconds, ticks: ticks / seconds };
+    // Judder is a spread of INTERVALS, not a wrong average: 50/17/50/17 averages
+    // to the right frame rate and looks broken.
+    const gaps = [];
+    for (let i = 1; i < tickTimes.length; i++) gaps.push(tickTimes[i] - tickTimes[i - 1]);
+    const steady = gaps.slice(2); // ignore the first frames while the pacer settles
+    const worst = steady.length ? Math.max(...steady) : 0;
+    const best = steady.length ? Math.min(...steady) : 0;
+    return {
+      rafCallbacks: rafCallbacks / seconds,
+      ticks: ticks / seconds,
+      maxGap: worst,
+      minGap: best,
+      spread: worst - best,
+    };
   };
 
   try {
     const eco = await measure(144, 30, 4);
     assert.ok(Math.abs(eco.ticks - 30) <= 1, `eco produced ${eco.ticks.toFixed(1)} ticks/s`);
+    // The wake margin has to be wide enough to catch the right vsync (see the
+    // judder guard below), which costs a couple of cheap callbacks per frame.
+    // 144/s down to ~60/s is the honest saving; buying the last few wake-ups
+    // back by shaving the margin traded smoothness for a number, which is the
+    // wrong way round.
     assert.ok(
-      eco.rafCallbacks < 45,
+      eco.rafCallbacks < 75,
       `eco still woke the main thread ${eco.rafCallbacks.toFixed(1)} times/s on a 144Hz panel`,
     );
 
@@ -105,9 +129,27 @@ for (const sourceHz of SOURCE_RATES) {
       full.rafCallbacks > 130,
       `full rate left vsync for a timer (${full.rafCallbacks.toFixed(1)} callbacks/s) — that is judder`,
     );
+    // THE JUDDER GUARD. Sleeping to a timer and then asking for a rAF means the
+    // request has to reach the right vsync. With a thin margin a late timer
+    // misses it and the frame lands a whole refresh period later, giving a
+    // 50/17/50/17 rhythm that averages out correctly and looks awful. Eco must
+    // stay EVEN under realistic timer slop, on both common panel rates.
+    for (const [hz, late] of [[60, 0], [60, 4], [60, 9], [144, 0], [144, 4], [144, 9]]) {
+      const paced = await measure(hz, 30, 4, late);
+      assert.ok(
+        Math.abs(paced.ticks - 30) <= 1,
+        `${hz}Hz eco with ${late}ms timer slop produced ${paced.ticks.toFixed(1)} fps`,
+      );
+      assert.ok(
+        paced.spread <= 1000 / hz + 1,
+        `${hz}Hz eco with ${late}ms timer slop juddered: frame gaps ${paced.minGap.toFixed(1)}-${paced.maxGap.toFixed(1)}ms`,
+      );
+    }
+
     console.log(
       `loop wake-ups on a 144Hz panel: eco ${eco.rafCallbacks.toFixed(1)}/s for ${eco.ticks.toFixed(1)} frames · `
-      + `full ${full.rafCallbacks.toFixed(1)}/s for ${full.ticks.toFixed(1)} frames (stays on vsync)`,
+      + `full ${full.rafCallbacks.toFixed(1)}/s for ${full.ticks.toFixed(1)} frames (stays on vsync); `
+      + `eco stays even under 0-9ms timer slop at 60Hz and 144Hz`,
     );
   } finally {
     globalThis.requestAnimationFrame = priorRaf;

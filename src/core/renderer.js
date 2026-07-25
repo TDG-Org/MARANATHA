@@ -84,7 +84,17 @@ export function startLoop(tick, getFps = () => 60) {
   // not aligned to vsync, and trading vsync for a timer at 60fps buys nothing
   // and costs judder. The saving is in eco, where two frames in three were
   // empty callbacks anyway.
-  const ARM_EARLY_MS = 2; // wake just before the deadline; rAF aligns the rest
+  // WAKE EARLY ENOUGH TO CATCH THE RIGHT VSYNC.
+  //
+  // The timer does not draw the frame — it only asks for the next rAF, and that
+  // request lands on the NEXT vsync. Windows timers routinely fire several
+  // milliseconds late, so a 2ms margin meant a slightly late timer missed its
+  // vsync entirely and the frame arrived a whole refresh period afterwards:
+  // 50/17/50/17 instead of a steady 33/33. That averages out to roughly the
+  // right number and looks like judder, which is the worst possible outcome for
+  // a change made in the name of smoothness. Half a 60Hz period of slack costs
+  // a couple of cheap callbacks and buys the alignment back.
+  const ARM_EARLY_MS = 8;
   const FULL_RATE = 60;
   const arm = (fps, delay) => {
     if (fps < FULL_RATE && delay > ARM_EARLY_MS) {

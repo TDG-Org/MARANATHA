@@ -14,6 +14,10 @@ const MOVE_KEYS = new Set(['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowlef
 // Exposes moveVec so the 3rd-person camera can trail the movement.
 export class PlayerController3D {
   constructor({ camera, character, bounds, walkSpeed = 3.05, runSpeed = 5.4, colliders = null, radius = 0.42, signal = null }) {
+    // Some places are not to be hurried through. A scene may forbid running
+    // (the dream does); the held key is then simply ignored, so nothing gets
+    // stuck 'running' when the ban is lifted.
+    this.canRun = true;
     this.camera = camera;
     this.character = character;
     this.walkSpeed = walkSpeed;
@@ -130,7 +134,8 @@ export class PlayerController3D {
         ix += this.joystick.vec.x;
         iz += -this.joystick.vec.y;
       }
-      running = k.has('shift') || (this.joystick.active && this.joystick.vec.x ** 2 + this.joystick.vec.y ** 2 > 0.72);
+      running = this.canRun
+        && (k.has('shift') || (this.joystick.active && this.joystick.vec.x ** 2 + this.joystick.vec.y ** 2 > 0.72));
     }
 
     let wantX = 0, wantZ = 0;

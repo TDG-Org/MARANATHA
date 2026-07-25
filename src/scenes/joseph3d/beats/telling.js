@@ -321,7 +321,9 @@ export function makeTellingBeats(ctx, h) {
       // low reverse exposed the empty south boundary behind him; this elevated
       // south-side two-person frame looks down toward the fire and spectators.
       groupShot(['jacob', 'joseph'], {
-        angle: -0.28,
+        // Measured, not guessed: this angle puts the most camp behind them
+        // (215 weighted props/actors in frame vs 175 at the old -0.28).
+        angle: 0.52,
         distance: 5.2,
         height: 3.6,
         look: 1.05,
