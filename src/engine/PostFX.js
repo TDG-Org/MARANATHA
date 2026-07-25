@@ -1,8 +1,9 @@
 import { Graphics } from '../systems/Graphics.js';
 
-// PostFX (D6): the game's grade + named filters, built on CSS canvas filters
-// and a vignette overlay — GPU-composited, effectively free on phones (a real
-// EffectComposer would cost a fullscreen framebuffer pass; wrong trade here).
+// PostFX (D6): the game's grade + named filters, built on one static CSS canvas
+// grade and simple alpha overlays. Full-frame filters are not "free" on every
+// browser/GPU, so dream mood comes from the authored light/material palette
+// instead of stacking another hue/color filter over the live canvas.
 // ONE instance owns the canvas; scenes ask for looks by NAME:
 //
 //   postFX.setFilter('none' | 'future' | 'dream')  — eased cross-fade
@@ -28,8 +29,9 @@ const FILTERS = {
   // canvas blur: it was the transition's largest compositor cost and made the
   // action look darker than its authored lighting.
   future: 'saturate(0.78) contrast(1.015) brightness(1.055)',
-  // the dream: cool, soft, faintly glowing (brightness lifts the additive glows)
-  dream: 'saturate(1.12) contrast(0.98) brightness(1.08) hue-rotate(-8deg)',
+  // Dream lighting/materials already own the cool palette. Keeping this empty
+  // avoids a second full-frame filter/compositor path only in the busiest set.
+  dream: '',
 };
 
 export class PostFX {
@@ -37,6 +39,7 @@ export class PostFX {
     this.canvas = canvasEl;
     this.filter = 'none';
     this._blurT = null;
+    this._lastCanvasFilter = null;
 
     // D9 (Nate): the old FUTURE vignette drew dark borders on all four sides
     // that overlapped the letterbox in the corners — REMOVED. The drained
@@ -54,8 +57,8 @@ export class PostFX {
     this.dreamGlow = document.createElement('div');
     this.dreamGlow.style.cssText = [
       'position:fixed', 'inset:0', 'z-index:25', 'pointer-events:none', 'opacity:0',
-      'transition:opacity 1600ms ease', 'mix-blend-mode:screen',
-      'background:radial-gradient(ellipse at 50% 38%, rgba(140,150,220,0.18) 0%, rgba(80,90,160,0.06) 55%, rgba(0,0,0,0) 78%)',
+      'transition:opacity 1600ms ease',
+      'background:radial-gradient(ellipse at 50% 38%, rgba(140,150,220,0.12) 0%, rgba(80,90,160,0.045) 55%, rgba(0,0,0,0) 78%)',
     ].join(';');
     document.body.append(this.dreamGlow);
 
@@ -77,7 +80,11 @@ export class PostFX {
 
   _compose(extra = '') {
     const f = `${this._base} ${FILTERS[this.filter] ?? ''} ${extra}`.trim();
-    this.canvas.style.filter = f || 'none';
+    const next = f || 'none';
+    if (next === this._lastCanvasFilter) return false;
+    this._lastCanvasFilter = next;
+    this.canvas.style.filter = next;
+    return true;
   }
 
   applyPreset() { this._compose(); }
@@ -85,9 +92,17 @@ export class PostFX {
   // Eased switch to a named filter. The vignette/glow overlays follow the name.
   setFilter(name, ms = 1200) {
     this.filter = FILTERS[name] !== undefined ? name : 'none';
-    this.canvas.style.transition = `filter ${ms}ms ease`;
     this.vignette.style.opacity = name === 'future' ? '1' : '0';
     this.dreamGlow.style.opacity = name === 'dream' ? '1' : '0';
+    // Only create a filter transition when the actual canvas grade changes.
+    // Entering dream now keeps the same base grade and touches no live-canvas
+    // compositor property.
+    const prior = this._lastCanvasFilter;
+    const next = `${this._base} ${FILTERS[this.filter] ?? ''}`.trim() || 'none';
+    const changed = next !== prior;
+    this.canvas.style.transition = changed && prior !== null
+      ? `filter ${ms}ms ease`
+      : 'none';
     this._compose();
   }
 
@@ -127,5 +142,6 @@ export class PostFX {
     this.dreamGlow.remove();
     this.focusWash.remove();
     this.canvas.style.filter = 'none';
+    this._lastCanvasFilter = null;
   }
 }

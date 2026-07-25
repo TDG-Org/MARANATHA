@@ -76,7 +76,7 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
   };
   // Finer tiling keeps the supplied polygon grass from reading as a few giant
   // facets across the landscape. UV repeats cost no extra draw or texture RAM.
-  const grassTex = loadTiled('textures/grass.jpg', 64, 28, THREE.MirroredRepeatWrapping);
+  const grassTex = loadTiled('textures/grass.jpg', 76, 34, THREE.MirroredRepeatWrapping);
   const rockTex = loadTiled('textures/rock.jpg', 1, 1);
   const dirtTex = loadTiled('textures/dirt.jpg', 2, 2);
   const worldTextures = { grass: grassTex, rock: rockTex, dirt: dirtTex };
@@ -455,6 +455,11 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
     if (!['camp', 'pit', 'dream', 'tent'].includes(name) || name === activeStage) return;
     activeStage = name;
     const campOn = name === 'camp';
+    // The continuous world ground reaches every stage. At the pit, tint only
+    // that landscape cool-dark so the grass recedes into night while the
+    // separately lit cast stays legible. Restore the exact neutral multiplier
+    // before any morning/camp/dream frame becomes visible.
+    ground.material.color.set(name === 'pit' ? 0x46505c : 0xffffff);
     camp.group.visible = campOn;
     motes.points.visible = campOn;
     smoke.points.visible = campOn;
@@ -858,6 +863,10 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
     // player motion, or a fleeing lamb forces full rate.
     fullRate: () =>
       !ready
+      // Dream exploration is not visually idle: wheat, fog, motes, fireflies,
+      // and floating stones all move. Eco-30 made that authored motion present
+      // near 24–30fps on some browsers even though the scene itself was cheap.
+      || activeStage === 'dream'
       || Narrator.speaking
       || dialogue.isOpen
       || ctx.sequencer.running

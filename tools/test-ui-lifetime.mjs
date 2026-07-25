@@ -62,12 +62,40 @@ const { makeAbortError, withAbort } = await import('../src/core/async.js');
 const { createDialogue } = await import('../src/ui/dialogue.js');
 const { createStoryHud } = await import('../src/ui/storyHud.js');
 const { createNameTags } = await import('../src/ui/nameTags.js');
+const { createPauseMenu } = await import('../src/ui/pause.js');
 const { withObjectivePrepaint } = await import('../src/ui/objectivePrepaint.js');
 const { Interactables } = await import('../src/engine/Interactables.js');
 const baselineKeyListeners = fakeWindow.listenerCount('keydown');
 
 const click = (el) => el.dispatchEvent({ type: 'click', target: el });
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// The same pause/settings control remains above cinematic bars and preserves a
+// cutscene's input-off truth when resumed.
+{
+  const pauseCalls = [];
+  const inputCalls = [];
+  const menu = createPauseMenu({
+    app: { setPaused: (on) => pauseCalls.push(on) },
+    isInputOn: () => false,
+    setInput: (on) => inputCalls.push(on),
+    onSettings: async () => {},
+    onHome: async () => false,
+  });
+  const button = fakeDocument.body.children.find(
+    (el) => el.dataset?.role === 'pause-settings',
+  );
+  assert.ok(button, 'pause/settings button was not mounted');
+  assert.equal(button.attributes.get('aria-label'), 'Pause and settings');
+  assert.match(button.style.cssText, /z-index:57/);
+  menu.open();
+  assert.deepEqual(pauseCalls, [true], 'cutscene pause did not freeze the app');
+  menu.close();
+  assert.deepEqual(pauseCalls, [true, false], 'cutscene pause did not resume the app');
+  assert.deepEqual(inputCalls, [false, false],
+    'resuming pause forced gameplay input on inside a cutscene');
+  menu.destroy();
+}
 
 // Cutscenes own a clean frame: projected gameplay labels hide as one layer
 // and reappear from fresh coordinates after the sequence.

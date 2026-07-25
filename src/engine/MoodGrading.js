@@ -24,12 +24,11 @@ export const MOODS = {
   // eases into full goldenHour from (the straight gray→gold cut read "way too
   // white"). Sunrise, not a lightswitch.
   dawn: { skyTop: 0xc9824f, skyBottom: 0xf2c68e, fog: 0xe6b98a, fogNear: 42, key: 0xf7d3a0, keyI: 0.92, hemi: 0.41, hemiSky: 0xf2c68e, sun: [2, 6, -12], ridge: [0xbd9078, 0xa27a80, 0x67506f], tint: '#000000', tintA: 0 },
-  // The whole cold open wears ONE soft-gloom palette. Earlier cuts swapped
-  // between a bright talk look, a dark throw look, and an even darker walk-off
-  // look, so the same night appeared to change exposure shot by shot. This
-  // middle value keeps faces and the well floor readable while cool color and
-  // a restrained tint carry the sadness.
-  pit: { skyTop: 0x55516a, skyBottom: 0x93818a, fog: 0x81798a, fogNear: 36, key: 0xd9cee7, keyI: 1.0, hemi: 0.76, hemiSky: 0x93818a, sun: [0, 12, 5], ridge: [0xa9a1b2, 0x938a9e, 0x6f687c], tint: '#1c1830', tintA: 0.025 },
+  // The whole cold open wears ONE soft-gloom NIGHT palette. Keep the actor key
+  // readable, but let the landscape, ridges and sky fall away so the distant
+  // meal fire is the one warm landmark. Earlier bright lavender air made the
+  // flash-forward read as overcast day even though the sun was hidden.
+  pit: { skyTop: 0x1c2238, skyBottom: 0x444055, fog: 0x343544, fogNear: 32, key: 0xc9d2e7, keyI: 0.94, hemi: 0.46, hemiSky: 0x444a63, sun: [0, 12, 5], ridge: [0x4e5265, 0x414556, 0x303442], tint: '#111629', tintA: 0.07 },
   // D13 (Nate: "it shows night when the brothers are talking… then day… THEN
   // night"): DAYTIME TENSION. The envy scene, the telling and the close are
   // broad daylight in the story — `ominous` is a NIGHT palette and reading it

@@ -312,10 +312,10 @@ export function makeCampBeats(ctx, h) {
       fn: async () => {
         jac.char.play('talk');
         twoShot('jacob', 'joseph', {
-          ms: 950, distMin: 3.2, distMax: 3.35,
+          ms: 1250, distMin: 3.2, distMax: 3.35,
           height: 1.9, look: 1.18, towardB, responsiveSpeaker: 'a',
         });
-        await wait(570);
+        await wait(1250);
       },
     });
     await seq([
@@ -373,11 +373,11 @@ export function makeCampBeats(ctx, h) {
         ctx.npcs.freeze(jac, true);
         jac.char.turnToward(dx, dz);
         twoShot('jacob', 'joseph', {
-          ms: 900, distMax: 3.3, height: 1.85, look: 1.2,
+          ms: 1250, distMax: 3.3, height: 1.85, look: 1.2,
           towardB: 0.6, responsiveSpeaker: 'a',
         }); // re-frame the CLOSED-UP pair — his face, inside the tent
         jac.char.play('talk'); // the offering gesture
-        await wait(420);
+        await wait(1250);
         ctx.joseph.setCoat(true);       // the tunic settles over his shoulders
         ctx.sound('sfx.cloth_equip');
         ctx.sound('stinger.coat_gift');

@@ -101,6 +101,11 @@ export function makeDreamBeat(ctx, h, { firstTell } = {}) {
     ctx.controller.bounds = { minX: D.FIELD.x - 13, maxX: D.FIELD.x + 13, minZ: D.FIELD.z - 13, maxZ: D.FIELD.z + 13 };
     ctx.camera.release(1);
     ctx.camera.snap();
+    // Hold the exact staged dream behind black long enough for one bounded
+    // burst of real 60fps submissions. Scene-load prewarm handles cold assets;
+    // this settles final visibility/camera/material state without revealing a
+    // half-prepared frame or adding an expensive canvas blur.
+    await wait(900);
     await seq([
       { t: 'grade', mood: 'dream', ms: 30 },
       { t: 'fn', fn: () => { D.showMoon(1); ctx.postFX.setFilter('dream', 1800); } },
@@ -201,7 +206,7 @@ export function makeDreamBeat(ctx, h, { firstTell } = {}) {
     ctx.setMusic('music.dream_wonder');
     ctx.storyEvent?.('dream2');
     await seq([
-      { t: 'title', heading: 'Joseph dreamed again', sub: 'The sun, moon, and eleven stars', holdMs: 2600 },
+      { t: 'title', heading: 'That night, Joseph dreamed again', sub: 'The sun, moon, and eleven stars', holdMs: 2800 },
       { t: 'fade', on: false, ms: 1100, pulse: false },
       { t: 'letterbox', on: false },
     ]);

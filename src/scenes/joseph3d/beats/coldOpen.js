@@ -36,6 +36,11 @@ export function makeColdOpen(ctx, h) {
     // without waking or rendering the entire 62u-away camp.
     const MEAL_BROTHERS = ['brother0', 'brother1', 'brother2'].map((k) => ctx.cast[k]);
     const mealHomes = MEAL_BROTHERS.map((n) => ({ x: n.pos.x, z: n.pos.z }));
+    const pitParticipants = new Set([...B, ...MEAL_BROTHERS]);
+    const BACKGROUND_CAST = Object.values(ctx.cast)
+      .filter((n) => n?.char?.root && !pitParticipants.has(n));
+    const backgroundVisibility = BACKGROUND_CAST.map((n) => n.char.root.visible);
+    const mealVisibility = MEAL_BROTHERS.map((n) => n.char.root.visible);
     // NOBODY may ever stand over the hole (D8: Reuben's old "ahead" slot put
     // him ON AIR over the shaft) — every brother placement is clamped radially
     // out past the rim. Joseph is moved via jRoot directly and is exempt.
@@ -70,12 +75,24 @@ export function makeColdOpen(ctx, h) {
     // sky read as a sunrise from the crying shot. Dark until the real morning.
     ctx.sunSprite.visible = false;
     P.group.visible = true;
+    // Only this scene's cast may paint in the wilderness. The camp set slept,
+    // but unrelated character roots at their normal world positions remained
+    // renderable and leaked as scattered people across long background shots.
+    BACKGROUND_CAST.forEach((n) => { n.char.root.visible = false; });
+    MEAL_BROTHERS.forEach((n) => {
+      n.char.root.visible = false;
+      ctx.npcs.freeze(n, true);
+    });
     // D14 (Nate: "a cloud or fog right on top of the well… the camera gets
     // really white"): the sky-light is an 8-unit ADDITIVE disc sitting over the
     // pit mouth — from the raised exchange camera it washed the top third of
     // the frame (+71 sRGB, measured). It belongs to the FALL, where it reads as
     // daylight closing over him, so it stays dark until the throw.
     P.setSkyLight(0); P.shrinkSkyLight(0);
+    // The far tree-ring camp/fire establishes the destination from the first
+    // shot. Its people remain hidden until the walk-off, so the night horizon
+    // reads as trees and one warm practical—not a crowd around the well.
+    P.setMealGlow(0.78);
     // …and the CAMP is 60u away and asleep: its ambience (Nate's camp_wind bed
     // carries birdsong, plus the sheep pen) must not play in the wilderness at
     // night. The morning brings it in.
@@ -458,6 +475,7 @@ export function makeColdOpen(ctx, h) {
           { x: P.MEAL.x + 1.45, z: P.MEAL.z + 0.45 },
         ];
         MEAL_BROTHERS.forEach((n, i) => {
+          n.char.root.visible = true;
           put(n, mealSlots[i].x, mealSlots[i].z);
           n.char.turnToward(P.MEAL.x - n.pos.x, P.MEAL.z - n.pos.z);
           n.char.play(i === 1 ? 'kneel' : 'idle');
@@ -554,7 +572,11 @@ export function makeColdOpen(ctx, h) {
           n.pos.z = mealHomes[i].z;
           n.char.setPosition(mealHomes[i].x, mealHomes[i].z);
           n.char.play('idle');
+          n.char.root.visible = mealVisibility[i];
           ctx.npcs.freeze(n, false);
+        });
+        BACKGROUND_CAST.forEach((n, i) => {
+          n.char.root.visible = backgroundVisibility[i];
         });
         ctx.controller.bounds = ctx.bounds;
         ctx.joseph.setPosition(-7, -2.5); // by his tent in the camp

@@ -486,6 +486,7 @@ export const GROUP_FACE_SAFE = Object.freeze({
 export const MAX_GROUP_HEAD_OCCLUSION = 0.08;
 export const MAX_VISIBLE_DIALOGUE_ROUTE_MS = 3200;
 export const MAX_VISIBLE_GROUP_ROUTE_MS = 4200;
+export const MIN_VISIBLE_DIALOGUE_MOVE_MS = 1200;
 
 export function projectedHeadOcclusion(a, b) {
   const near = a.depth <= b.depth ? a : b;
@@ -689,7 +690,18 @@ export function makeHelpers(ctx) {
     authoredMs,
     maxVisibleMs,
   }) => {
-    const moveMs = ctx.camera.cinematicMoveTo(spec) ?? authoredMs;
+    // Short visible reverses read as a snap even when mathematically eased.
+    // Covered one-frame cuts never enter this helper; every visible dialogue
+    // reframe gets at least 1.2s to travel cleanly around the audience.
+    const comfortableSpec = {
+      ...spec,
+      duration: Math.max(
+        MIN_VISIBLE_DIALOGUE_MOVE_MS,
+        spec.duration ?? authoredMs,
+      ),
+    };
+    const moveMs = ctx.camera.cinematicMoveTo(comfortableSpec)
+      ?? comfortableSpec.duration;
     if (moveMs <= maxVisibleMs) {
       await wait(moveMs);
       return { covered: false, moveMs };
@@ -702,7 +714,7 @@ export function makeHelpers(ctx) {
     // then reveal the exact authored endpoint.
     await ctx.cinema.fade(true, 180);
     ctx.camera.cutTo({
-      ...spec,
+      ...comfortableSpec,
       path: 'linear',
       arcCenter: null,
       arcRadius: 0,
@@ -861,17 +873,19 @@ export function makeHelpers(ctx) {
     });
     const groupArc = Math.hypot(a.x - FIRE.x, a.z - FIRE.z) < 5.5
       && Math.hypot(b.x - FIRE.x, b.z - FIRE.z) < 5.5;
+    const moveMs = ms <= 1 ? 1 : Math.max(ms, MIN_VISIBLE_DIALOGUE_MOVE_MS);
     ctx.camera.cinematicMoveTo({
       angle: plan.angle,
       target: plan.target,
       // distMax: INTERIOR shots cap the pull-back so the lens can never
       // back out through the tent shell (D11 — Nate saw the outside)
       distance: plan.distance,
-      height: plan.height, lookHeight: plan.lookHeight, duration: ms,
+      height: plan.height, lookHeight: plan.lookHeight, duration: moveMs,
       path: groupArc ? 'groupArc' : 'arc',
       arcCenter: groupArc ? FIRE : null,
       arcRadius: groupArc ? 6.4 : 0,
     });
+    plan.moveMs = moveMs;
     return plan;
   };
 

@@ -317,8 +317,18 @@ export function makeTellingBeats(ctx, h) {
           ctx.joseph.position.z - jac.pos.z,
         );
       } },
-      shot('jacob', 'joseph', { side: -0.7, dist: 3.8, height: 2.1, look: 1.2 }),
-      { t: 'wait', ms: 1400 },
+      // Jacob's quiet reaction looks back INTO the lived-in camp. The former
+      // low reverse exposed the empty south boundary behind him; this elevated
+      // south-side two-person frame looks down toward the fire and spectators.
+      groupShot(['jacob', 'joseph'], {
+        angle: -0.28,
+        distance: 5.2,
+        height: 3.6,
+        look: 1.05,
+        ms: 1800,
+        arcRadius: 6.4,
+      }),
+      { t: 'wait', ms: 1200 },
       { t: 'verseHide' },
     ]);
 

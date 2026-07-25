@@ -9,6 +9,10 @@ import { mulberry32, toonMat } from '../../engine/world.js';
 export function buildPitStage(tex = {}) {
   const group = new THREE.Group();
   const PIT = { x: -62, z: 6 };
+  // Genesis 37:25 records a meal, not a return home. Keep that destination far
+  // enough away to read as a background camp rather than people standing
+  // around the cistern.
+  const MEAL = { x: PIT.x + 31, z: PIT.z - 9.5 };
   const rnd = mulberry32(37);
 
   // harsh rocky ground around the pit (country near Dothan — paler, rougher).
@@ -85,6 +89,23 @@ export function buildPitStage(tex = {}) {
       yaw: rnd() * Math.PI * 2,
     });
   }
+  // A second, tighter tree cluster surrounds the distant meal camp. Leave a
+  // sightline back toward the cistern so its small fire remains legible.
+  const campToPit = Math.atan2(PIT.z - MEAL.z, PIT.x - MEAL.x);
+  for (let i = 0; i < 22; i++) {
+    const a = (i / 22) * Math.PI * 2 + (rnd() - 0.5) * 0.16;
+    let da = a - campToPit;
+    while (da > Math.PI) da -= Math.PI * 2;
+    while (da < -Math.PI) da += Math.PI * 2;
+    if (Math.abs(da) < 0.42) continue;
+    const r = 5.8 + rnd() * 3.8;
+    treeSpots.push({
+      x: MEAL.x + Math.cos(a) * r,
+      z: MEAL.z + Math.sin(a) * r,
+      scale: 0.82 + rnd() * 0.44,
+      yaw: rnd() * Math.PI * 2,
+    });
+  }
   const trunkGeo = new THREE.CylinderGeometry(0.24, 0.38, 3.6, 5);
   trunkGeo.translate(0, 1.8, 0);
   const crownGeo = new THREE.IcosahedronGeometry(1.65, 1);
@@ -107,6 +128,30 @@ export function buildPitStage(tex = {}) {
   crowns.instanceMatrix.needsUpdate = true;
   crowns.instanceColor.needsUpdate = true;
   group.add(trunks, crowns);
+
+  // Three almost-black tent silhouettes make the fire read as a distant camp.
+  // They share one instanced draw and own no texture, animation, or light.
+  const tentGeo = new THREE.ConeGeometry(1.25, 1.75, 4);
+  tentGeo.translate(0, 0.875, 0);
+  const campTents = new THREE.InstancedMesh(
+    tentGeo,
+    new THREE.MeshBasicMaterial({ color: 0x17151c, fog: true }),
+    3,
+  );
+  const tentDummy = new THREE.Object3D();
+  [
+    [MEAL.x - 3.0, MEAL.z + 1.7, 0.15, 1.1],
+    [MEAL.x + 2.8, MEAL.z + 1.5, -0.22, 0.9],
+    [MEAL.x + 0.4, MEAL.z - 3.2, 0.75, 0.82],
+  ].forEach(([x, z, yaw, scale], i) => {
+    tentDummy.position.set(x, 0, z);
+    tentDummy.rotation.y = Math.PI / 4 + yaw;
+    tentDummy.scale.set(1.45 * scale, scale, 0.9 * scale);
+    tentDummy.updateMatrix();
+    campTents.setMatrixAt(i, tentDummy.matrix);
+  });
+  campTents.instanceMatrix.needsUpdate = true;
+  group.add(campTents);
 
   // (D7: the old opaque "mouth" disc is GONE — the hole is real. Looking down
   // the shaft you now see the walls, the floor, and the boy on his back.)
@@ -197,9 +242,8 @@ export function buildPitStage(tex = {}) {
   // D11: deeper fire-red + smaller — it must read as a distant MEAL FIRE, never
   // as a sunrise on the horizon (the pit plays as night).
   const mealGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0xff8f4a, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
-  const MEAL = { x: PIT.x + 22, z: PIT.z - 6.5 };
   mealGlow.position.set(MEAL.x, 1.6, MEAL.z);
-  mealGlow.scale.set(6.2, 3.8, 1);
+  mealGlow.scale.set(7.2, 4.2, 1);
   group.add(mealGlow);
 
   return {

@@ -16,14 +16,19 @@ export function createPauseMenu({ app, isInputOn, setInput, onSettings, onHome }
   let subOpen = false; // a settings/confirm layer sits above us — ignore Esc
   let frozen = false;  // global audio/narration ownership outlives overlay state
 
-  // --- the ⏸ button (top-right, below the volume control; ≥44px target) ----
+  // --- the pause/settings button (top-right; ≥44px target) ------------------
+  // It stays above cinema bars/cards/fades so settings remain reachable during
+  // every narrated line and cutscene. The pause overlay itself sits one layer
+  // higher and naturally covers the button after it is opened.
   const btn = document.createElement('button');
   btn.type = 'button';
-  btn.setAttribute('aria-label', 'Pause');
-  btn.textContent = '⏸';
+  btn.setAttribute('aria-label', 'Pause and settings');
+  btn.title = 'Pause and settings';
+  btn.dataset.role = 'pause-settings';
+  btn.textContent = '⚙';
   btn.style.cssText = [
     'position:fixed', 'top:calc(56px + env(safe-area-inset-top))', 'right:calc(14px + env(safe-area-inset-right))',
-    'z-index:40', 'width:46px', 'height:46px', 'border-radius:12px', 'cursor:pointer',
+    'z-index:57', 'width:46px', 'height:46px', 'border-radius:12px', 'cursor:pointer',
     'display:flex', 'align-items:center', 'justify-content:center',
     'font-size:19px', 'line-height:1', 'color:#fdf6e3',
     'background:rgba(16,14,26,0.72)', 'border:1px solid rgba(255,255,255,0.14)',

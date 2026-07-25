@@ -80,6 +80,22 @@ function slowFrames(graphics, count) {
     /const moteCount = particleCapacity\(MOTE_BASE\)[\s\S]*const FIREFLY_N = particleCapacity\(FIREFLY_BASE\)/,
     'dream particles cannot restore High density after a lower entry preset',
   );
+  const postFxSource = readFileSync(new URL('../src/engine/PostFX.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(
+    postFxSource,
+    /mix-blend-mode:screen/,
+    'dream still forces a full-frame screen-blend compositor surface',
+  );
+  assert.match(
+    postFxSource,
+    /dream:\s*''/,
+    'dream still stacks a second live-canvas color filter over its authored mood lighting',
+  );
+  assert.match(
+    postFxSource,
+    /next === this\._lastCanvasFilter[\s\S]*return false/,
+    'unchanged full-canvas filter writes are not change-gated',
+  );
 }
 
 // New and remembered automatic policy may never boot above Medium.

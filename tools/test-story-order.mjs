@@ -80,6 +80,8 @@ assert.doesNotMatch(
 );
 assert.match(sceneSource, /grassTex = loadTiled\([^;]+THREE\.MirroredRepeatWrapping\)/,
   'Scene 1 grass no longer uses seam-safe mirrored wrapping');
+assert.match(sceneSource, /grassTex = loadTiled\('textures\/grass\.jpg', 76, 34,/,
+  'Scene 1 grass facets are no longer using the finer approved tiling');
 assert.match(homeSource, /texture\.wrapS = texture\.wrapT = THREE\.MirroredRepeatWrapping/,
   'Home grass no longer uses seam-safe mirrored wrapping');
 assert.match(
@@ -203,6 +205,30 @@ assert.doesNotMatch(
   /pitTalk|futureSoft|grading\.set\('ominous'\)/,
   'cold-open cuts still swap to a different global exposure',
 );
+assert.match(
+  coldOpenSource,
+  /BACKGROUND_CAST\.forEach\(\(n\) => \{ n\.char\.root\.visible = false; \}\)/,
+  'unrelated camp characters can still leak into the pit background',
+);
+assert.match(
+  coldOpenSource,
+  /BACKGROUND_CAST\.forEach\(\(n, i\) => \{[\s\S]*backgroundVisibility\[i\]/,
+  'pit-only cast visibility is not restored under the morning black',
+);
+assert.match(pitSource, /const MEAL = \{ x: PIT\.x \+ 31, z: PIT\.z - 9\.5 \}/,
+  'the meal camp drifted back beside the cistern');
+assert.match(pitSource, /const campTents = new THREE\.InstancedMesh\(/,
+  'the distant tree/fire destination has no readable camp silhouette');
+assert.match(
+  sceneSource,
+  /ground\.material\.color\.set\(name === 'pit' \? 0x46505c : 0xffffff\)/,
+  'the shared grass landscape no longer recedes into night at the pit stage',
+);
+assert.match(
+  await read('../src/engine/MoodGrading.js'),
+  /pit:\s*\{\s*skyTop:\s*0x1c2238,[\s\S]*ridge:\s*\[0x4e5265,\s*0x414556,\s*0x303442\]/,
+  'the cold-open sky or ridges drifted back to the bright overcast-day palette',
+);
 {
   const heaveStart = coldOpenSource.indexOf('await ctx.motion.tween(1250');
   const heaveEnd = coldOpenSource.indexOf('P.setSkyLight(1)', heaveStart);
@@ -230,6 +256,21 @@ assert.match(
   dreamSource,
   /setObjective\(`Walk to the wheat bundles — \$\{bowed\} of \$\{D\.outer\.length\}\.`\)/,
   'the wheat objective loses its action verb after the first bundle',
+);
+assert.match(
+  dreamSource,
+  /ctx\.camera\.snap\(\);\s*[\s\S]*await wait\(900\);\s*await seq\(\[/,
+  'first-dream exact stage state is not settled behind black before reveal',
+);
+assert.match(
+  dreamSource,
+  /heading: 'That night, Joseph dreamed again'/,
+  'second-dream bottom-right context title is missing',
+);
+assert.match(
+  sceneSource,
+  /fullRate: \(\) =>[\s\S]*activeStage === 'dream'/,
+  'animated dream exploration can still fall into the eco frame-rate target',
 );
 assert.doesNotMatch(
   dreamSource,

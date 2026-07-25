@@ -1,7 +1,16 @@
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { CameraDirector } from '../src/engine/CameraDirector.js';
-import { MAX_VISIBLE_GROUP_ROUTE_MS } from '../src/scenes/joseph3d/beats/helpers.js';
+import {
+  MAX_VISIBLE_GROUP_ROUTE_MS,
+  MIN_VISIBLE_DIALOGUE_MOVE_MS,
+} from '../src/scenes/joseph3d/beats/helpers.js';
+
+assert.equal(
+  MIN_VISIBLE_DIALOGUE_MOVE_MS,
+  1200,
+  'visible dialogue camera changes are fast enough to read as snaps',
+);
 
 const camera = new THREE.PerspectiveCamera(46, 16 / 9, 0.1, 300);
 const director = new CameraDirector(camera, { minGroundY: -100 });
