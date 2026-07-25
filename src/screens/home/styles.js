@@ -136,10 +136,6 @@ export const UI_CSS = `
   background: rgba(255,233,201,.9); padding: calc(4px * var(--u)) calc(10px * var(--u));
   border-radius: 20px;
 }
-.mr-ord {
-  font: 600 calc(11px * var(--u)) Georgia, serif;
-  letter-spacing: .3em; text-transform: uppercase; color: #f2b880;
-}
 .mr-story-title {
   font: 400 calc(47px * var(--u)) Georgia, 'Times New Roman', serif;
   color: #fff6e6; line-height: 1.04; margin: calc(16px * var(--u)) 0 0;
@@ -148,11 +144,6 @@ export const UI_CSS = `
   font: 400 calc(12.5px * var(--u)) 'Segoe UI', system-ui, sans-serif;
   letter-spacing: .16em; text-transform: uppercase; color: rgba(253,246,227,.56);
   margin-top: calc(13px * var(--u));
-}
-.mr-progress {
-  font: 500 calc(11px * var(--u)) 'Segoe UI', system-ui, sans-serif;
-  letter-spacing: .14em; text-transform: uppercase; color: rgba(253,246,227,.4);
-  margin-top: calc(9px * var(--u));
 }
 .mr-rule {
   width: calc(56px * var(--u)); height: 2px; background: #f2b880;
@@ -291,7 +282,6 @@ export const UI_CSS = `
   box-sizing: border-box;
 }
 .mr-home.is-stacked .mr-story-title { font-size: calc(34px * var(--u)); margin-top: calc(8px * var(--u)); }
-.mr-home.is-stacked .mr-progress { display: none; }
 .mr-home.is-stacked .mr-rule { margin: calc(12px * var(--u)) 0 calc(10px * var(--u)); }
 .mr-home.is-stacked .mr-blurb { font-size: calc(14px * var(--u)); min-height: calc(56px * var(--u)); }
 .mr-home.is-stacked .mr-start {

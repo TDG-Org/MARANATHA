@@ -32,7 +32,13 @@ export function getCompleted() {
 export function statusOf(storyId) {
   const completed = getCompleted();
   if (completed.includes(storyId)) return 'done';
-  const current = STORIES.find((s) => !completed.includes(s.id));
+  // "Current" means the next chapter the player can actually WALK. Measuring it
+  // against every chapter in the book made it Creation forever -- a story with
+  // no scene yet -- so no playable chapter was ever marked current and the map
+  // had to fall back to guessing. Unbuilt chapters are scenery; they cannot be
+  // the thing you are up to.
+  const playable = STORIES.filter((s) => s.sceneKey);
+  const current = playable.find((s) => !completed.includes(s.id));
   return current?.id === storyId ? 'current' : 'locked';
 }
 

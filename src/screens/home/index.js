@@ -179,11 +179,9 @@ export function buildHome({ app, params = {} }) {
     <div class="mr-panel">
       <div class="mr-panel-top">
         <span class="mr-era" data-field="era">Genesis</span>
-        <span class="mr-ord" data-field="ord">Chapter IX</span>
       </div>
       <h1 class="mr-story-title" data-field="title">Joseph</h1>
       <div class="mr-passage" data-field="passage">Genesis 37–50</div>
-      <div class="mr-progress" data-field="progress"></div>
       <div class="mr-rule"></div>
       <p class="mr-blurb" data-field="blurb"></p>
       <button type="button" class="mr-start" data-field="start">▶&nbsp; Start Story</button>
@@ -348,14 +346,9 @@ export function buildHome({ app, params = {} }) {
 
     const era = ERAS.find((e) => e.id === node.era);
     field('era').textContent = era ? era.name : '';
-    field('ord').textContent = `Chapter ${node.ord}`;
     field('title').textContent = node.title;
     field('passage').textContent = node.passage;
     field('blurb').textContent = node.blurb;
-    // "Walked" means walked: chapters the player has actually finished.
-    const walked = atlas.nodes.filter((n) => n.status === 'done').length;
-    field('progress').textContent =
-      `${walked} of ${atlas.total} stories walked · story ${node.num}`;
 
     startBtn.textContent = node.built ? '▶  Start Story' : '🔒  Coming soon';
     startBtn.disabled = !node.built;
@@ -555,7 +548,14 @@ export function buildHome({ app, params = {} }) {
     app.navigate(story.sceneKey, { storyId: story.id });
   };
 
-  ui.querySelector('.mr-gear').onclick = () => { Audio.uiClick(); openSettings(); };
+  ui.querySelector('.mr-gear').onclick = () => {
+    Audio.uiClick();
+    // Resetting progress changes the status of every stop, the walked stretch of
+    // road, and the progress line -- none of which this screen recomputes on its
+    // own. Without this the map kept showing the world as it was before the
+    // reset until the player happened to rebuild it by visiting another page.
+    openSettings({ onReset: () => { if (!disposed) app.navigate('home'); } });
+  };
 
   const onKeyDown = (e) => {
     if (e.defaultPrevented || e.target?.closest?.('input, select, textarea')) return;

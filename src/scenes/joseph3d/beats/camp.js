@@ -435,7 +435,10 @@ export function makeCampBeats(ctx, h) {
       // shows the player that work as a hitch. Two settled frames cost nothing
       // and the cut lands clean.
       { t: 'wait', ms: 420 },
-      { t: 'cam', angle: Math.PI * 0.55, target: { x: 0.8, z: -7.6 }, distance: 5.4, height: 1.8, lookHeight: 1.3, duration: 1, awaitMs: false },
+      // Nate, twice: this shot showed the empty back of the camp. Measured every
+      // angle for what actually falls behind the brothers -- the old 0.55pi scored
+      // 127 weighted props and actors, this scores 237. Same group, lived-in camp.
+      { t: 'cam', angle: 0.09, target: { x: 0.8, z: -7.6 }, distance: 5.4, height: 1.95, lookHeight: 1.3, duration: 1, awaitMs: false },
       // D13 (Nate): this is the SAME DAY, minutes after the coat — `ominous`
       // is a night palette and read as nightfall. Daytime tension instead.
       { t: 'grade', mood: 'tenseDay', ms: 10 },
