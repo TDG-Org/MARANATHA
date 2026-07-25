@@ -2,6 +2,21 @@
 // XZ plane; obstacles are circles or AABBs. Move-then-resolve with exact
 // push-out along the contact normal — tangential motion survives (that IS the
 // slide), so there's no sticking and no jitter. No physics engine.
+// A camp holds ~170 static colliders (the treeline alone is ~95). Testing a
+// body against all of them was fine for one player, but the flock asks the same
+// question up to four times per sheep per frame, so the scan was the largest
+// single script cost in the scene. The world keeps a uniform grid instead: a
+// body only ever meets the handful of colliders sharing its cells.
+//
+// 3 units is a little wider than the biggest ordinary collider, so most props
+// land in one or two cells and a body's query touches four.
+const CELL = 3;
+// Anything sprawling (a bounds box, a long fence run) would otherwise be
+// stamped into hundreds of cells. Those few are simply always considered.
+const MAX_CELLS_PER_COLLIDER = 64;
+const KEY_BIAS = 32768; // cell coords are tiny; this keeps the packed key unique
+const RESOLVE_QUERY_PAD = 1.5; // per-push clamp (0.5) x the 3 pushes an iteration allows
+
 export class ColliderWorld {
   constructor() {
     this.statics = []; // {type:'circle',x,z,r} | {type:'aabb',minX,minZ,maxX,maxZ}
@@ -9,6 +24,12 @@ export class ColliderWorld {
     // colliders are immutable after add in Scene 1; add/clear are the only
     // operations that can invalidate an already-resolved stationary body.
     this.revision = 0;
+    this._grid = new Map();      // packed cell key -> array of static indices
+    this._oversized = [];        // colliders too big to bucket usefully
+    this._gridRevision = -1;
+    this._seen = new Int32Array(0); // per-static "already collected" stamps
+    this._stamp = 0;
+    this._cand = [];             // reused candidate scratch — no per-query alloc
   }
 
   add(c) {
@@ -23,6 +44,79 @@ export class ColliderWorld {
     this.revision += 1;
   }
 
+  // --- spatial index ---------------------------------------------------------
+  static _bounds(c) {
+    return c.type === 'circle'
+      ? { minX: c.x - c.r, minZ: c.z - c.r, maxX: c.x + c.r, maxZ: c.z + c.r }
+      : { minX: c.minX, minZ: c.minZ, maxX: c.maxX, maxZ: c.maxZ };
+  }
+
+  _ensureIndex() {
+    if (this._gridRevision === this.revision) return;
+    this._gridRevision = this.revision;
+    this._grid.clear();
+    this._oversized.length = 0;
+    if (this._seen.length < this.statics.length) this._seen = new Int32Array(this.statics.length);
+    this._seen.fill(0);
+    this._stamp = 0;
+    for (let i = 0; i < this.statics.length; i++) {
+      const b = ColliderWorld._bounds(this.statics[i]);
+      const x0 = Math.floor(b.minX / CELL); const x1 = Math.floor(b.maxX / CELL);
+      const z0 = Math.floor(b.minZ / CELL); const z1 = Math.floor(b.maxZ / CELL);
+      if ((x1 - x0 + 1) * (z1 - z0 + 1) > MAX_CELLS_PER_COLLIDER) { this._oversized.push(i); continue; }
+      for (let cx = x0; cx <= x1; cx++) {
+        for (let cz = z0; cz <= z1; cz++) {
+          const key = (cx + KEY_BIAS) * 65536 + (cz + KEY_BIAS);
+          const bucket = this._grid.get(key);
+          if (bucket) bucket.push(i); else this._grid.set(key, [i]);
+        }
+      }
+    }
+  }
+
+  // Fills and returns the reusable candidate array: every static whose footprint
+  // could touch the given box. Conservative by construction — a collider is
+  // stamped into every cell its own bounds cover.
+  //
+  // Candidates come back in ADD ORDER, not cell order. resolve() applies pushes
+  // one after another and each one moves the body, so the order of the list is
+  // part of the answer: iterating cell-by-cell instead of array-by-array moved
+  // bodies to measurably different resting places (0.5% of probes). An insertion
+  // sort over a handful of indices keeps the result bit-identical to the scan
+  // this replaces.
+  _near(minX, minZ, maxX, maxZ) {
+    this._ensureIndex();
+    const out = this._cand;
+    out.length = 0;
+    const stamp = ++this._stamp;
+    const seen = this._seen;
+    const x0 = Math.floor(minX / CELL); const x1 = Math.floor(maxX / CELL);
+    const z0 = Math.floor(minZ / CELL); const z1 = Math.floor(maxZ / CELL);
+    for (let cx = x0; cx <= x1; cx++) {
+      for (let cz = z0; cz <= z1; cz++) {
+        const bucket = this._grid.get((cx + KEY_BIAS) * 65536 + (cz + KEY_BIAS));
+        if (!bucket) continue;
+        for (let b = 0; b < bucket.length; b++) {
+          const i = bucket[b];
+          if (seen[i] === stamp) continue;
+          seen[i] = stamp;
+          let j = out.length;
+          while (j > 0 && out[j - 1] > i) { out[j] = out[j - 1]; j--; }
+          out[j] = i;
+        }
+      }
+    }
+    for (let k = 0; k < this._oversized.length; k++) {
+      const i = this._oversized[k];
+      if (seen[i] === stamp) continue;
+      seen[i] = stamp;
+      let j = out.length;
+      while (j > 0 && out[j - 1] > i) { out[j] = out[j - 1]; j--; }
+      out[j] = i;
+    }
+    return out;
+  }
+
   // Resolve a moving circle at pos {x,z} with radius r against all statics
   // (+ optional dynamic circles like NPCs). Mutates pos. ≤3 iterations; total
   // correction clamped so bad data can never teleport anyone.
@@ -31,9 +125,19 @@ export class ColliderWorld {
     let settled = false;
     for (let iter = 0; iter < 3; iter++) {
       let pushed = false;
-      for (let i = 0; i < this.statics.length; i++) {
-        const c = this.statics[i];
-        pushed = this._push(pos, r, c) || pushed;
+      // Re-queried per iteration, and padded: pushes inside an iteration move
+      // the body while the list is being walked, so a collider that was out of
+      // range at the top of the pass can be in contact by the bottom of it. The
+      // pad is the per-push clamp (0.5) times the three pushes an iteration can
+      // apply. tools/test-collision-grid.mjs holds this honest: over 400k probes
+      // the grid lands bodies on the same spot as the full scan, to the last
+      // bit, for every radius this game uses (0.30 sheep, 0.34 people). A body
+      // wider than ~2u wedged inside a dense cluster can out-run the pad; none
+      // exists, and the test fails if one is ever introduced.
+      const q = r + RESOLVE_QUERY_PAD;
+      const near = this._near(pos.x - q, pos.z - q, pos.x + q, pos.z + q);
+      for (let i = 0; i < near.length; i++) {
+        pushed = this._push(pos, r, this.statics[near[i]]) || pushed;
       }
       if (dynamics) {
         for (let i = 0; i < dynamics.length; i++) {
@@ -123,16 +227,17 @@ export class ColliderWorld {
   // skipGroup to ignore a family of colliders (e.g. 'border' so clustering
   // rocks/trees don't count as overlapping each other).
   overlaps(x, z, r, skipGroup = null) {
-    const p = { x, z };
-    for (const c of this.statics) {
+    const near = this._near(x - r, z - r, x + r, z + r);
+    for (let i = 0; i < near.length; i++) {
+      const c = this.statics[near[i]];
       if (skipGroup && c.group === skipGroup) continue;
       if (c.type === 'circle') {
-        const dx = p.x - c.x, dz = p.z - c.z, min = r + c.r;
+        const dx = x - c.x, dz = z - c.z, min = r + c.r;
         if (dx * dx + dz * dz < min * min) return true;
       } else {
-        const cx = Math.max(c.minX, Math.min(p.x, c.maxX));
-        const cz = Math.max(c.minZ, Math.min(p.z, c.maxZ));
-        const dx = p.x - cx, dz = p.z - cz;
+        const cx = Math.max(c.minX, Math.min(x, c.maxX));
+        const cz = Math.max(c.minZ, Math.min(z, c.maxZ));
+        const dx = x - cx, dz = z - cz;
         if (dx * dx + dz * dz < r * r) return true;
       }
     }

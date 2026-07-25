@@ -17,7 +17,11 @@ class PointsEffect {
     this.emIdx = new Uint8Array(count);    // which emitter owns the particle
     this.emitters = [];
     this.geo = new THREE.BufferGeometry();
-    this.geo.setAttribute('position', new THREE.BufferAttribute(this.pos, 3));
+    const posAttr = new THREE.BufferAttribute(this.pos, 3);
+    // Rewritten every frame — tell the driver so, or it keeps treating the
+    // buffer as immutable and re-validates the whole allocation on each upload.
+    posAttr.setUsage(THREE.DynamicDrawUsage);
+    this.geo.setAttribute('position', posAttr);
     this.geo.setDrawRange(0, count);
     this.mat = new THREE.PointsMaterial({
       map: glowTexture(64), color, size, sizeAttenuation: true, transparent: true,
@@ -54,7 +58,28 @@ class PointsEffect {
 
   setFade(f) { this.fade = f; }
 
+  // Buffers are allocated at the HIGHEST preset's capacity so quality can be
+  // raised mid-scene, but only `activeCount` particles are ever simulated.
+  // Uploading the whole array would send up to 60% zeroes every frame.
+  _upload() {
+    const attr = this.geo.attributes.position;
+    attr.clearUpdateRanges();
+    attr.addUpdateRange(0, this.activeCount * 3);
+    attr.needsUpdate = true;
+  }
+
   _fadeStep(dt) {
+    // Once the fade has settled there is nothing to write. Without this, a
+    // fully-faded-out effect still wrote a material uniform and a visibility
+    // flag on every frame for the rest of the scene.
+    if (Math.abs(this.fade - this._fadeCur) < 0.0005) {
+      if (this._fadeCur !== this.fade) {
+        this._fadeCur = this.fade;
+        this.mat.opacity = this.baseOpacity * this._fadeCur;
+        this.points.visible = this.activeCount > 0 && this.mat.opacity > 0.01;
+      }
+      return;
+    }
     this._fadeCur += (this.fade - this._fadeCur) * Math.min(dt * 0.002, 1);
     this.mat.opacity = this.baseOpacity * this._fadeCur;
     this.points.visible = this.activeCount > 0 && this.mat.opacity > 0.01;
@@ -85,7 +110,7 @@ export function makeSmoke({ count = 26, seed = 21 } = {}) {
       fx.pos[i * 3] = e.x + Math.sin(t * 0.7 + fx.phase[i] + k * 4) * (0.15 + k * 0.75);
       fx.pos[i * 3 + 2] = e.z + Math.cos(t * 0.6 + fx.phase[i] + k * 3) * (0.12 + k * 0.6);
     }
-    fx.geo.attributes.position.needsUpdate = true;
+    fx._upload();
   };
   return fx;
 }
@@ -107,7 +132,7 @@ export function makeEmbers({ count = 14, seed = 22 } = {}) {
       fx.pos[i * 3] = e.x + Math.sin(fx.phase[i] + k * 6) * 0.18;
       fx.pos[i * 3 + 2] = e.z + Math.cos(fx.phase[i] * 1.3 + k * 5) * 0.18;
     }
-    fx.geo.attributes.position.needsUpdate = true;
+    fx._upload();
   };
   return fx;
 }
@@ -138,7 +163,7 @@ export function makeFireflies({ count = 26, span = 30, seed = 23 } = {}) {
     }
     // blink via size pulse (cheap global) — per-particle blink comes from phase spread
     fx.mat.size = 0.16 + Math.abs(Math.sin(t * 1.7)) * 0.1;
-    fx.geo.attributes.position.needsUpdate = true;
+    fx._upload();
   };
   return fx;
 }

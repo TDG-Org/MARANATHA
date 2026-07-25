@@ -373,6 +373,10 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
   const pit = buildPitStage(worldTextures);
   pit.group.visible = false;
   scene.add(pit.group);
+  // The pit's shaft light hangs off the SCENE, not off the hidden stage group,
+  // so the scene's point-light count never changes (see pit.js). It is dark
+  // until the cold open turns it up.
+  scene.add(pit.shaftLight);
 
   // --- Jacob's tent interior (lamplit stage; the coat is given HERE) ---
   const TENT_I = { x: -62, z: -34 };
@@ -467,7 +471,12 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
     fireflies.points.visible = campOn;
     ctx.sheep.bodies.visible = campOn;
     ctx.sheep.heads.visible = campOn;
-    for (const f of fireLights) f.light.visible = campOn;
+    // Lights are dimmed, never hidden. An invisible light leaves the light list,
+    // and the point-light count is baked into every lit material's shader cache
+    // key — so toggling visibility recompiled the world's programs on each stage
+    // change, right on a cut. The count is constant; only intensity moves.
+    if (!campOn) for (const f of fireLights) f.light.intensity = 0;
+    pit.setShaft(name === 'pit' ? 1 : 0);
     // The stage owns its soundscape too. Sheep/chatter/bird loops should not
     // keep streaming or leak into the pit, dream, or isolated tent interior.
     setCampAmbience(campOn ? 1 : 0, campOn ? 1.2 : 0.6);

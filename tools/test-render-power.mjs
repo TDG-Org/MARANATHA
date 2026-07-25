@@ -268,7 +268,11 @@ let playerReduction = 0;
   const legacyStaticChecks = frames * world.statics.length;
   playerReduction = 1 - world.staticChecks / legacyStaticChecks;
   assert.equal(world.resolveCalls, 1, 'stationary player repeatedly resolved the static world');
-  assert.equal(world.staticChecks, world.statics.length);
+  // The gate allows exactly one resolve; the spatial grid then keeps even that
+  // one from touching the whole camp (see tools/test-collision-grid.mjs, which
+  // proves the narrowed set gives identical results).
+  assert.ok(world.staticChecks <= world.statics.length,
+    'a single resolve checked more colliders than the world holds');
   assert.ok(playerReduction > 0.998);
 
   dynamic.x = character.position.x + 0.6;
@@ -373,7 +377,8 @@ let npcTotalReduction = 0;
   npcTotalReduction = 1 - gatedTotalChecks / legacyTotalChecks;
   assert.equal(world.resolveCalls, npcs.npcs.length,
     'stationary NPCs repeatedly resolved the static world');
-  assert.equal(world.staticChecks, npcs.npcs.length * world.statics.length);
+  assert.ok(world.staticChecks <= npcs.npcs.length * world.statics.length,
+    'the one resolve per NPC checked more colliders than the world holds');
   assert.ok(npcStaticReduction > 0.998);
   assert.ok(npcTotalReduction > 0.89);
 

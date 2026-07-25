@@ -202,12 +202,18 @@ export function buildPitStage(tex = {}) {
   // only a whisper of light reaches the floor around him now
   const floorGlow = new THREE.Mesh(new THREE.CircleGeometry(1.15, 18), new THREE.MeshBasicMaterial({ color: 0x5f5648, transparent: true, opacity: 0.26, fog: true }));
   floorGlow.rotation.x = -Math.PI / 2; floorGlow.position.set(PIT.x, -3.98, PIT.z); group.add(floorGlow);
-  // …and a real shaft of daylight ON HIM: one warm point light inside the pit
-  // (lives in this group, so it dies with the stage after the cold open —
-  // the boy at the bottom must be SEEN, not implied).
-  const shaftLight = new THREE.PointLight(0xfff0d0, 1.05, 8.5, 1.4);
+  // …and a real shaft of daylight ON HIM: one warm point light in the pit — the
+  // boy at the bottom must be SEEN, not implied.
+  //
+  // It deliberately does NOT live in `group`. three.js drops invisible lights
+  // from the light list, and the number of point lights is part of a material's
+  // shader cache key — so hiding this one with the stage changed the count
+  // (camp 2 · pit 1 · dream 0) and made every lit material recompile its program
+  // the first time each stage appeared, which is a hitch exactly on a cut. The
+  // scene keeps a constant three point lights forever and this one is simply
+  // turned down to zero; the pre-warm already compiles that configuration.
+  const shaftLight = new THREE.PointLight(0xfff0d0, 0, 8.5, 1.4);
   shaftLight.position.set(PIT.x, -1.1, PIT.z);
-  group.add(shaftLight);
 
   // the SKY-LIGHT above the pit — a bright disc that SHRINKS as he falls in
   const ringTex = (() => {
@@ -247,7 +253,9 @@ export function buildPitStage(tex = {}) {
   group.add(mealGlow);
 
   return {
-    group, PIT, MEAL, coatProp, skyLight,
+    group, PIT, MEAL, coatProp, skyLight, shaftLight,
+    // The stage owner drives this instead of hiding the light (see above).
+    setShaft(k) { shaftLight.intensity = 1.05 * k; },
     setSkyLight(k) { skyLight.material.opacity = 0.9 * k; },
     setMealGlow(k) { mealGlow.material.opacity = 0.6 * k; },
     shrinkSkyLight(k) { skyLight.scale.setScalar(8 - 6.5 * k); }, // k 0→1 closes over him
@@ -255,6 +263,7 @@ export function buildPitStage(tex = {}) {
     dispose() {
       ringTex.dispose();
       glowTex.dispose();
+      shaftLight.parent?.remove(shaftLight); // it lives on the scene, not the group
       group.traverse((o) => { if (o.isInstancedMesh) o.dispose(); if (o.isMesh || o.isSprite) { o.geometry?.dispose?.(); o.material?.dispose?.(); } });
       group.parent?.remove(group);
     },

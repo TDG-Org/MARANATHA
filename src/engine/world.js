@@ -137,6 +137,13 @@ export function makeSky({ top = 0xf2b880, bottom = 0xffe9c9, offset = 0.12, expo
   });
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(480, 32, 15), mat);
   mesh.frustumCulled = false;
+  // Draw the dome LAST in the opaque pass. It writes no depth, and its bounding
+  // sphere sits on the camera, so the default front-to-back sort put it first —
+  // meaning every pixel of the sky ran the gradient + dither shader and was then
+  // painted over by the ground, the ridges and the camp. Ordered last, the depth
+  // buffer rejects those fragments before they shade, so only sky the player can
+  // actually see costs anything. Same picture, a fraction of the fill.
+  mesh.renderOrder = 999;
 
   // Eased uniform tween (drives sky mood transitions).
   let tween = null;

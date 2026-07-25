@@ -5,7 +5,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "test": "npm run test:pacing && npm run test:camera && npm run test:lifetime && npm run test:ui-lifetime && npm run test:beats && npm run test:story && npm run test:layout && npm run test:models && npm run test:audio-power && npm run test:graphics-power && npm run test:render-power && npm run test:app && npm run test:vo",
+    "test": "npm run test:pacing && npm run test:camera && npm run test:lifetime && npm run test:ui-lifetime && npm run test:beats && npm run test:story && npm run test:layout && npm run test:models && npm run test:collision && npm run test:audio-power && npm run test:graphics-power && npm run test:render-power && npm run test:app && npm run test:vo",
     "start": "vite --port 1225 --strictPort --open",
     "vo": "node tools/make-vo.mjs",
     "dev": "vite",
@@ -19,6 +19,7 @@
     "test:story": "node tools/test-story-order.mjs",
     "test:layout": "node tools/test-scene-layout.mjs",
     "test:models": "node tools/test-character-glb-optimizer.mjs",
+    "test:collision": "node tools/test-collision-grid.mjs",
     "test:audio-power": "node tools/test-audio-power.mjs",
     "test:graphics-power": "node tools/test-graphics-power.mjs",
     "test:render-power": "node tools/test-render-power.mjs",
