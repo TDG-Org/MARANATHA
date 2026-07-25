@@ -159,7 +159,18 @@ export function buildPitStage(tex = {}) {
   // the pit INTERIOR (below ground) — D11 (Nate): MUCH darker, with a true
   // BLACK floor at the very bottom; the boy stays visible only in the narrow
   // pool of light on him (D7 law: he must be SEEN — but the pit reads night).
-  const wall = new THREE.Mesh(new THREE.CylinderGeometry(2.05, 1.85, 4.1, 20, 1, true), new THREE.MeshBasicMaterial({ color: 0x2a2433, side: THREE.BackSide, fog: true }));
+  // The shaft wall carries Nate's brick. It stays UNLIT and heavily tinted:
+  // the cistern reads as night, so the courses should be felt in the shaft of
+  // light and swallowed everywhere else, never lit up like a daytime surface.
+  const wall = new THREE.Mesh(
+    new THREE.CylinderGeometry(2.05, 1.85, 4.1, 20, 1, true),
+    new THREE.MeshBasicMaterial({
+      color: tex.brick ? 0x6a6072 : 0x2a2433,
+      map: tex.brick || null,
+      side: THREE.BackSide,
+      fog: true,
+    }),
+  );
   wall.position.set(PIT.x, -2.0, PIT.z); group.add(wall);
   // A little hand-laid masonry gives the cistern wall readable history. Four
   // staggered courses share ONE instanced box draw; no texture, shader, or

@@ -372,6 +372,9 @@ class AudioSystem {
   playLoop(key, { gain = 1 } = {}) {
     const e = this._manifest?.get(key);
     if (!e) return this._silentLoopHandle();
+    // A track's own level match (manifest `gain`) multiplies the caller's ask,
+    // so a quiet master can be brought up in ONE place for every call site.
+    gain *= e.gain ?? 1;
 
     // D8 double-start guard: pending, streamed, and fallback loops all share
     // the same key owner. Re-entry can never stack a second transport.
@@ -757,7 +760,8 @@ class AudioSystem {
   // D7: the SAD bed — a low A-minor wash for the lonely walk to the tent
   // (a real music/sad_night.mp3 replaces it the moment Nate drops one in).
   // D9: louder — Nate couldn't hear it at all.
-  musicSadBed(gain = 1) { return this._musicHandle(0.062, [110.0, 164.81, 220.0, 261.63], gain); }
+  // D9 lifted this 0.036 -> 0.062; Nate still could not hear it under the scene.
+  musicSadBed(gain = 1) { return this._musicHandle(0.115, [110.0, 164.81, 220.0, 261.63], gain); }
   // D9: the DREAD bed — a low, uneasy minor cluster under the cold open's
   // betrayal (the open used to play in total silence; Nate missed tension).
   // A real music/dark_amb.mp3 takes over the moment it lands.
@@ -1245,15 +1249,16 @@ class AudioSystem {
   blip() { this.tone({ freq: 300, slideTo: 180, type: 'sine', dur: 0.1, attack: 0.02, release: 0.18, gain: 0.045, send: 0.35 }); }
   thump() {
     this.tone({ freq: 90, slideTo: 55, type: 'sine', dur: 0.16, attack: 0.012, release: 0.3, gain: 0.12, send: 0.1 });
-    this.noiseHit({ dur: 0.12, type: 'lowpass', from: 220, gain: 0.045, attack: 0.01 });
+    this.noiseHit({ dur: 0.12, type: 'lowpass', from: 220, gain: 0.075, attack: 0.01 });
   }
   breath() { this.noiseHit({ dur: 3, type: 'bandpass', from: 350, to: 850, q: 0.6, gain: 0.06, attack: 1.4, send: 0.3 }); }
+  // The quest cue: finishing an objective should be heard, not guessed at.
   bell() {
     [523.25, 1046.5].forEach((f, i) =>
-      this.tone({ freq: f, type: 'sine', dur: 0.08, attack: 0.01, release: 2.2 - i * 0.5, gain: 0.045 / (i + 1), send: 0.55 }));
+      this.tone({ freq: f, type: 'sine', dur: 0.08, attack: 0.01, release: 2.2 - i * 0.5, gain: 0.092 / (i + 1), send: 0.55 }));
   }
   footstep() { this.noiseHit({ dur: 0.08, type: 'lowpass', from: 170, gain: 0.06, attack: 0.012, send: 0.05 }); }
-  uiClick() { this.tone({ freq: 523.25, type: 'sine', dur: 0.035, attack: 0.005, release: 0.14, gain: 0.035, send: 0.2 }); }
+  uiClick() { this.tone({ freq: 523.25, type: 'sine', dur: 0.035, attack: 0.005, release: 0.14, gain: 0.055, send: 0.2 }); }
 }
 
 export { AudioSystem };

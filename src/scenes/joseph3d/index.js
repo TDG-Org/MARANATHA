@@ -79,7 +79,10 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
   const grassTex = loadTiled('textures/grass.jpg', 76, 34, THREE.MirroredRepeatWrapping);
   const rockTex = loadTiled('textures/rock.jpg', 1, 1);
   const dirtTex = loadTiled('textures/dirt.jpg', 2, 2);
-  const worldTextures = { grass: grassTex, rock: rockTex, dirt: dirtTex };
+  // Nate's brick, for the inside of the cistern. Mirrored so the courses meet
+  // themselves at the seam as the wall curves right round the camera.
+  const brickTex = loadTiled('textures/brick.jpg', 6, 2, THREE.MirroredRepeatWrapping);
+  const worldTextures = { grass: grassTex, rock: rockTex, dirt: dirtTex, brick: brickTex };
   // Every story STAGE carves its own flat pad (level-layout law 1): the camp,
   // the dream field, the pit, and Jacob's tent interior. D4: the ground is a
   // sun-lit GRASS field — green base with brighter grass + dry-dirt patches.

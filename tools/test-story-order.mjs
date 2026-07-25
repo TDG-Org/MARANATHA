@@ -61,10 +61,10 @@ assert.match(
 const audioKeys = AUDIO_MANIFEST.map(({ key }) => key);
 assert.ok(audioKeys.includes('music.dark_amb'), 'reusable dark ambience is missing from the manifest');
 assert.ok(audioKeys.includes('sfx.boy_crying'), 'Nate-supplied pit sniffles are missing from the manifest');
-assert.equal(
-  AUDIO_MANIFEST.find(({ key }) => key === 'sfx.boy_crying')?.seconds,
-  5.6,
-  'pit sniffles must remain within the requested 5–6 second window',
+const sniffles = AUDIO_MANIFEST.find(({ key }) => key === 'sfx.boy_crying')?.seconds;
+assert.ok(
+  sniffles >= 4 && sniffles <= 5,
+  `pit sniffles must stay in the requested 4-5 second window (got ${sniffles})`,
 );
 assert.equal(audioKeys.includes('music.betrayal_dark'), false, 'scene-specific dark music key returned');
 assert.equal(audioKeys.includes('music.pit_sad'), false, 'redundant pit music key returned');

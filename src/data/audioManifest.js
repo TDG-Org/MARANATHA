@@ -10,6 +10,10 @@
 //   file:     path under /audio (folder/name, no ext) when a REAL file exists.
 //             Files are sorted into /audio/{music,sfx,ambient,vo}/. The KEY the
 //             game calls stays stable; the loader fetches `file` (or the key).
+//   gain:     optional per-track level match (default 1). Tracks arrive at
+//             different mastering levels; this is where one is brought up or
+//             down to sit with the others, rather than every call site
+//             guessing a number.
 //   seconds/channels on available loops are probed asset metadata. Tests derive
 //             the former decoded-PCM cost from these values; never hard-code it.
 export const AUDIO_MANIFEST = [
@@ -46,7 +50,7 @@ export const AUDIO_MANIFEST = [
   { key: 'music.dream_wonder', bus: 'music', loop: true, seconds: 165.561236, channels: 2, file: 'music/dream_wonder', format: 'mp3', fallback: 'musicWonderBed', available: true, purpose: 'dream sequence — hushed awe', scene: 'joseph3d-1' },
   { key: 'music.ominous_turn', bus: 'music', loop: true, seconds: 91.128, channels: 2, file: 'music/ominous_turn', fallback: null, available: true, purpose: 'the brothers’ hatred — warm → ominous shift', scene: 'joseph3d-1' },
   { key: 'music.sad_night', bus: 'music', loop: true, seconds: 60, file: 'music/sad_night', fallback: 'musicSadBed', available: false, purpose: 'SAD — the lonely walk to his tent after the jeer (procedural minor pad until a real file lands; D9 louder)', scene: 'joseph3d-1' },
-  { key: 'music.dark_amb', bus: 'music', loop: true, seconds: 97.44, channels: 2, file: 'music/dark_amb', format: 'mp3', fallback: 'musicDreadBed', available: true, purpose: 'reusable dark ambience — one continuous score bed through the cold-open betrayal, throw, and pit hold', scene: 'joseph3d-1' },
+  { key: 'music.dark_amb', bus: 'music', loop: true, seconds: 97.44, channels: 2, file: 'music/dark_amb', format: 'mp3', fallback: 'musicDreadBed', available: true, gain: 1.45, purpose: 'reusable dark ambience — one continuous score bed through the cold-open betrayal, throw, and pit hold', scene: 'joseph3d-1' },
 
   // --- Scene 1 (3D) — reactive SFX -----------------------------------------
   { key: 'sfx.footstep_grass', bus: 'sfx', loop: false, seconds: 0.15, fallback: 'footstep', available: false, purpose: 'footfall on grass', scene: 'joseph3d-1' },
@@ -59,7 +63,7 @@ export const AUDIO_MANIFEST = [
   { key: 'stinger.hatred', bus: 'sfx', loop: false, seconds: 2.4, fallback: 'swellSoft', available: false, purpose: 'the brothers’ jealousy hardens', scene: 'joseph3d-1' },
   { key: 'sfx.sheaf_bow', bus: 'sfx', loop: false, seconds: 0.6, fallback: 'thump', available: false, purpose: 'a sheaf bows in the dream', scene: 'joseph3d-1' },
   { key: 'sfx.men_laughing', bus: 'sfx', loop: false, seconds: 2.5, file: 'sfx/men_laughing', fallback: null, available: true, purpose: 'the brothers mock/laugh at Joseph (group envy beats)', scene: 'joseph3d-1' },
-  { key: 'sfx.boy_crying', bus: 'sfx', loop: false, seconds: 5.6, channels: 1, file: 'sfx/boy_crying', format: 'mp3', fallback: null, available: true, purpose: 'soft crying/sniffles — Joseph alone at the bottom of the pit (5.6s mono one-shot)', scene: 'joseph3d-1' },
+  { key: 'sfx.boy_crying', bus: 'sfx', loop: false, seconds: 4.6, channels: 1, file: 'sfx/boy_crying', format: 'mp3', fallback: null, available: true, purpose: 'soft crying/sniffles — Joseph alone at the bottom of the pit (4.6s mono one-shot, level-matched)', scene: 'joseph3d-1' },
   { key: 'sfx.pit_impact', bus: 'sfx', loop: false, seconds: 1.2, file: 'sfx/pit_impact', fallback: 'thump', available: false, purpose: 'the dull earth landing at the bottom of the pit (procedural thump until a real body-drop lands)', scene: 'joseph3d-1' },
   { key: 'sfx.fall_whoosh', bus: 'sfx', loop: false, seconds: 3, file: 'sfx/fall_whoosh', fallback: 'whooshDown', available: false, purpose: 'soft airy rush under the slow-motion fall (procedural whoosh until a real file lands)', scene: 'joseph3d-1' },
   { key: 'sfx.march_loop', bus: 'sfx', loop: true, seconds: 10, file: 'sfx/march_loop', fallback: null, available: false, purpose: 'five men walking on dry ground — under the cold-open march (SILENT until the file lands — 🔴 NATE.md)', scene: 'joseph3d-1' },
