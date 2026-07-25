@@ -34,6 +34,13 @@ const PARTICLE_BASE = { stars: 64, sparkles: 9, motes: 24, embers: 18, fireflies
 const animRe = (name) => new RegExp(`animation:\\s*mr${name}[^;"]*;?`, 'g');
 const strip = (html, name) => html.replace(animRe(name), '');
 
+// The design marches the road's dashes with `stroke-dashoffset`. That is the
+// one property on this screen the compositor cannot animate by itself, so every
+// frame it asks the main thread to re-rasterise the whole road path — forever,
+// while the player reads the chapter blurb. The dashes stay exactly where they
+// are and shimmer instead: the same "the road goes on" read, on the compositor.
+const composited = (html) => html.replace(animRe('Dash'), 'animation:mrShimmer 3.6s ease-in-out infinite');
+
 // Keep one running instance in every `keep` (0 = none, 1 = all).
 function thinAnimations(html, name, keep) {
   if (keep === 1) return html;
@@ -87,7 +94,7 @@ export function buildHome({ app, params = {} }) {
 
   stage.innerHTML =
     backdrop.replace(/<!--slot:(\w+)-->/g, (_, k) => fields[k] || '')
-    + ROAD_HTML.replace('<!--slot:nodes-->', atlas.nodes.map(nodeHtml).join('') + gateHtml(atlas))
+    + composited(ROAD_HTML).replace('<!--slot:nodes-->', atlas.nodes.map(nodeHtml).join('') + gateHtml(atlas))
     + VIGNETTE_HTML;
 
   band.append(stage);
@@ -495,6 +502,24 @@ export function buildHome({ app, params = {} }) {
   observer?.observe(root);
   const graphicsOff = Graphics.subscribe?.(() => relayout());
 
+  // ---- motion gate ---------------------------------------------------------
+  // A menu is where a player parks. The vista is CSS, so it lives on the
+  // compositor and never touches the frame governor — but "not on the main
+  // thread" is not "free": ~110 running animations ask the compositor for a new
+  // frame at the display's refresh rate for as long as this screen is up, which
+  // on a 144 Hz panel is 144 composites a second of a picture nobody is
+  // watching. Hidden tabs are already stopped by the browser; an UNFOCUSED but
+  // visible window is not, and that is exactly the second-monitor case. Both
+  // stop here, and the motion picks up where it left off on the way back.
+  const syncMotion = () => {
+    if (disposed) return;
+    root.classList.toggle('mr-still', document.hidden || !document.hasFocus());
+  };
+  document.addEventListener('visibilitychange', syncMotion);
+  window.addEventListener('blur', syncMotion);
+  window.addEventListener('focus', syncMotion);
+  syncMotion();
+
   // ---- audio ---------------------------------------------------------------
   // Build and prepaint stay silent behind the veil; the soundscape starts only
   // once the app has revealed this screen (or on the first unlocking tap).
@@ -535,6 +560,9 @@ export function buildHome({ app, params = {} }) {
     clearTimeout(revealTimer);
     window.removeEventListener('pointerdown', startBeds);
     window.removeEventListener('keydown', onKeyDown);
+    document.removeEventListener('visibilitychange', syncMotion);
+    window.removeEventListener('blur', syncMotion);
+    window.removeEventListener('focus', syncMotion);
     window.removeEventListener('resize', onResize);
     window.removeEventListener('orientationchange', onResize);
     window.visualViewport?.removeEventListener('resize', onResize);

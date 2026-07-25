@@ -1,16 +1,22 @@
 // Home's stylesheet. Injected on entry, removed on dispose.
 //
 // The keyframes are the design project's, verbatim — they are what makes the
-// vista breathe. Everything is opacity/transform (composited, no layout, no
-// repaint) except the campfire flames, whose blur is rasterised once and then
-// only fades. `.mr-quiet` (reduced-motion) stops the lot.
+// vista breathe. THE LAW HERE: every one of them animates `transform` or
+// `opacity` and nothing else. Those two are the only properties the compositor
+// can animate without asking the main thread to paint, so a hundred of them
+// running at once still costs no repaint. The design's marching road dashes
+// (`stroke-dashoffset`) broke that law — one animation, but it re-rasterised
+// the whole 2370x810 road path every frame, forever. It shimmers now instead.
+//
+// Two stops: `.mr-quiet` (reduced-motion) removes the motion; `.mr-still`
+// pauses it while the window is hidden or unfocused, so a parked menu on a
+// second monitor stops asking the compositor for frames it has no viewer for.
 
 export const KEYFRAMES_CSS = `
 @keyframes mrDrift { from { transform: translateX(-6%); } to { transform: translateX(6%); } }
 @keyframes mrMote { 0% { transform: translate(0,0); opacity: 0; } 20% { opacity: .85; } 100% { transform: translate(46px,-120px); opacity: 0; } }
 @keyframes mrSmoke { 0% { transform: translate(0,0) scale(.7); opacity: 0; } 25% { opacity: .5; } 100% { transform: translate(-26px,-96px) scale(1.9); opacity: 0; } }
 @keyframes mrTwinkle { 0%,100% { opacity: .25; } 50% { opacity: .95; } }
-@keyframes mrDash { to { stroke-dashoffset: -64; } }
 @keyframes mrFlicker { 0%,100% { opacity: .58; } 28% { opacity: .95; } 52% { opacity: .72; } 74% { opacity: 1; } }
 @keyframes mrWing { 0%,100% { transform: scaleY(.55); } 50% { transform: scaleY(1); } }
 @keyframes mrGlow { 0%,100% { opacity: .45; } 50% { opacity: .8; } }
@@ -33,6 +39,7 @@ export const UI_CSS = `
 }
 .mr-home.is-in { opacity: 1; }
 .mr-quiet .mr-band *, .mr-quiet .mr-band { animation: none !important; }
+.mr-still .mr-band *, .mr-still .mr-band { animation-play-state: paused !important; }
 
 .mr-band { position: absolute; left: 0; top: 0; right: 0; overflow: hidden; }
 .mr-stage {

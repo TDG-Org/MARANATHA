@@ -59,6 +59,43 @@ function slowFrames(graphics, count) {
   );
   assert.match(homeSource, /requestAnimationFrame\(reveal\)/,
     'the home’s one allowed rAF is no longer the single-shot reveal');
+
+  // Every home keyframe must animate ONLY transform/opacity. Those are the two
+  // properties the compositor animates by itself; anything else (the design's
+  // marching `stroke-dashoffset`, a colour, a filter, a size) drags the main
+  // thread into a repaint on every single frame for as long as the menu is up.
+  const stylesSource = readFileSync(new URL('../src/screens/home/styles.js', import.meta.url), 'utf8');
+  const keyframeBlocks = stylesSource.match(/@keyframes\s+\w+\s*\{[\s\S]*?\n?\}/g) || [];
+  assert.ok(keyframeBlocks.length >= 10, 'home keyframes were not found to audit');
+  for (const block of keyframeBlocks) {
+    const name = block.match(/@keyframes\s+(\w+)/)[1];
+    const props = [...block.matchAll(/([a-z-]+)\s*:/gi)].map((m) => m[1].toLowerCase());
+    for (const prop of props) {
+      assert.ok(
+        prop === 'transform' || prop === 'opacity',
+        `@keyframes ${name} animates "${prop}" — only transform/opacity stay on the compositor`,
+      );
+    }
+  }
+  // The road's dashes may never march again: the generated backdrop still ships
+  // the design's mrDash, so the screen has to keep rewriting it on the way in.
+  assert.match(homeSource, /animRe\('Dash'\), 'animation:mrShimmer/,
+    'the road no longer converts the design’s stroke-dashoffset march to a composited shimmer');
+  assert.doesNotMatch(stylesSource, /@keyframes mrDash/,
+    'the stroke-dashoffset keyframe came back');
+
+  // Hidden OR unfocused parks the vista. A visible-but-unfocused window is the
+  // second-monitor case the browser does NOT throttle for us.
+  assert.match(homeSource, /document\.hidden \|\| !document\.hasFocus\(\)/,
+    'the home no longer parks its animations when nobody is watching');
+  for (const event of ['visibilitychange', 'blur', 'focus']) {
+    assert.ok(
+      homeSource.includes(`removeEventListener('${event}', syncMotion)`),
+      `home leaks its ${event} motion listener`,
+    );
+  }
+  assert.match(stylesSource, /\.mr-still .mr-band \*[^}]*animation-play-state: paused/,
+    'the parked-menu class no longer pauses the vista');
   const loaderSource = readFileSync(new URL('../src/ui/loader.js', import.meta.url), 'utf8');
   assert.match(loaderSource, /visible && !document\.hidden \? 'running' : 'paused'/,
     'loader animation state does not follow visibility');
