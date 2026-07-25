@@ -41,16 +41,60 @@ export const UI_CSS = `
   font-family: 'Segoe UI', system-ui, sans-serif; color: #fdf6e3;
 }
 
+/* The parallax bands and the road are the only things that move while panning.
+   Promoting them means each is rasterised ONCE and then merely translated, so a
+   drag costs a few layer moves instead of repainting the hillside every frame.
+   They are clipped to the widest slice they can ever show (see clipWorld), so
+   the promotion buys smoothness without holding six 6400px surfaces. */
+.mr-stage [data-par], .mr-stage [data-road] {
+  will-change: transform;
+  backface-visibility: hidden;
+}
+.mr-stage [data-par] { overflow: hidden; }
+/* the cloud band's soft edges spill outside its box on purpose */
+.mr-stage [data-band="0"] { overflow: visible; }
+
+/* ---- the road, and the only place a drag may grab ---- */
+[data-roadwrap] { cursor: grab; touch-action: pan-y; }
+[data-roadwrap].is-grabbing { cursor: grabbing; }
+
 /* ---- chapter stops ---- */
 .mr-node { transition: transform 260ms cubic-bezier(.2,.8,.3,1), filter 260ms ease; }
 .mr-node:hover { transform: translateY(-7px); filter: brightness(1.1); }
 .mr-node.is-selected [data-circle] { outline: 2px solid rgba(255,240,214,.9); outline-offset: 7px; }
 .mr-node:focus { outline: none; }
 .mr-node:focus-visible [data-circle] { outline: 3px solid #fff6e6; outline-offset: 7px; }
+/* stops past the gate are scenery, not choices — the road simply goes on */
+.mr-node-beyond { opacity: .5; pointer-events: none; }
+
+/* ---- the gate: where the road is barred until this story is walked ---- */
+.mr-gate-sign {
+  display: flex; align-items: center; gap: 12px; white-space: nowrap;
+  transform: translateY(-50%);
+}
+.mr-gate-lock {
+  font-size: 26px; line-height: 1;
+  filter: drop-shadow(0 2px 8px rgba(4,14,22,.9));
+}
+.mr-gate-text {
+  font: 600 15px 'Segoe UI', system-ui, sans-serif; color: #ffe9c9;
+  letter-spacing: .04em; text-shadow: 0 2px 10px rgba(4,14,22,.95);
+}
+.mr-gate-text i {
+  font: italic 400 12.5px Georgia, serif; color: rgba(253,246,227,.62);
+  letter-spacing: .02em;
+}
+/* a small nudge when the player pushes against the gate */
+.mr-gate-sign { transition: transform 320ms cubic-bezier(.2,.8,.3,1), opacity 320ms ease; opacity: .82; }
+.at-gate .mr-gate-sign { transform: translateY(-50%) translateX(-8px); opacity: 1; }
 
 /* ---- overlay ---- */
 .mr-ui { position: absolute; inset: 0; pointer-events: none; }
 .mr-ui button { pointer-events: auto; font-family: inherit; }
+/* The chapter panel and the era ribbon sit OVER the map, so they have to catch
+   the pointer themselves — otherwise a drag started on the blurb would grab the
+   road underneath them. Everything else in the overlay stays transparent. */
+.mr-panel, .mr-ribbon-row { pointer-events: auto; }
 
 .mr-titleblock {
   position: absolute; left: 0; right: 0; top: calc(42px * var(--u));
@@ -168,8 +212,11 @@ export const UI_CSS = `
   background: #0a1a22; border: 1px solid rgba(255,232,190,.16);
   transition: background 220ms ease, border-color 220ms ease;
 }
-.mr-era-chip:hover { background: #122a33; border-color: rgba(255,232,190,.6); }
+.mr-era-chip:hover:not(:disabled) { background: #122a33; border-color: rgba(255,232,190,.6); }
 .mr-era-chip.is-on { background: #2b2317; border-color: rgba(255,232,190,.65); }
+/* eras beyond the gate: visibly shut, and not a target */
+.mr-era-chip.is-shut { opacity: .42; cursor: default; border-style: dashed; }
+.mr-era-chip.is-shut .mr-era-dots { opacity: .55; }
 .mr-era-name {
   font: 600 calc(10.5px * var(--u)) 'Segoe UI', system-ui, sans-serif;
   letter-spacing: .2em; text-transform: uppercase; color: rgba(253,246,227,.6);

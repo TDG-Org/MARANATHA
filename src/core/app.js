@@ -69,7 +69,7 @@ export function createApp(container) {
     renderer.setSize(w, h);
     pausedPainted = false;
     if (paused && current && !busy) {
-      renderer.render(current.scene, camera);
+      paint();
       pausedPainted = true;
     }
   };
@@ -77,6 +77,23 @@ export function createApp(container) {
   window.addEventListener('orientationchange', onResize);
   window.visualViewport?.addEventListener('resize', onResize);
   if ('ResizeObserver' in window) new ResizeObserver(onResize).observe(container);
+
+  // A screen may declare `flat` when it has no 3D content at all (the home
+  // story map is DOM/CSS/SVG). No GPU frame is submitted while it is up:
+  // rendering an empty scene every frame is pure waste on the screen players
+  // park on.
+  //
+  // The canvas is hidden with VISIBILITY, never `display:none`. Removing its
+  // layout box also drops the WebGL drawing buffer, and the next scene's
+  // shader/texture pre-warm then never completes — measured: Joseph reached its
+  // 12s readiness deadline and bounced back to home every time, while the same
+  // navigation from a non-flat screen loaded fine. Visibility keeps the buffer.
+  const isFlat = () => !!current?.instance?.flat;
+  const showCanvas = (on) => { renderer.domElement.style.visibility = on ? '' : 'hidden'; };
+  const paint = () => {
+    if (!current || isFlat()) return;
+    renderer.render(current.scene, camera);
+  };
 
   async function build(key, params) {
     const entry = screens.get(key);
@@ -89,6 +106,7 @@ export function createApp(container) {
       }
       const instance = builder({ scene, camera, renderer, app, params, signal: lifetime.signal }) || {};
       current = { key, scene, instance, lifetime };
+      showCanvas(!instance.flat);
     } catch (e) {
       lifetime.abort(makeAbortError(`Screen "${key}" failed to build`));
       disposeDeep(scene);
@@ -101,6 +119,7 @@ export function createApp(container) {
     current.lifetime.abort(makeAbortError(reason));
     try { current.instance.dispose?.(); } catch (e) { console.error('[app] dispose error', e); }
     disposeDeep(current.scene);
+    showCanvas(true); // the next screen decides again once it is built
     postFX.reset();
     current = null;
     debugStateAcc = 0;
@@ -180,7 +199,7 @@ export function createApp(container) {
       try { current.instance.update?.(0, performance.now()); } catch (error) {
         console.error(`[app] screen "${current.key}" preparation error`, error);
       }
-      renderer.render(current.scene, camera); // paint one frame before revealing
+      paint(); // paint one frame before revealing (a flat screen has none to paint)
       await veil.reveal(first ? 900 : 620);
       current.instance.activate?.();
     } finally {
@@ -238,7 +257,7 @@ export function createApp(container) {
         // Freeze the exact final canvas once, then disable the rAF ownership
         // latch. The pause overlay is DOM and needs no game loop underneath.
         if (current && !busy) {
-          renderer.render(current.scene, camera);
+          paint();
           pausedPainted = true;
         }
         loopController?.stop();
@@ -267,13 +286,13 @@ export function createApp(container) {
           if (updateErrors++ < 3) console.error('[app] update error', e);
         }
         const t1 = performance.now();
-        renderer.render(current.scene, camera);
+        paint();
         subMs = performance.now() - t1;
         updMs = t1 - t0;
       } else if (!pausedPainted) {
         // energy rule (D6): a paused game paints its frozen frame ONCE — the
         // GPU sleeps until resume or resize (DOM pause menu needs no canvas).
-        renderer.render(current.scene, camera);
+        paint();
         pausedPainted = true;
       }
     }

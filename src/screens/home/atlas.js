@@ -4,11 +4,24 @@ import { STORIES } from '../../data/stories.js';
 // the road, the road itself, and the ambient particle fields.
 //
 // Everything here works in the design's 1440x810 coordinate space (index.js
-// scales that space to the viewport as one composited transform), so the
-// numbers below are the design's numbers, unchanged.
+// scales that space to the viewport as one composited transform).
 
 const GAP = { major: 208, standard: 162, minor: 128 };
 const SIZE = { major: 94, standard: 64, minor: 44 };
+
+// The road's height on the hillside. It was authored at 628 with a ±72 wave,
+// which put the chapter labels almost on top of the era ribbon on a short
+// screen. Raised to 574 with a tighter wave: the highest stop now sits at
+// y≈513, still a clear 50px BELOW the farthest ridge's crest (y≈462), so every
+// chapter keeps its feet on the hill instead of floating in the sky.
+const ROAD_Y = 574;
+const ROAD_WAVE = 46;
+const ROAD_ROLL = 15;
+
+// How far past the last playable chapter the player may travel, and how far
+// the road is drawn beyond that before it runs into the dark.
+const REACH_AHEAD = 1;
+const DRAW_AHEAD = 2;
 
 const ROMAN = [
   '', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII',
@@ -49,16 +62,19 @@ function smooth(pts) {
 
 // Lay the chapters out left to right, spaced by how big each one reads, on a
 // gentle two-frequency wave so the road rises and falls like real country.
+//
+// Only the part of the journey the player can actually reach is built. The
+// road stops a couple of chapters past that and fades into the dark, which is
+// both the honest picture (one story exists) and the reason this screen is
+// cheap: the painted world is ~2.6k wide instead of 6.4k.
 export function buildAtlas(isBuilt) {
   let x = 330;
   let prevTier = null;
-  const nodes = STORIES.map((story, i) => {
+  const all = STORIES.map((story, i) => {
     const tier = story.tier || 'standard';
     if (i > 0) x += Math.round((GAP[prevTier] + GAP[tier]) / 2);
     prevTier = tier;
-    const y = Math.round(628 + 54 * Math.sin(i * 0.62 + 0.4) + 18 * Math.cos(i * 0.29));
-    const size = SIZE[tier];
-    const built = isBuilt(story);
+    const y = Math.round(ROAD_Y + ROAD_WAVE * Math.sin(i * 0.62 + 0.4) + ROAD_ROLL * Math.cos(i * 0.29));
     return {
       id: story.id,
       title: story.title,
@@ -66,35 +82,62 @@ export function buildAtlas(isBuilt) {
       blurb: story.blurb,
       era: story.era,
       tier,
-      built,
+      built: isBuilt(story),
+      index: i,
       x,
       y,
-      size,
+      size: SIZE[tier],
       num: i + 1,
       ord: ROMAN[i + 1] || String(i + 1),
     };
   });
 
-  const roadW = x + 380;
+  const lastBuilt = all.reduce((acc, n, i) => (n.built ? i : acc), 0);
+  const reachIndex = Math.min(all.length - 1, lastBuilt + REACH_AHEAD);
+  const drawIndex = Math.min(all.length - 1, reachIndex + DRAW_AHEAD);
+  const nodes = all.slice(0, drawIndex + 1);
+  nodes.forEach((n) => { n.reachable = n.index <= reachIndex; });
+
+  const worldW = nodes[nodes.length - 1].x + 420;
   const byId = new Map(nodes.map((n) => [n.id, n]));
 
-  // The road runs on past the last chapter anyone can walk — the journey is
-  // longer than what is built.
+  // The road runs on past the last stop drawn, so it reads as a journey that
+  // continues rather than a line that stops.
   const pts = [
-    { x: 40, y: nodes[0].y + 108 },
+    { x: 40, y: nodes[0].y + 72 },
     ...nodes.map((n) => ({ x: n.x, y: n.y })),
-    { x: roadW - 60, y: nodes[nodes.length - 1].y - 92 },
+    { x: worldW - 60, y: nodes[nodes.length - 1].y - 78 },
   ];
   const roadPath = smooth(pts);
-  const lastBuilt = nodes.filter((n) => n.built).slice(-1)[0];
-  const walkedPath = lastBuilt ? smooth(pts.slice(0, nodes.indexOf(lastBuilt) + 2)) : '';
+  const lastWalked = nodes.filter((n) => n.built).slice(-1)[0];
+  const walkedPath = lastWalked ? smooth(pts.slice(0, nodes.indexOf(lastWalked) + 2)) : '';
 
-  return { nodes, byId, roadW, roadPath, walkedPath };
+  // Where the road is barred, and the vertical band it occupies — the only
+  // place a drag is allowed to grab, so the sky and the hills stay still under
+  // the cursor. It has to cover the stops (circle + numeral above + name
+  // below) AND the road's own dip past the last one, plus the bed's halo.
+  // It hugs the storyline: the chapter numerals above the circles, the names
+  // below them, and the road bed's halo — plus a little grab room. Anything
+  // outside is sky or hillside, and holds still under the cursor.
+  const gateX = nodes[reachIndex].x + Math.round(nodes[reachIndex].size / 2) + 120;
+  const nodeYs = nodes.map((n) => n.y);
+  const pathYs = pts.map((p) => p.y);
+  const halfMax = Math.max(...nodes.map((n) => n.size)) / 2;
+  const BED_HALO = 70; // half the widest road-bed stroke, so it is never cut
+  const bandTop = Math.round(Math.min(Math.min(...nodeYs) - halfMax - 60, Math.min(...pathYs) - BED_HALO));
+  const bandBottom = Math.round(Math.max(Math.max(...nodeYs) + halfMax + 84, Math.max(...pathYs) + BED_HALO));
+
+  return {
+    nodes, byId, worldW, roadPath, walkedPath,
+    reachIndex, lastBuilt, gateX, bandTop, bandBottom,
+    total: all.length,
+  };
 }
 
 // A chapter stop. Built chapters are warm and lit with a play arrow; the rest
 // are cold stone — locked (with a padlock) or, for the quieter stops between
-// landmarks, just a marker on the road.
+// landmarks, just a marker on the road. Stops past the gate are drawn dimmer
+// still and cannot be picked: they are scenery, not choices.
 export function nodeHtml(n) {
   const done = n.status === 'done';
   const lit = n.built;
@@ -133,33 +176,84 @@ export function nodeHtml(n) {
     ? '#fff6e6'
     : n.tier === 'minor' ? 'rgba(253,246,227,.6)' : 'rgba(253,246,227,.82)';
 
-  const label = `Chapter ${n.ord} — ${n.title}, ${n.passage}${lit ? '' : ' (coming soon)'}`;
+  // Past the gate the stop is scenery: not a button, not focusable, not read
+  // out as a choice.
+  if (!n.reachable) {
+    return `<div class="mr-node mr-node-beyond" data-beyond="1" aria-hidden="true"
+      style="position:absolute; left:${n.x}px; top:${n.y}px; width:0; height:0">
+      <span data-circle="1" style="position:absolute; left:0; top:0; width:${n.size}px; height:${n.size}px; transform:translate(-50%,-50%); border-radius:50%; display:flex; align-items:center; justify-content:center; background:${bg}; border:2px solid ${border}; box-shadow:${shadow}">${glyph}</span>
+      <span style="position:absolute; left:0; top:${half + 13}px; transform:translateX(-50%); font:600 ${labelSize}px 'Segoe UI',system-ui,sans-serif; color:${labelColor}; letter-spacing:.04em; white-space:nowrap; text-shadow:0 2px 9px rgba(4,14,20,.85)">${n.title}</span>
+    </div>`;
+  }
 
+  const label = `Chapter ${n.ord} — ${n.title}, ${n.passage}${lit ? '' : ' (coming soon)'}`;
   return `<button type="button" class="mr-node" data-node="${n.id}" aria-label="${label}"
     style="position:absolute; left:${n.x}px; top:${n.y}px; width:0; height:0; padding:0; border:0; background:none; color:inherit; font:inherit; cursor:pointer">
     ${halo}
-    <span data-circle="1" style="position:absolute; left:0; top:0; width:${n.size}px; height:${n.size}px; transform:translate(-50%,-50%); border-radius:50%; display:flex; align-items:center; justify-content:center; background:${bg}; border:2px solid ${border}; box-shadow:${shadow}"
-      >${glyph}</span>
+    <span data-circle="1" style="position:absolute; left:0; top:0; width:${n.size}px; height:${n.size}px; transform:translate(-50%,-50%); border-radius:50%; display:flex; align-items:center; justify-content:center; background:${bg}; border:2px solid ${border}; box-shadow:${shadow}">${glyph}</span>
     <span style="position:absolute; left:0; top:${-half - 26}px; transform:translateX(-50%); font:600 ${ordSize}px Georgia,serif; letter-spacing:.24em; color:${ordColor}; white-space:nowrap; pointer-events:none">${n.ord}</span>
     <span style="position:absolute; left:0; top:${half + 13}px; transform:translateX(-50%); font:600 ${labelSize}px 'Segoe UI',system-ui,sans-serif; color:${labelColor}; letter-spacing:.04em; white-space:nowrap; text-shadow:0 2px 9px rgba(4,14,20,.85); pointer-events:none">${n.title}</span>
   </button>`;
 }
 
-// The ambient fields. `counts` arrives already scaled by the player's Graphics
-// preset, so Low draws a quieter sky rather than a different one.
+// The soft dark bed the road lies on, so the line and the stops read against a
+// busy hillside. Four concentric strokes of the same path fade outwards — a
+// blur's look with none of a blur's cost, and it rasterises once with the road.
+export function roadBedHtml(d) {
+  if (!d) return '';
+  const band = [[132, 0.2], [92, 0.18], [58, 0.2], [30, 0.22]];
+  return band.map(([w, o]) => `<path d="${d}" fill="none" stroke="#01030c" stroke-opacity="${o}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"></path>`).join('');
+}
+
+// Where the road is barred. The dark gathers across it and a sign says why, in
+// the same words the player would use.
+export function gateHtml(atlas) {
+  const { gateX, bandTop, bandBottom } = atlas;
+  const h = bandBottom - bandTop;
+  return `<div class="mr-gate" style="position:absolute; left:${gateX}px; top:${bandTop}px; width:${atlas.worldW - gateX}px; height:${h}px; pointer-events:none">
+    <div style="position:absolute; inset:0; background:linear-gradient(90deg,rgba(1,3,10,0) 0%,rgba(1,3,10,.62) 34%,rgba(1,3,10,.88) 68%,rgba(1,3,10,.96) 100%)"></div>
+    <div class="mr-gate-sign" style="position:absolute; left:96px; top:${Math.round(h / 2)}px">
+      <span class="mr-gate-lock">🔒</span>
+      <span class="mr-gate-text">Walk this story first<br><i>the road opens as you go</i></span>
+    </div>
+  </div>`;
+}
+
+// The ambient fields.
+//
+// The design gave every star, mote, firefly and ember its own infinite
+// animation — around 130 of them, and each running animation is its own
+// compositor layer. They are GROUPED instead: a handful of layers, each with
+// its own duration and delay, holding members drawn from all over the field
+// (group = i % groups, never a contiguous block). The sky still twinkles out
+// of step and the motes still drift apart, because no two groups share a
+// phase — but the compositor carries ~18 layers instead of ~130.
 export function particleHtml(counts) {
   const r = seeded(9173);
+  const groupsFor = (n, per) => Math.max(2, Math.min(8, Math.round(n / per)));
+
+  // Spread `n` members across `g` groups, interleaved so each group is
+  // scattered across the whole field rather than clumped in one corner.
+  const grouped = (n, g, make, wrap) => {
+    const buckets = Array.from({ length: g }, () => []);
+    for (let i = 0; i < n; i++) buckets[i % g].push(make(i));
+    return buckets.map((members, gi) => wrap(members.join(''), gi)).join('');
+  };
+
   const out = {};
 
-  out.stars = Array.from({ length: counts.stars }, () => {
+  const starGroups = groupsFor(counts.stars, 8);
+  out.stars = grouped(counts.stars, starGroups, () => {
     const x = Math.round(r() * 1420);
     const y = Math.round(r() * 480);
     const s = r() > 0.78 ? 4 : r() > 0.4 ? 3 : 2;
     const sh = r() > 0.72 ? '0 0 8px 2px rgba(214,228,255,.55)' : 'none';
-    const dur = (3.4 + r() * 3.6).toFixed(1);
-    const d = (r() * 5).toFixed(1);
-    return `<div style="position:absolute; left:${x}px; top:${y}px; width:${s}px; height:${s}px; border-radius:50%; background:#eef4ff; box-shadow:${sh}; animation:mrTwinkle ${dur}s ease-in-out ${d}s infinite"></div>`;
-  }).join('');
+    return `<div style="position:absolute; left:${x}px; top:${y}px; width:${s}px; height:${s}px; border-radius:50%; background:#eef4ff; box-shadow:${sh}"></div>`;
+  }, (inner, gi) => {
+    const dur = (3.4 + (gi / starGroups) * 3.6).toFixed(1);
+    const d = ((gi * 1.37) % 5).toFixed(1);
+    return `<div style="position:absolute; inset:0; animation:mrTwinkle ${dur}s ease-in-out ${d}s infinite">${inner}</div>`;
+  });
 
   out.sparkles = Array.from({ length: counts.sparkles }, () => {
     const x = Math.round(60 + r() * 1320);
@@ -174,36 +268,43 @@ export function particleHtml(counts) {
     </div>`;
   }).join('');
 
-  out.motes = Array.from({ length: counts.motes }, () => {
+  const moteGroups = groupsFor(counts.motes, 8);
+  out.motes = grouped(counts.motes, moteGroups, () => {
     const x = Math.round(120 + r() * 1240);
     const y = Math.round(540 + r() * 240);
     const s = r() > 0.7 ? 6 : r() > 0.35 ? 5 : 4;
-    const dur = (12 + r() * 8).toFixed(1);
-    const d = (r() * 12).toFixed(1);
-    return `<div style="position:absolute; left:${x}px; top:${y}px; width:${s}px; height:${s}px; border-radius:50%; background:#dfe8ff; opacity:.5; animation:mrMote ${dur}s linear ${d}s infinite; pointer-events:none"></div>`;
-  }).join('');
+    return `<div style="position:absolute; left:${x}px; top:${y}px; width:${s}px; height:${s}px; border-radius:50%; background:#dfe8ff; opacity:.5"></div>`;
+  }, (inner, gi) => {
+    const dur = (12 + (gi / moteGroups) * 8).toFixed(1);
+    const d = ((gi * 4.1) % 12).toFixed(1);
+    return `<div style="position:absolute; inset:0; pointer-events:none; animation:mrMote ${dur}s linear ${d}s infinite">${inner}</div>`;
+  });
 
-  // Embers rise from the two far camps only — the near camp is small enough
-  // that its own flames read on their own.
+  // Embers rise from the two far camps; each camp gets its own pair of drifts.
   const camps = [[2303, 657], [4606, 672]];
   const perCamp = Math.max(2, Math.round(counts.embers / camps.length));
-  out.embers = camps.flatMap(([cx, cy]) => Array.from({ length: perCamp }, () => {
+  out.embers = camps.map(([cx, cy]) => grouped(perCamp, 2, () => {
     const x = Math.round(cx - 8 + r() * 22);
     const y = Math.round(cy - r() * 10);
     const s = r() > 0.66 ? 5 : r() > 0.33 ? 4 : 3;
-    const dx = Math.round(-10 + r() * 40);
-    const dur = (2.6 + r() * 2.6).toFixed(1);
-    const d = (r() * 4).toFixed(1);
-    return `<div style="position:absolute; left:${x}px; top:${y}px; width:${s}px; height:${s}px; border-radius:50%; background:#ffc27a; box-shadow:0 0 9px 2px rgba(255,168,84,.55); animation:mrEmber ${dur}s ease-out ${d}s infinite; --dx:${dx}px"></div>`;
+    return `<div style="position:absolute; left:${x}px; top:${y}px; width:${s}px; height:${s}px; border-radius:50%; background:#ffc27a; box-shadow:0 0 9px 2px rgba(255,168,84,.55)"></div>`;
+  }, (inner, gi) => {
+    const dx = gi === 0 ? 12 : 30;
+    const dur = (2.6 + gi * 1.3).toFixed(1);
+    const d = (gi * 1.6).toFixed(1);
+    return `<div style="position:absolute; inset:0; --dx:${dx}px; animation:mrEmber ${dur}s ease-out ${d}s infinite">${inner}</div>`;
   })).join('');
 
-  out.fireflies = Array.from({ length: counts.fireflies }, () => {
+  const flyGroups = groupsFor(counts.fireflies, 6);
+  out.fireflies = grouped(counts.fireflies, flyGroups, () => {
     const x = Math.round(160 + r() * 1180);
     const y = Math.round(560 + r() * 200);
-    const dur = (7 + r() * 6).toFixed(1);
-    const d = (r() * 8).toFixed(1);
-    return `<div style="position:absolute; left:${x}px; top:${y}px; width:5px; height:5px; border-radius:50%; background:#ffe9a8; box-shadow:0 0 11px 3px rgba(255,214,120,.5); animation:mrFly ${dur}s ease-in-out ${d}s infinite"></div>`;
-  }).join('');
+    return `<div style="position:absolute; left:${x}px; top:${y}px; width:5px; height:5px; border-radius:50%; background:#ffe9a8; box-shadow:0 0 11px 3px rgba(255,214,120,.5)"></div>`;
+  }, (inner, gi) => {
+    const dur = (7 + (gi / flyGroups) * 6).toFixed(1);
+    const d = ((gi * 2.6) % 8).toFixed(1);
+    return `<div style="position:absolute; inset:0; animation:mrFly ${dur}s ease-in-out ${d}s infinite">${inner}</div>`;
+  });
 
   return out;
 }

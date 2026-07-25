@@ -5,24 +5,25 @@ import { Graphics } from '../../systems/Graphics.js';
 import { openSettings } from '../../ui/settings.js';
 import { BACKDROP_HTML, ROAD_HTML, VIGNETTE_HTML } from './backdrop.js';
 import { PALETTES, paletteKeyForNow } from './palettes.js';
-import { buildAtlas, nodeHtml, particleHtml } from './atlas.js';
+import { buildAtlas, nodeHtml, roadBedHtml, gateHtml, particleHtml } from './atlas.js';
 import { KEYFRAMES_CSS, UI_CSS } from './styles.js';
 
-// HOME — the story map: one long night road through the whole Bible, with the
+// HOME — the story map: one long night road through the Bible, with the
 // chapters standing along it as lit or waiting stops.
 //
-// This screen is DOM/CSS/SVG only. There is no 3D content behind it (the app's
-// WebGL scene stays empty here), which is why the loop can idle at eco 30 the
-// whole time it is parked: the vista's motion belongs to the compositor, not
-// to the frame loop.
+// This screen is DOM/CSS/SVG only. It declares `flat`, so the app hides the
+// WebGL canvas and stops submitting frames for it entirely while we are here —
+// the vista's motion belongs to the compositor, not to the frame loop.
 //
 // Coordinate spaces, kept strictly apart:
 //   · THE STAGE is the design's 1440x810 space. The painted world lives here
 //     and the whole space is scaled to cover the viewport with ONE composited
 //     transform, so the composition is identical on every screen.
 //   · THE OVERLAY is viewport space. Title, story panel, era ribbon and chrome
-//     live here at real CSS sizes, so text stays crisp and legible on a phone
-//     instead of being scaled down with the scenery.
+//     live here at real CSS sizes, so text stays crisp and legible on a phone.
+//
+// Everything that moves while panning is a promoted layer translated by whole
+// pixels; nothing on this screen repaints per frame.
 
 const DESIGN_W = 1440;
 const DESIGN_H = 810;
@@ -31,9 +32,6 @@ const DESIGN_H = 810;
 const PARTICLE_BASE = { stars: 64, sparkles: 9, motes: 24, embers: 18, fireflies: 18 };
 
 const animRe = (name) => new RegExp(`animation:\\s*mr${name}[^;"]*;?`, 'g');
-
-// Remove one named animation from the markup entirely — the element stays, it
-// simply holds still.
 const strip = (html, name) => html.replace(animRe(name), '');
 
 // Keep one running instance in every `keep` (0 = none, 1 = all).
@@ -55,6 +53,7 @@ export function buildHome({ app, params = {} }) {
   const isBuilt = (story) => !!(story.sceneKey && app.hasScreen(story.sceneKey));
   const atlas = buildAtlas(isBuilt);
   atlas.nodes.forEach((n) => { n.status = statusOf(n.id); });
+  const gateNode = atlas.nodes[atlas.reachIndex];
 
   // ---- style ---------------------------------------------------------------
   const style = document.createElement('style');
@@ -71,15 +70,11 @@ export function buildHome({ app, params = {} }) {
   const stage = document.createElement('div'); // the 1440x810 design space
   stage.className = 'mr-stage';
 
-  // The design sways all 118 plants individually, and each running animation
-  // is its own compositor layer — by far the biggest cost on this screen and
-  // the least visible, since the plants are few-pixel silhouettes in the dark
-  // parallax bands. So the sway is THINNED rather than kept flat: High sways
-  // everything, Medium sways one plant in three (which reads more like real
-  // wind than all of them moving in step), Low leaves the border still and
-  // drops the camp smoke too. The vista is the same either way — only how much
-  // of it moves changes.
-  const swayKeep = { low: 0, medium: 3, high: 1 }[Graphics.name] ?? 3;
+  // The importer already dropped sway from the three far bands. What is left
+  // is the near band, where the plants are big enough for the motion to read —
+  // and even that is thinned by preset, because a running animation is a
+  // compositor layer.
+  const swayKeep = { low: 0, medium: 2, high: 1 }[Graphics.name] ?? 2;
   const backdrop = thinAnimations(
     Graphics.name === 'low' ? strip(BACKDROP_HTML, 'Smoke') : BACKDROP_HTML,
     'Sway',
@@ -92,7 +87,7 @@ export function buildHome({ app, params = {} }) {
 
   stage.innerHTML =
     backdrop.replace(/<!--slot:(\w+)-->/g, (_, k) => fields[k] || '')
-    + ROAD_HTML.replace('<!--slot:nodes-->', atlas.nodes.map(nodeHtml).join(''))
+    + ROAD_HTML.replace('<!--slot:nodes-->', atlas.nodes.map(nodeHtml).join('') + gateHtml(atlas))
     + VIGNETTE_HTML;
 
   band.append(stage);
@@ -102,17 +97,28 @@ export function buildHome({ app, params = {} }) {
   const roadWrap = stage.querySelector('[data-roadwrap]');
   const road = stage.querySelector('[data-road]');
   const roadSvg = road.querySelector('svg');
-  roadSvg.setAttribute('viewBox', `0 0 ${atlas.roadW} ${DESIGN_H}`);
-  roadSvg.style.width = `${atlas.roadW}px`;
-  road.style.width = `${atlas.roadW}px`;
   road.querySelector('[data-roadglow]').setAttribute('d', atlas.roadPath);
   road.querySelector('[data-roadline]').setAttribute('d', atlas.roadPath);
   road.querySelector('[data-roadwalked]').setAttribute('d', atlas.walkedPath);
+  // The dark bed goes UNDER everything else in the road's SVG.
+  roadSvg.insertAdjacentHTML('afterbegin', roadBedHtml(atlas.roadPath));
+
+  // Dragging may only grab the road's own band. Everywhere else — the sky, the
+  // hills, the title — stays still under the cursor.
+  roadWrap.style.top = `${atlas.bandTop}px`;
+  roadWrap.style.bottom = 'auto';
+  roadWrap.style.height = `${atlas.bandBottom - atlas.bandTop}px`;
+  road.style.top = `${-atlas.bandTop}px`; // world coordinates survive the crop
 
   const parallax = [...stage.querySelectorAll('[data-par]')]
-    .map((el) => ({ el, factor: Number(el.dataset.par) || 0 }));
+    .map((el) => ({ el, factor: Number(el.dataset.par) || 0, svg: el.querySelector('svg') }));
 
   // ---- overlay UI ----------------------------------------------------------
+  const eraReachable = (era) => {
+    const first = atlas.nodes.find((n) => n.era === era.id && n.reachable);
+    return first || null;
+  };
+
   const ui = document.createElement('div');
   ui.className = 'mr-ui';
   ui.innerHTML = `
@@ -138,14 +144,16 @@ export function buildHome({ app, params = {} }) {
       <button type="button" class="mr-nav" data-nav="prev" aria-label="Previous chapter">‹</button>
       <div class="mr-ribbon">
         ${ERAS.map((era) => {
-    const list = atlas.nodes.filter((n) => n.era === era.id);
-    const dots = list.map((n) => {
-      const w = n.tier === 'major' ? 7 : n.tier === 'standard' ? 5 : 3.5;
-      const bg = n.built ? '#ffd28a' : 'rgba(253,246,227,.32)';
+    const open = !!eraReachable(era);
+    const list = STORIES.filter((s) => s.era === era.id);
+    const dots = list.map((s) => {
+      const w = s.tier === 'major' ? 7 : s.tier === 'standard' ? 5 : 3.5;
+      const bg = isBuilt(s) ? '#ffd28a' : 'rgba(253,246,227,.32)';
       return `<i style="width:${w}px; height:${w}px; background:${bg}"></i>`;
     }).join('');
-    return `<button type="button" class="mr-era-chip" data-era="${era.id}" style="flex:${list.length} 1 0" aria-label="${era.name} — ${era.sub}">
-            <span class="mr-era-name">${era.name}</span>
+    return `<button type="button" class="mr-era-chip${open ? '' : ' is-shut'}" data-era="${era.id}"${open ? '' : ' disabled'}
+              style="flex:${list.length} 1 0" aria-label="${era.name} — ${era.sub}${open ? '' : ' (locked)'}">
+            <span class="mr-era-name">${open ? '' : '🔒 '}${era.name}</span>
             <span class="mr-era-dots">${dots}</span>
           </button>`;
   }).join('')}
@@ -232,29 +240,37 @@ export function buildHome({ app, params = {} }) {
   // ---- camera --------------------------------------------------------------
   let scale = 1;
   let stacked = false;
-  let visibleW = DESIGN_W; // design px currently visible across the viewport
+  let cropX = 0;          // css px of stage cropped off the left (cover-centring)
+  let visibleW = DESIGN_W; // design px visible across the viewport
+  let viewRight = DESIGN_W; // rightmost visible point, in stage coordinates
+  let minOffset = 0;
   let offset = 0;
   let selectedId = null;
 
-  const clampOffset = (v) => Math.max(visibleW - atlas.roadW - 20, Math.min(80, v));
+  const clampOffset = (v) => Math.max(minOffset, Math.min(80, v));
+
+  // The stage is centred when it is wider than the viewport, so a point on
+  // screen is NOT simply cssX / scale — the crop has to come back out first.
+  // Every focus and clamp below works in stage coordinates.
+  const toStageX = (cssX) => (cssX + cropX) / scale;
 
   // Where a selected chapter should come to rest: middle of the open space
   // beside the story panel on wide screens, dead centre when it is stacked.
   function focusX() {
-    if (stacked) return visibleW * 0.5;
+    if (stacked) return toStageX(window.innerWidth * 0.5);
     const panel = ui.querySelector('.mr-panel');
-    const panelRight = (panel?.getBoundingClientRect().right ?? 0) / scale;
-    return (panelRight + visibleW) / 2;
+    const panelRight = toStageX(panel?.getBoundingClientRect().right ?? 0);
+    return (panelRight + viewRight) / 2;
   }
 
   function applyCamera(animate) {
     const transition = animate ? 'transform 680ms cubic-bezier(.22,.72,.2,1)' : 'none';
     const x = Math.round(offset);
     road.style.transition = transition;
-    road.style.transform = `translateX(${x}px)`;
+    road.style.transform = `translate3d(${x}px,0,0)`;
     for (const layer of parallax) {
       layer.el.style.transition = transition;
-      layer.el.style.transform = `translateX(${Math.round(x * layer.factor)}px)`;
+      layer.el.style.transform = `translate3d(${Math.round(x * layer.factor)}px,0,0)`;
     }
     // The sun/moon travels with the farthest band so the hilltop crosses stay
     // silhouetted against it, and never slides under the story panel.
@@ -263,14 +279,15 @@ export function buildHome({ app, params = {} }) {
       const el = stage.querySelector(sel);
       if (!el) continue;
       el.style.transition = transition;
-      el.style.transform = `translate(-50%,-50%) translateX(${dx}px)`;
+      el.style.transform = `translate(-50%,-50%) translate3d(${dx}px,0,0)`;
     }
+    root.classList.toggle('at-gate', x <= minOffset + 2);
   }
 
   // ---- selection -----------------------------------------------------------
   function selectStory(id, animate = true) {
     const node = atlas.byId.get(id);
-    if (!node) return;
+    if (!node || !node.reachable) return;
     selectedId = id;
 
     const era = ERAS.find((e) => e.id === node.era);
@@ -279,11 +296,10 @@ export function buildHome({ app, params = {} }) {
     field('title').textContent = node.title;
     field('passage').textContent = node.passage;
     field('blurb').textContent = node.blurb;
-    // "Walked" means walked: chapters the player has actually finished, not
-    // chapters that happen to be built.
+    // "Walked" means walked: chapters the player has actually finished.
     const walked = atlas.nodes.filter((n) => n.status === 'done').length;
     field('progress').textContent =
-      `${walked} of ${atlas.nodes.length} stories walked · story ${node.num}`;
+      `${walked} of ${atlas.total} stories walked · story ${node.num}`;
 
     startBtn.textContent = node.built ? '▶  Start Story' : '🔒  Coming soon';
     startBtn.disabled = !node.built;
@@ -304,11 +320,32 @@ export function buildHome({ app, params = {} }) {
 
   function step(dir) {
     const i = atlas.nodes.findIndex((n) => n.id === selectedId);
-    const next = atlas.nodes[Math.max(0, Math.min(atlas.nodes.length - 1, i + dir))];
-    if (next) { Audio.uiClick(); selectStory(next.id); }
+    const next = atlas.nodes[Math.max(0, Math.min(atlas.reachIndex, i + dir))];
+    if (next && next.id !== selectedId) { Audio.uiClick(); selectStory(next.id); }
   }
 
   // ---- responsive ----------------------------------------------------------
+  // Each parallax band is clipped to the widest slice it can ever show
+  // (viewport + how far it travels at its own parallax factor). Without this
+  // the browser holds five 6400px-wide surfaces; with it the far bands are
+  // barely wider than the screen.
+  function clipWorld() {
+    const travel = Math.abs(minOffset) + 60;
+    for (const layer of parallax) {
+      const w = Math.min(atlas.worldW, Math.ceil(viewRight + travel * layer.factor));
+      layer.el.style.width = `${w}px`;
+      if (layer.svg) {
+        layer.svg.setAttribute('viewBox', `0 0 ${w} ${DESIGN_H}`);
+        layer.svg.style.width = `${w}px`;
+      }
+    }
+    const roadW = Math.min(atlas.worldW, Math.ceil(viewRight + travel));
+    road.style.width = `${roadW}px`;
+    roadSvg.setAttribute('viewBox', `0 0 ${roadW} ${DESIGN_H}`);
+    roadSvg.style.width = `${roadW}px`;
+    roadSvg.style.height = `${DESIGN_H}px`;
+  }
+
   function relayout() {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
@@ -342,22 +379,27 @@ export function buildHome({ app, params = {} }) {
     band.style.height = `${bandH}px`;
     scale = Math.max(bandH / DESIGN_H, vw / DESIGN_W);
     visibleW = vw / scale;
-    // Cover: centre whatever overflows, so the horizon and the road stay put.
-    const dx = (DESIGN_W * scale - vw) / 2;
-    const dy = (DESIGN_H * scale - bandH) / 2;
-    stage.style.transform = `translate(${-dx}px,${-dy}px) scale(${scale})`;
+    // Cover: centre what overflows horizontally, but bias the vertical crop
+    // upward so the road keeps its distance from the era ribbon.
+    cropX = (DESIGN_W * scale - vw) / 2;
+    viewRight = toStageX(vw);
+    const dy = (DESIGN_H * scale - bandH) * 0.66;
+    stage.style.transform = `translate3d(${-cropX}px,${-dy}px,0) scale(${scale})`;
 
     // The road fades out behind the story panel instead of running under it.
     if (stacked) {
       roadWrap.style.maskImage = 'none';
       roadWrap.style.webkitMaskImage = 'none';
     } else {
-      const edge = (panel?.getBoundingClientRect().right ?? 468 * scale) / scale;
+      const edge = toStageX(panel?.getBoundingClientRect().right ?? 468 * scale);
       const mask = `linear-gradient(90deg,rgba(0,0,0,0) 0px,rgba(0,0,0,0) ${Math.round(edge - 168)}px,rgba(0,0,0,.5) ${Math.round(edge - 48)}px,#000 ${Math.round(edge + 92)}px)`;
       roadWrap.style.maskImage = mask;
       roadWrap.style.webkitMaskImage = mask;
     }
 
+    // Only one story exists, so the journey is barred one chapter past it.
+    minOffset = Math.min(80, focusX() - gateNode.x);
+    clipWorld();
     offset = clampOffset(offset);
     if (selectedId) selectStory(selectedId, false);
     else applyCamera(false);
@@ -375,7 +417,7 @@ export function buildHome({ app, params = {} }) {
     dragFrom = e.clientX;
     dragBase = offset;
     dragDist = 0;
-    roadWrap.style.cursor = 'grabbing';
+    roadWrap.classList.add('is-grabbing');
     roadWrap.setPointerCapture?.(e.pointerId);
   };
   const onPointerMove = (e) => {
@@ -388,7 +430,7 @@ export function buildHome({ app, params = {} }) {
   const onPointerUp = (e) => {
     if (!dragging) return;
     dragging = false;
-    roadWrap.style.cursor = 'grab';
+    roadWrap.classList.remove('is-grabbing');
     roadWrap.releasePointerCapture?.(e.pointerId);
   };
   const onWheel = (e) => {
@@ -417,7 +459,8 @@ export function buildHome({ app, params = {} }) {
     if (nav) { step(nav.dataset.nav === 'next' ? 1 : -1); return; }
     const chip = e.target.closest?.('[data-era]');
     if (chip) {
-      const first = atlas.nodes.find((n) => n.era === chip.dataset.era);
+      const era = ERAS.find((x) => x.id === chip.dataset.era);
+      const first = era && eraReachable(era);
       if (first) { Audio.uiClick(); selectStory(first.id); }
       return;
     }
@@ -503,7 +546,7 @@ export function buildHome({ app, params = {} }) {
     style.remove();
   }
 
-  // No 3D content and no per-frame work: every pixel here is composited CSS,
-  // so the frame loop has nothing to do and stays at eco.
-  return { update() {}, dispose, activate, whenReady: Promise.resolve(true) };
+  // `flat` tells the app there is no 3D here: it hides the canvas and stops
+  // submitting GPU frames while this screen is up.
+  return { flat: true, update() {}, dispose, activate, whenReady: Promise.resolve(true) };
 }
