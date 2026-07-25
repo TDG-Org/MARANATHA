@@ -47,17 +47,47 @@ export function createRenderer(container) {
 // also keeps 120/144/165/240Hz panels from rendering the game above 60fps.
 export function startLoop(tick, getFps = () => 60) {
   let raf = 0;
+  let gap = 0;
   let running = false;
   let enabled = true;
   let visible = !document.hidden;
   const pacer = createFramePacer(performance.now());
 
+  // Skipping the WORK is only half the saving; the other half is not waking up
+  // at all. Chained straight, rAF calls back at the panel's refresh rate — 144
+  // or 240 times a second on the machines this is meant to run cool on — and
+  // each of those wake-ups asked getFps(), consulted the scene, and returned.
+  // The CPU never got to sleep between eco frames, which is exactly where deep
+  // idle (and the fan) is won.
+  //
+  // Below the display rate, the next request is deferred by a timer until the
+  // frame is nearly due. Responsiveness is untouched: the pacer already only
+  // acted every 33ms in eco, so the first frame after a keypress arrives no
+  // later than it did before — the difference is the ~110 empty callbacks a
+  // second that used to happen in between.
+  // ONLY below 60. At full rate the loop must stay chained to rAF: a timer is
+  // not aligned to vsync, and trading vsync for a timer at 60fps buys nothing
+  // and costs judder. The saving is in eco, where two frames in three were
+  // empty callbacks anyway.
+  const ARM_EARLY_MS = 2; // wake just before the deadline; rAF aligns the rest
+  const FULL_RATE = 60;
+  const arm = (fps, delay) => {
+    if (fps < FULL_RATE && delay > ARM_EARLY_MS) {
+      gap = setTimeout(() => { gap = 0; if (running) raf = requestAnimationFrame(frame); }, delay - ARM_EARLY_MS);
+      return;
+    }
+    raf = requestAnimationFrame(frame);
+  };
+
   const frame = (now) => {
     if (!running) return;
-    raf = requestAnimationFrame(frame);
     const fps = getFps();
-    if (!pacer.advance(now, fps)) return;
+    if (!pacer.advance(now, fps)) {
+      arm(fps, pacer.timeUntilDue(now));
+      return;
+    }
     tick(pacer.dt, now, fps);
+    arm(fps, pacer.timeUntilDue(performance.now()));
   };
 
   const startInternal = () => {
@@ -69,6 +99,7 @@ export function startLoop(tick, getFps = () => 60) {
   const stopInternal = () => {
     running = false;
     cancelAnimationFrame(raf);
+    if (gap) { clearTimeout(gap); gap = 0; }
   };
   // Public start/stop are an ownership latch (navigation/pause), distinct from
   // visibility. Showing a tab must never restart a loop the app deliberately

@@ -52,5 +52,13 @@ export function createFramePacer(startTime = 0) {
       }
       return true;
     },
+
+    // Milliseconds until the next frame is due. The loop uses this to sleep
+    // between eco frames instead of chaining requestAnimationFrame at the
+    // panel's refresh rate and throwing most of the callbacks away.
+    timeUntilDue(now) {
+      if (!Number.isFinite(now)) return 0;
+      return Math.max(0, nextDue - now);
+    },
   };
 }
