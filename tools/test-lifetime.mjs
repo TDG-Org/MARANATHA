@@ -29,6 +29,57 @@ for (const paused of [false, true]) {
   assert.equal(settled, true);
 }
 
+// The BROWSER path of a story hold: one timer for the whole wait, not a 50ms
+// poll. The cinema layer is made of holds, so a polling wait woke the main
+// thread ~20 times a second for the entire length of every title card, verse
+// hold and camera move. Pause still has to be exact, which is the hard part:
+// the single sleeping timer must bank the time it already served.
+{
+  const priorWindow = globalThis.window;
+  const priorDocument = globalThis.document;
+  const listeners = new Map();
+  const on = (type, fn) => { listeners.set(type, [...(listeners.get(type) || []), fn]); };
+  const off = (type, fn) => { listeners.set(type, (listeners.get(type) || []).filter((f) => f !== fn)); };
+  const fire = (type) => { for (const fn of [...(listeners.get(type) || [])]) fn({ type }); };
+  globalThis.window = { addEventListener: on, removeEventListener: off };
+  globalThis.document = { hidden: false, addEventListener: on, removeEventListener: off };
+
+  let timers = 0;
+  const realSetTimeout = globalThis.setTimeout;
+  globalThis.setTimeout = (fn, ms, ...rest) => { timers += 1; return realSetTimeout(fn, ms, ...rest); };
+  try {
+    let paused = false;
+    let done = false;
+    const started = performance.now();
+    const held = pausableWait(300, () => paused).then(() => { done = true; });
+    assert.equal(timers, 1, 'a browser story hold still slices itself into polling timers');
+
+    await delay(100);
+    paused = true;
+    fire('maranatha-pausechange');
+    const atPause = timers;
+    await delay(220);
+    assert.equal(done, false, 'a paused story hold ran to completion anyway');
+    assert.equal(timers, atPause, 'a paused hold kept scheduling wake-ups');
+
+    paused = false;
+    fire('maranatha-pausechange');
+    await held;
+    const elapsed = performance.now() - started;
+    assert.equal(done, true);
+    // ~100ms served + ~220ms paused + ~200ms remaining. The pause must be added
+    // to the wall clock, and the served 100ms must NOT be waited a second time.
+    assert.ok(elapsed > 480 && elapsed < 700, `paused hold settled after ${elapsed.toFixed(0)}ms, expected ~520`);
+    assert.ok(timers <= 3, `a 300ms hold used ${timers} timers; the whole point is a handful`);
+    assert.equal(listeners.get('maranatha-pausechange')?.length ?? 0, 0, 'a settled hold left its pause listener attached');
+    assert.equal(listeners.get('visibilitychange')?.length ?? 0, 0, 'a settled hold left its visibility listener attached');
+  } finally {
+    globalThis.setTimeout = realSetTimeout;
+    globalThis.window = priorWindow;
+    globalThis.document = priorDocument;
+  }
+}
+
 {
   const motion = new CutsceneMotion();
   const run = motion.tween(5000, () => {});

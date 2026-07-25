@@ -21,7 +21,7 @@ export function createNameTags() {
       'font:600 clamp(11px,1.5vw,13px) "Segoe UI",system-ui,sans-serif',
       'color:#fdf6e3', 'background:rgba(16,14,26,0.62)',
       'border:1px solid rgba(242,184,128,0.28)', 'box-shadow:0 2px 8px rgba(0,0,0,0.3)',
-      'will-change:transform,left,top', 'transition:opacity 200ms ease',
+      'will-change:transform', 'transition:opacity 200ms ease',
     ].join(';');
     layer.append(el);
     // D9 perf: position via ONE composited transform (left/top writes forced a

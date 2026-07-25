@@ -5,6 +5,10 @@ import { Audio } from '../systems/AudioSystem.js';
 import { abortReason } from '../core/async.js';
 import { CollisionGate } from './collision.js';
 
+// Held keys auto-repeat around 30 times a second, and the old form rebuilt a
+// nine-item array for each of those events just to ask whether the key matters.
+const MOVE_KEYS = new Set(['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'shift']);
+
 // Moves a Character3D relative to the camera (WASD / arrows + touch joystick),
 // eased. The character turns toward its move direction and picks idle/walk/run.
 // Exposes moveVec so the 3rd-person camera can trail the movement.
@@ -34,7 +38,7 @@ export class PlayerController3D {
 
     this._onKeyDown = (e) => {
       const k = e.key.toLowerCase();
-      if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'shift'].includes(k)) this.keys.add(k);
+      if (MOVE_KEYS.has(k)) this.keys.add(k);
       // D8: C sits the hero down wherever he stands (a held kneel/sit pose —
       // any movement stands him back up; see the anim-state logic below).
       if (k === 'c' && this.enabled && this.vel.lengthSq() < 0.1) this.character.play('kneel');

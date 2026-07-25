@@ -29,17 +29,31 @@ export class Joystick {
     document.body.append(base);
     this.base = base;
 
-    const R = () => base.getBoundingClientRect().width * 0.38;
+    // The stick is a fixed-position element: its box only moves on resize or
+    // rotation. It used to be measured three times per pointermove, and twice
+    // AFTER writing the thumb's transform — so each of the 60-120 move events a
+    // second forced the browser to re-run layout it had just invalidated. On a
+    // phone, which is the only place this control exists, and while the player
+    // is walking. Measured once, and again only when the viewport changes.
+    let box = null;
+    let radius = 0;
+    const measure = () => {
+      box = base.getBoundingClientRect();
+      radius = box.width * 0.38 || 1;
+    };
+    this._remeasure = () => { box = null; };
+    window.addEventListener('resize', this._remeasure);
+    window.addEventListener('orientationchange', this._remeasure);
     let id = null;
     const set = (ev) => {
-      const r = base.getBoundingClientRect();
-      let dx = ev.clientX - (r.left + r.width / 2);
-      let dy = ev.clientY - (r.top + r.height / 2);
+      if (!box) measure();
+      let dx = ev.clientX - (box.left + box.width / 2);
+      let dy = ev.clientY - (box.top + box.height / 2);
       const len = Math.hypot(dx, dy) || 1;
-      const cap = Math.min(len, R());
+      const cap = Math.min(len, radius);
       dx = (dx / len) * cap; dy = (dy / len) * cap;
       thumb.style.transform = `translate(${dx}px, ${dy}px)`;
-      this.vec.x = dx / R(); this.vec.y = dy / R();
+      this.vec.x = dx / radius; this.vec.y = dy / radius;
       this.active = true;
     };
     base.addEventListener('pointerdown', (e) => { id = e.pointerId; base.setPointerCapture?.(id); set(e); });
@@ -70,6 +84,10 @@ export class Joystick {
 
   dispose() {
     if (this._onBlur) window.removeEventListener('blur', this._onBlur);
+    if (this._remeasure) {
+      window.removeEventListener('resize', this._remeasure);
+      window.removeEventListener('orientationchange', this._remeasure);
+    }
     this.base?.remove();
   }
 }

@@ -64,7 +64,11 @@ export class Interactables {
       const p = this._active;
       const obj = p && (typeof p.object === 'function' ? p.object() : p.object);
       if (!obj) return false;
-      const r = (this.dom || document.body).getBoundingClientRect();
+      // The canvas is a fixed, full-viewport element: its rect only changes on
+      // resize. Reading it here read it from INSIDE the frame loop, in between
+      // other DOM writes, which forces a synchronous layout every time the
+      // pointer moves. Measured once, invalidated on resize.
+      const r = this._rect || (this._rect = (this.dom || document.body).getBoundingClientRect());
       this._ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
       this._ray.setFromCamera(this._ndc, this.camera);
       this._ray.camera = this.camera;
@@ -94,6 +98,10 @@ export class Interactables {
       this._hasHoverPoint = true;
       this._hoverDirty = true;
     };
+    this._rect = null;
+    this._onResize = () => { this._rect = null; };
+    window.addEventListener('resize', this._onResize);
+    window.addEventListener('orientationchange', this._onResize);
     if (this.dom) {
       this.dom.addEventListener('pointerdown', this._onDown);
       if (!this._touch) this.dom.addEventListener('pointermove', this._onMove);
@@ -152,14 +160,19 @@ export class Interactables {
     for (const p of this.prompts) {
       if (!p.when()) continue;
       const at = p.getPos ? p.getPos() : p; // one call, not two
-      const d = Math.hypot(at.x - pp.x, at.z - pp.z);
-      if (d < p.r && d < bestD) { bestD = d; best = p; best._px = at.x; best._pz = at.z; }
+      // Squared throughout — nothing here needs the actual distance, and this
+      // runs for every prompt on every frame.
+      const dx = at.x - pp.x; const dz = at.z - pp.z;
+      const d2 = dx * dx + dz * dz;
+      if (d2 < p.r * p.r && d2 < bestD) { bestD = d2; best = p; best._px = at.x; best._pz = at.z; }
     }
     const activeChanged = this._active !== best;
     this._active = best;
     if (!best) {
-      this.pill.style.display = 'none';
-      if (this.dom) this.dom.style.cursor = '';
+      // Change-gated: with no prompt nearby (most of the game) these two writes
+      // ran every single frame for nothing.
+      if (this.pill.style.display !== 'none') this.pill.style.display = 'none';
+      if (this.dom && this.dom.style.cursor !== '') this.dom.style.cursor = '';
       return;
     }
     if (activeChanged && this._hasHoverPoint) this._hoverDirty = true;
@@ -174,8 +187,12 @@ export class Interactables {
     if (this._v.z > 1) { this.pill.style.display = 'none'; return; }
     // D9 perf: write the DOM only when something CHANGED (label / >0.5px move)
     // — style writes every frame forced layout while a prompt was on screen.
-    const label = this._touch ? `${best.label}` : `[E]  ${best.label}`;
-    if (this._lastLabel !== label) { this._label.textContent = label; this._lastLabel = label; }
+    // Compare the SOURCE label, not a rebuilt one: the old form allocated a
+    // fresh string every frame purely to discover it was the same string.
+    if (this._lastSource !== best.label) {
+      this._lastSource = best.label;
+      this._label.textContent = this._touch ? best.label : `[E]  ${best.label}`;
+    }
     const x = (this._v.x * 0.5 + 0.5) * window.innerWidth;
     const y = (-this._v.y * 0.5 + 0.5) * window.innerHeight;
     if (Math.abs(x - (this._lastX ?? -9)) > 0.5 || Math.abs(y - (this._lastY ?? -9)) > 0.5) {
@@ -193,6 +210,8 @@ export class Interactables {
     this.triggers.length = 0;
     this.signal?.removeEventListener('abort', this._onAbort);
     window.removeEventListener('keydown', this._onKey);
+    window.removeEventListener('resize', this._onResize);
+    window.removeEventListener('orientationchange', this._onResize);
     if (this.dom) {
       this.dom.removeEventListener('pointerdown', this._onDown);
       this.dom.removeEventListener('pointermove', this._onMove);

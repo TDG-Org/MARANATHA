@@ -418,7 +418,10 @@ export class Character3D {
   }
 
   play(state) {
-    if (!CHARACTER_STATES.includes(state) || state === this.state) { this.state = state; return; }
+    // Order matters: play() is called every frame for every character, almost
+    // always with the state it already has. Testing identity first skips a
+    // linear scan of the state list ~15 times a frame for nothing.
+    if (state === this.state || !CHARACTER_STATES.includes(state)) { this.state = state; return; }
     if (this.mode === 'glb' && this.actions) {
       const next = this.actions[state];
       if (next && next !== this.current) {

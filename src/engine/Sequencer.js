@@ -52,6 +52,17 @@ export const pausableWait = (ms, isPaused = null, signal = null) => new Promise(
     if (error) reject(error); else resolve();
   };
   const onAbort = () => finish(abortReason(signal));
+  // In the browser, sleep the WHOLE remaining hold in one timer.
+  //
+  // This used to tick every 50ms so it could notice a pause, which meant a
+  // four-second title card scheduled eighty sequential wake-ups — and the
+  // cinema layer is nothing but holds, so a five-minute scene woke the main
+  // thread thousands of times for no reason beyond asking "still paused?". It
+  // never needed to ask: pause and visibility both fire events, and those
+  // events already re-schedule. Only the non-DOM harness, whose predicate has
+  // no event to listen to, still polls.
+  const now = () => (globalThis.performance?.now?.() ?? Date.now());
+  let startedAt = 0;
   const schedule = () => {
     if (settled || timer) return;
     if (isPaused?.()) {
@@ -59,7 +70,8 @@ export const pausableWait = (ms, isPaused = null, signal = null) => new Promise(
       if (!eventDriven) timer = setTimeout(tick, step);
       return;
     }
-    const slice = Math.min(step, left);
+    const slice = eventDriven ? left : Math.min(step, left);
+    startedAt = now();
     timer = setTimeout(() => tick(slice), slice);
   };
   const tick = (elapsed = 0) => {
@@ -70,8 +82,16 @@ export const pausableWait = (ms, isPaused = null, signal = null) => new Promise(
     else schedule();
   };
   const onPauseState = () => {
-    if (timer) clearTimeout(timer);
+    if (!timer) { schedule(); return; }
+    // Pausing mid-sleep: bank the time actually served, then wait out the rest
+    // when play resumes. Without this the single long timer would either lose
+    // the elapsed portion or ignore the pause entirely.
+    clearTimeout(timer);
     timer = null;
+    if (eventDriven && !settled) {
+      left = Math.max(0, left - (now() - startedAt));
+      if (left <= 0) { finish(); return; }
+    }
     schedule();
   };
   signal?.addEventListener('abort', onAbort, { once: true });

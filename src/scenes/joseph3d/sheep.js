@@ -270,19 +270,31 @@ export class SheepFlock {
     this._writeAll(t);
   }
 
+  // Composed by hand, straight into the instance buffer.
+  //
+  // The Object3D route cost six trig calls per sheep per frame that nobody
+  // asked for: writing `rotation` fires Euler's onChange, which rebuilds the
+  // quaternion, which updateMatrix() then decomposes back into the same yaw.
+  // A yaw-only rotation about Y is just one sin and one cos, and the resulting
+  // matrix has a known shape — so the elements go in directly.
   _writeAll(t = 0) {
-    const d = this._d;
-    this.sheep.forEach((s, i) => {
+    const body = this.bodies.instanceMatrix.array;
+    const head = this.heads.instanceMatrix.array;
+    for (let i = 0; i < this.sheep.length; i++) {
+      const s = this.sheep[i];
       const bob = Math.abs(Math.sin(s.walk * Math.PI + s.phase)) * 0.05;
       const breathe = 1 + Math.sin(t * 1.6 + s.phase) * 0.02;
       const size = s.lamb ? 0.74 : 1; // lambs stay small even once penned
-      d.position.set(s.x, bob, s.z);
-      d.rotation.set(0, s.yaw, 0);
-      d.scale.set(size, size * breathe, size);
-      d.updateMatrix();
-      this.bodies.setMatrixAt(i, d.matrix);
-      this.heads.setMatrixAt(i, d.matrix);
-    });
+      const c = Math.cos(s.yaw); const sn = Math.sin(s.yaw);
+      const sy = size * breathe;
+      const o = i * 16;
+      // column-major: [ Rx*sx | Ry*sy | Rz*sz | T ]
+      body[o] = c * size; body[o + 1] = 0; body[o + 2] = -sn * size; body[o + 3] = 0;
+      body[o + 4] = 0; body[o + 5] = sy; body[o + 6] = 0; body[o + 7] = 0;
+      body[o + 8] = sn * size; body[o + 9] = 0; body[o + 10] = c * size; body[o + 11] = 0;
+      body[o + 12] = s.x; body[o + 13] = bob; body[o + 14] = s.z; body[o + 15] = 1;
+      for (let k = 0; k < 16; k++) head[o + k] = body[o + k];
+    }
     this.bodies.instanceMatrix.needsUpdate = true;
     this.heads.instanceMatrix.needsUpdate = true;
   }
