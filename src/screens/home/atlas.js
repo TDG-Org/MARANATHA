@@ -14,7 +14,7 @@ const SIZE = { major: 94, standard: 64, minor: 44 };
 // screen. Raised to 574 with a tighter wave: the highest stop now sits at
 // y≈513, still a clear 50px BELOW the farthest ridge's crest (y≈462), so every
 // chapter keeps its feet on the hill instead of floating in the sky.
-const ROAD_Y = 574;
+const ROAD_Y = 596; // Nate: a touch lower on the hillside
 const ROAD_WAVE = 46;
 const ROAD_ROLL = 15;
 
@@ -123,7 +123,7 @@ export function buildAtlas(isBuilt) {
   const nodeYs = nodes.map((n) => n.y);
   const pathYs = pts.map((p) => p.y);
   const halfMax = Math.max(...nodes.map((n) => n.size)) / 2;
-  const BED_HALO = 70; // half the widest road-bed stroke, so it is never cut
+  const BED_HALO = 30; // half the widest road-bed stroke, so it is never cut
   const bandTop = Math.round(Math.min(Math.min(...nodeYs) - halfMax - 60, Math.min(...pathYs) - BED_HALO));
   const bandBottom = Math.round(Math.max(Math.max(...nodeYs) + halfMax + 84, Math.max(...pathYs) + BED_HALO));
 
@@ -197,12 +197,30 @@ export function nodeHtml(n) {
 }
 
 // The soft dark bed the road lies on, so the line and the stops read against a
-// busy hillside. Four concentric strokes of the same path fade outwards — a
-// blur's look with none of a blur's cost, and it rasterises once with the road.
+// busy hillside. Concentric strokes of the same path fade outwards — a blur's
+// look with none of a blur's cost, and it rasterises once with the road.
+//
+// It used to be a 132px-wide hard-stepped band with blunt round caps, which
+// read as a black stripe painted across the hillside and stopping dead at both
+// ends. Now it is less than half as wide, and a mask dissolves it into the
+// landscape at the head and tail instead of cutting it off.
+export const BED_WIDTH = 56;
 export function roadBedHtml(d) {
   if (!d) return '';
-  const band = [[132, 0.2], [92, 0.18], [58, 0.2], [30, 0.22]];
-  return band.map(([w, o]) => `<path d="${d}" fill="none" stroke="#01030c" stroke-opacity="${o}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"></path>`).join('');
+  const band = [[BED_WIDTH, 0.17], [38, 0.17], [22, 0.2]];
+  const strokes = band
+    .map(([w, o]) => `<path d="${d}" fill="none" stroke="#01030c" stroke-opacity="${o}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"></path>`)
+    .join('');
+  return `<defs><linearGradient id="mrBedFade" x1="0" x2="1">
+      <stop offset="0" stop-color="#000"></stop>
+      <stop offset="0.06" stop-color="#fff"></stop>
+      <stop offset="0.88" stop-color="#fff"></stop>
+      <stop offset="1" stop-color="#000"></stop>
+    </linearGradient>
+    <mask id="mrBedMask" maskUnits="userSpaceOnUse" x="0" y="0" width="100%" height="100%">
+      <rect x="0" y="0" width="100%" height="100%" fill="url(#mrBedFade)"></rect>
+    </mask></defs>
+    <g mask="url(#mrBedMask)">${strokes}</g>`;
 }
 
 // Where the road is barred. The dark gathers across it and a sign says why, in
@@ -281,9 +299,12 @@ export function particleHtml(counts) {
   });
 
   // Embers rise from the two far camps; each camp gets its own pair of drifts.
+  // Those camps sit at x 2303 and 4606, and the band that holds them is clipped
+  // to roughly 1630px on every screen — so this field has never been visible to
+  // anyone. It stays switched off unless a count is deliberately asked for.
   const camps = [[2303, 657], [4606, 672]];
-  const perCamp = Math.max(2, Math.round(counts.embers / camps.length));
-  out.embers = camps.map(([cx, cy]) => grouped(perCamp, 2, () => {
+  const perCamp = Math.max(2, Math.round((counts.embers || 0) / camps.length));
+  out.embers = !counts.embers ? '' : camps.map(([cx, cy]) => grouped(perCamp, 2, () => {
     const x = Math.round(cx - 8 + r() * 22);
     const y = Math.round(cy - r() * 10);
     const s = r() > 0.66 ? 5 : r() > 0.33 ? 4 : 3;

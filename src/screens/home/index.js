@@ -29,7 +29,24 @@ const DESIGN_W = 1440;
 const DESIGN_H = 810;
 
 // Ambient field sizes at Medium; Graphics.particles() scales them per preset.
-const PARTICLE_BASE = { stars: 64, sparkles: 9, motes: 24, embers: 18, fireflies: 18 };
+//
+// Nate, on the first build: "there just feels like there's TOO much going on,
+// too much flare around the storyline... i can bare[ly] see the camp and the
+// tents and people in the background". The sky and the road verge were doing
+// so much twinkling that the painted world underneath them stopped reading.
+// These are roughly half what the design shipped, and the field that was
+// costing the most attention around the road — the glowing fireflies along the
+// verge — is the one cut hardest.
+//
+// `embers` is 0 deliberately, and it is not a taste call: the ember field
+// targets camps at x 2303 and 4606, while band 3 is clipped to about 1630px on
+// every screen size. Those particles have never once been visible. They were
+// paying for four running animations to render nothing.
+const PARTICLE_BASE = { stars: 34, sparkles: 3, motes: 12, embers: 0, fireflies: 7 };
+
+// How many of the design's three shooting stars survive. They are the single
+// most attention-grabbing thing on a screen that is meant to feel still.
+const SHOOTING_STARS = 1;
 
 const animRe = (name) => new RegExp(`animation:\\s*mr${name}[^;"]*;?`, 'g');
 const strip = (html, name) => html.replace(animRe(name), '');
@@ -47,6 +64,19 @@ function thinAnimations(html, name, keep) {
   if (keep <= 0) return strip(html, name);
   let i = 0;
   return html.replace(animRe(name), (m) => (i++ % keep === 0 ? m : ''));
+}
+
+// Remove whole ELEMENTS, not just their animation.
+//
+// Stripping an animation off a particle leaves the element behind at its
+// authored style — and these particles are drawn by their keyframes, whose 0%
+// is `opacity: 0`. Take the animation away and a drifting smoke puff becomes a
+// solid pale disc sitting on the fire forever. Anything that is only visible
+// while it animates has to be deleted outright.
+function dropElements(html, name, keep = 0) {
+  const re = new RegExp(`<div[^>]*animation:\\s*mr${name}[^>]*>(?:</div>|[\\s\\S]*?</div>\\s*</div>)`, 'g');
+  let i = 0;
+  return html.replace(re, (m) => (i++ < keep ? m : ''));
 }
 
 export function buildHome({ app, params = {} }) {
@@ -81,15 +111,27 @@ export function buildHome({ app, params = {} }) {
   // is the near band, where the plants are big enough for the motion to read —
   // and even that is thinned by preset, because a running animation is a
   // compositor layer.
-  const swayKeep = { low: 0, medium: 2, high: 1 }[Graphics.name] ?? 2;
+  const swayKeep = { low: 0, medium: 3, high: 2 }[Graphics.name] ?? 3;
   const backdrop = thinAnimations(
-    Graphics.name === 'low' ? strip(BACKDROP_HTML, 'Smoke') : BACKDROP_HTML,
+    // Low DELETES the smoke rather than freezing it: a puff with no animation
+    // is a solid pale disc parked on the fire, because its keyframe owns the
+    // opacity. Shooting stars are cut on every preset — one streak reads as
+    // wonder, three read as a screensaver.
+    dropElements(
+      Graphics.name === 'low' ? dropElements(BACKDROP_HTML, 'Smoke') : BACKDROP_HTML,
+      'Shoot',
+      SHOOTING_STARS,
+    ),
     'Sway',
     swayKeep,
   );
 
   const counts = {};
-  for (const [key, base] of Object.entries(PARTICLE_BASE)) counts[key] = Graphics.particles(base);
+  for (const [key, base] of Object.entries(PARTICLE_BASE)) {
+    // A zero base means the field is switched off outright — don't let the
+    // preset's minimum quietly resurrect three of them.
+    counts[key] = base > 0 ? Graphics.particles(base) : 0;
+  }
   const fields = particleHtml(counts);
 
   stage.innerHTML =
@@ -222,6 +264,13 @@ export function buildHome({ app, params = {} }) {
       const b = q(`[data-par="${f}"]`);
       if (b) b.style.color = palette.veg[i] || palette.ridges[i + 1];
     });
+    // Nate: "i can barely see the camp and the tents and people". The camp is
+    // drawn in its band's own silhouette colour, which at night is #080f24
+    // against a #16224a hillside — a difference of about fifteen levels, i.e.
+    // none. The tents are 42px and the people are ten. They are the only sign
+    // of life in the vista, so they get their own lift out of the hillside
+    // rather than sharing the shrubbery's colour.
+    all('[data-campgroup]').forEach((g) => { g.style.color = palette.camp || palette.ridges[3]; });
     const { lum } = palette;
     const place = (sel, w, h) => {
       const el = q(sel);
@@ -336,6 +385,29 @@ export function buildHome({ app, params = {} }) {
   // (viewport + how far it travels at its own parallax factor). Without this
   // the browser holds five 6400px-wide surfaces; with it the far bands are
   // barely wider than the screen.
+  // The design paints a world 6400px wide, but a band only ever shows the slice
+  // clipWorld() gives it — so a second camp at x=2140 inside a band clipped to
+  // 1630 is not "far away", it is UNREACHABLE. Most of the backdrop is in that
+  // state: whole camps, herds, a shepherd, most of the birds, and every one of
+  // their running animations, parsed and laid out and composited to render
+  // nothing at all, on every device, forever. Anything whose own left edge
+  // starts past its band's clip is removed once, on the first layout.
+  let pruned = false;
+  function pruneUnreachable() {
+    if (pruned) return 0;
+    pruned = true;
+    let removed = 0;
+    for (const layer of parallax) {
+      const clip = parseFloat(layer.el.style.width) || Infinity;
+      for (const child of [...layer.el.children]) {
+        if (child.tagName === 'svg') continue; // the band's own hillside
+        const left = parseFloat(child.style.left);
+        if (Number.isFinite(left) && left > clip) { child.remove(); removed += 1; }
+      }
+    }
+    return removed;
+  }
+
   function clipWorld() {
     const travel = Math.abs(minOffset) + 60;
     for (const layer of parallax) {
@@ -407,6 +479,7 @@ export function buildHome({ app, params = {} }) {
     // Only one story exists, so the journey is barred one chapter past it.
     minOffset = Math.min(80, focusX() - gateNode.x);
     clipWorld();
+    pruneUnreachable();
     offset = clampOffset(offset);
     if (selectedId) selectStory(selectedId, false);
     else applyCamera(false);

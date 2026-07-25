@@ -10,6 +10,9 @@ export const PALETTES = {
     sky: 'linear-gradient(180deg,#01020a 0%,#03071a 13%,#061031 26%,#0a1842 39%,#102150 52%,#17284f 63%,#1d2b4a 73%,#222c42 84%,#242a38 94%)',
     ridges: ['#16224a', '#101a3a', '#0a122a', '#06091a', '#02040c'],
     veg: ['#080f24', '#04081a', '#01030c', '#000105'],
+    // The camp silhouette sits ABOVE the vegetation tone: it is the only sign
+    // of life in the vista and must not dissolve into the hillside.
+    camp: '#2c3a63',
     lum: { x: 1200, y: 414, size: 128, glowSize: 640, ring: 250 },
     lumFill: 'radial-gradient(circle at 38% 34%,#ffffff 0%,#fdfeff 48%,#eaf0ff 66%,rgba(226,235,255,.42) 74%,rgba(223,232,255,0) 82%)',
     glowFill: 'radial-gradient(circle,rgba(206,226,255,.42) 0%,rgba(158,192,255,.15) 30%,rgba(140,178,255,0) 64%)',
@@ -24,6 +27,9 @@ export const PALETTES = {
     sky: 'linear-gradient(180deg,#05040f 0%,#0b0722 13%,#170b31 26%,#28103f 39%,#3f1544 52%,#571a41 64%,#75243c 76%,#963a36 88%,#b8583a 96%)',
     ridges: ['#2a1a44', '#1e1234', '#140b26', '#0a0518', '#04020c'],
     veg: ['#150a22', '#0b0416', '#04010a', '#010004'],
+    // The camp silhouette sits ABOVE the vegetation tone: it is the only sign
+    // of life in the vista and must not dissolve into the hillside.
+    camp: '#3a2647',
     lum: { x: 1200, y: 416, size: 122, glowSize: 600, ring: 236 },
     lumFill: 'radial-gradient(circle at 38% 34%,#fffdf8 0%,#faf2ff 46%,#e6dcf8 62%,rgba(230,220,248,.26) 71%,rgba(230,220,248,0) 79%)',
     glowFill: 'radial-gradient(circle,rgba(226,188,255,.26) 0%,rgba(196,152,255,.1) 32%,rgba(190,146,255,0) 66%)',
@@ -38,6 +44,9 @@ export const PALETTES = {
     sky: 'linear-gradient(180deg,#01050c 0%,#04101c 13%,#07202c 26%,#0b3038 39%,#11423e 52%,#1a5147 63%,#2e5c48 74%,#5c6244 86%,#8a6b3f 96%)',
     ridges: ['#123240', '#0d2530', '#081a22', '#041016', '#010709'],
     veg: ['#07171e', '#030d12', '#010609', '#000304'],
+    // The camp silhouette sits ABOVE the vegetation tone: it is the only sign
+    // of life in the vista and must not dissolve into the hillside.
+    camp: '#24404a',
     lum: { x: 1200, y: 418, size: 120, glowSize: 620, ring: 232 },
     lumFill: 'radial-gradient(circle,#fffef8 0%,#fff6de 46%,#ffe8b4 62%,rgba(255,222,158,.28) 71%,rgba(255,214,140,0) 79%)',
     glowFill: 'radial-gradient(circle,rgba(255,222,164,.28) 0%,rgba(255,196,120,.1) 32%,rgba(255,190,110,0) 66%)',
@@ -52,6 +61,9 @@ export const PALETTES = {
     sky: 'linear-gradient(180deg,#071420 0%,#0d2130 13%,#13323f 26%,#1b4550 39%,#265459 52%,#365e58 64%,#4d6a54 78%,#6e7450 90%,#8a7c52 97%)',
     ridges: ['#1c3f4a', '#152f38', '#0e2028', '#071319', '#030a0d'],
     veg: ['#0b1c22', '#051013', '#020809', '#000405'],
+    // The camp silhouette sits ABOVE the vegetation tone: it is the only sign
+    // of life in the vista and must not dissolve into the hillside.
+    camp: '#2b4650',
     lum: { x: 1200, y: 420, size: 110, glowSize: 560, ring: 220 },
     lumFill: 'radial-gradient(circle,#fffefa 0%,#fbf8ec 48%,rgba(248,244,224,0) 74%)',
     glowFill: 'radial-gradient(circle,rgba(236,240,224,.24) 0%,rgba(214,222,204,.08) 34%,rgba(210,218,200,0) 66%)',

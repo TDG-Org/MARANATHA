@@ -25,12 +25,37 @@ export function openSettings({ onReset } = {}) {
     'border:1px solid rgba(242,184,128,0.18)', 'border-radius:16px',
     'box-shadow:0 16px 48px rgba(0,0,0,0.5)', 'color:#fdf6e3',
     'transform:translateY(10px)', 'transition:transform 220ms ease',
+    'position:relative', // the corner dismiss anchors here, not to the backdrop
   ].join(';');
 
   const title = document.createElement('div');
   title.textContent = 'Settings';
   title.style.cssText = 'font-family:Georgia,serif; font-size:22px; margin-bottom:18px; text-align:center;';
   panel.append(title);
+
+  // The dismiss everyone reaches for first. Esc, the backdrop and the bar at
+  // the bottom all still work; this is simply where a person looks.
+  const dismiss = document.createElement('button');
+  dismiss.type = 'button';
+  dismiss.setAttribute('aria-label', 'Close settings');
+  dismiss.textContent = '✕';
+  dismiss.style.cssText = [
+    'position:absolute', 'top:12px', 'right:12px',
+    'width:34px', 'height:34px', 'border-radius:10px', 'padding:0',
+    'display:flex', 'align-items:center', 'justify-content:center',
+    'font:400 16px/1 "Segoe UI",system-ui,sans-serif', 'color:#fdf6e3',
+    'background:transparent', 'border:1px solid rgba(255,255,255,0.14)',
+    'cursor:pointer', 'transition:background 150ms ease,border-color 150ms ease',
+  ].join(';');
+  dismiss.onpointerenter = () => {
+    dismiss.style.background = 'rgba(255,255,255,0.09)';
+    dismiss.style.borderColor = 'rgba(255,232,190,0.55)';
+  };
+  dismiss.onpointerleave = () => {
+    dismiss.style.background = 'transparent';
+    dismiss.style.borderColor = 'rgba(255,255,255,0.14)';
+  };
+  panel.append(dismiss);
 
   // --- a labelled slider row ---
   const sliderRow = (label, getValue, onInput, onChange) => {
@@ -193,6 +218,7 @@ export function openSettings({ onReset } = {}) {
       if (e.key === 'Escape') { e.stopImmediatePropagation(); doClose(); }
     };
     close.onclick = doClose;
+    dismiss.onclick = doClose;
     backdrop.onclick = (e) => { if (e.target === backdrop) doClose(); };
     // capture phase: Settings' Esc wins over any game/pause Esc handling
     window.addEventListener('keydown', onKey, true);
