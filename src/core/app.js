@@ -126,9 +126,16 @@ export function createApp(container) {
     if (hud.el) delete hud.el.dataset.sceneState;
   }
 
+  // A navigation asked for while another is still running is REMEMBERED, not
+  // dropped. A screen change takes about two seconds end to end, and every
+  // button in the game routes through here -- Start Story, About, Support,
+  // the pop-outs' X, the scene's home button. Silently ignoring a press made
+  // those buttons look broken: click Support right after closing About and
+  // nothing happened at all, with no error and nothing to see.
+  let queued = null;
   async function navigate(key, params) {
-    if (busy) return;
     if (!screens.has(key)) { console.warn(`[app] no screen "${key}"`); return; }
+    if (busy) { queued = { key, params }; return; }
     navT = performance.now(); // scene-entry grace: reveals glide at full rate
     busy = true;
     // The loader/veil are CSS-owned. Stop all game callbacks and GPU submits
@@ -207,6 +214,14 @@ export function createApp(container) {
       if (loaderVisible) await loader.hide();
       busy = false;
       if (!paused) loopController?.start();
+    }
+    // Whatever the player asked for while we were working, honour it now.
+    // Only the LAST request survives: pressing three things in a row should
+    // land you where you last pointed, not walk you through all three.
+    if (queued) {
+      const next = queued;
+      queued = null;
+      if (next.key !== current?.key) await navigate(next.key, next.params);
     }
   }
 

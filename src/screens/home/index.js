@@ -385,17 +385,25 @@ export function buildHome({ app, params = {} }) {
   // their running animations, parsed and laid out and composited to render
   // nothing at all, on every device, forever. Anything whose own left edge
   // starts past its band's clip is removed once, on the first layout.
+  // Removal is permanent, so it must NOT be judged against the window the player
+  // happens to have open. A band's clip is `viewRight + travel x factor`, and
+  // viewRight is bounded by the design width however wide the monitor gets
+  // (the stage is cover-scaled). So the threshold is computed from the WIDEST
+  // slice a band could ever show, plus a margin — anything past that is
+  // unreachable on any screen, at any size, forever.
   let pruned = false;
   function pruneUnreachable() {
     if (pruned) return 0;
+    const travel = Math.abs(minOffset) + 60;
+    if (!Number.isFinite(travel)) return 0;
     pruned = true;
     let removed = 0;
     for (const layer of parallax) {
-      const clip = parseFloat(layer.el.style.width) || Infinity;
+      const widestEver = Math.min(atlas.worldW, DESIGN_W + 240 + travel * layer.factor);
       for (const child of [...layer.el.children]) {
         if (child.tagName === 'svg') continue; // the band's own hillside
         const left = parseFloat(child.style.left);
-        if (Number.isFinite(left) && left > clip) { child.remove(); removed += 1; }
+        if (Number.isFinite(left) && left > widestEver) { child.remove(); removed += 1; }
       }
     }
     return removed;

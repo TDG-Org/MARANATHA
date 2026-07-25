@@ -123,13 +123,17 @@ function popout({ app, heading, passage }) {
     card.style.transform = 'translateY(0)';
   });
 
-  let leaving = false;
+  // No one-shot latch, and no retry loop here either. app.navigate() is
+  // busy-guarded but now QUEUES a request made mid-transition, so one call is
+  // always enough. (The obvious `if (leaving) return; leaving = true;` guard was
+  // a trap: opening this pop-out is itself a ~2s navigation, so an early Escape
+  // got refused while the latch had already flipped, and the page could then
+  // never be closed by anything.)
   const leave = () => {
-    if (leaving) return; // a double click must not queue two navigations
-    leaving = true;
     Audio.uiClick?.();
     app.navigate('home');
   };
+
   close.onclick = leave;
   // anywhere outside the card returns to the map
   root.onclick = (e) => { if (e.target === root || behind.contains(e.target)) leave(); };
