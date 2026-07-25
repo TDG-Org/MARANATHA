@@ -77,8 +77,16 @@ Where everything lives. One line per module; folders ordered by how often you'll
 
 ## `screens/` + `data/`
 
-- `screens/home.js` (story map) · `screens/pages.js` (About/Support) ·
-  `screens/playground.js` (#playground test bench)
+- `screens/home/` — the story map: one night road through the whole Bible.
+  DOM/CSS/SVG only (no 3D content), imported from the Claude Design project:
+  - `index.js` — the screen: shell, palette, camera/pan, selection, responsive
+    layout (design-space stage vs viewport-space UI), audio, dispose
+  - `backdrop.js` — GENERATED: the painted night world, verbatim from the
+    design doc. Restyle in the design project and re-import; don't hand-edit
+  - `styles.js` — the design's keyframes + the overlay UI stylesheet
+  - `atlas.js` — where each chapter stands on the road, the road path, and the
+    ambient particle fields · `palettes.js` — the four time-of-day palettes
+- `screens/pages.js` (About/Support) · `screens/playground.js` (#playground test bench)
 - `data/versesWEB.js` (WEB scripture — verified verbatim; + NARRATION + routing table) ·
-  `data/audioManifest.js` (every sound key → file/fallback) · `data/stories.js` (registry)
-  · `data/verses.js` (legacy BSB, 2D scene only)
+  `data/audioManifest.js` (every sound key → file/fallback) · `data/stories.js` (the 35
+  chapters + eras; `sceneKey` marks which are built) · `data/verses.js` (legacy BSB, 2D only)

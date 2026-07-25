@@ -1,5 +1,5 @@
 import { createApp } from './core/app.js';
-import { buildHome } from './screens/home.js';
+import { buildHome } from './screens/home/index.js';
 import { Audio } from './systems/AudioSystem.js';
 import { Settings } from './systems/Settings.js';
 import { Narrator } from './systems/Narrator.js';
