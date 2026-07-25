@@ -96,6 +96,28 @@ function slowFrames(graphics, count) {
   }
   assert.match(stylesSource, /\.mr-still .mr-band \*[^}]*animation-play-state: paused/,
     'the parked-menu class no longer pauses the vista');
+  // The number of point lights in the scene is part of every lit material's
+  // shader cache key. Hiding a light REMOVES it from the light list, so a stage
+  // that toggles visibility makes the whole world recompile its programs the
+  // first time that stage appears — a hitch landing exactly on a cut. Lights
+  // may be dimmed; they may not be hidden.
+  const josephSource = readFileSync(new URL('../src/scenes/joseph3d/index.js', import.meta.url), 'utf8');
+  const pitSource = readFileSync(new URL('../src/scenes/joseph3d/pit.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(josephSource, /light\.visible\s*=/,
+    'a stage hides a light again — that changes the point-light count and recompiles shaders on a cut');
+  assert.match(josephSource, /if \(!campOn\) for \(const f of fireLights\) f\.light\.intensity = 0;/,
+    'off-stage fire lights are no longer dimmed to zero');
+  assert.match(josephSource, /scene\.add\(pit\.shaftLight\)/,
+    'the pit shaft light went back inside the hidden stage group');
+  assert.doesNotMatch(pitSource, /group\.add\(shaftLight\)/,
+    'the pit shaft light is parented to the stage group again');
+
+  // The sky dome writes no depth and sits on the camera, so the default sort
+  // draws it first and every one of its pixels is shaded then painted over.
+  const worldSource = readFileSync(new URL('../src/engine/world.js', import.meta.url), 'utf8');
+  assert.match(worldSource, /mesh\.renderOrder = 999/,
+    'the sky dome no longer draws last — its fill is being shaded and then overdrawn');
+
   const loaderSource = readFileSync(new URL('../src/ui/loader.js', import.meta.url), 'utf8');
   assert.match(loaderSource, /visible && !document\.hidden \? 'running' : 'paused'/,
     'loader animation state does not follow visibility');
