@@ -174,7 +174,7 @@ await assert.rejects(
 }
 
 const appSource = await readFile(new URL('../src/core/app.js', import.meta.url), 'utf8');
-const homeSource = await readFile(new URL('../src/screens/home.js', import.meta.url), 'utf8');
+const homeSource = await readFile(new URL('../src/screens/home/index.js', import.meta.url), 'utf8');
 const josephSource = await readFile(new URL('../src/scenes/joseph3d/index.js', import.meta.url), 'utf8');
 
 assert.match(
@@ -220,20 +220,18 @@ assert.match(
 for (const recoveryText of ['role', 'Try again', 'Reload', 'app.navigate']) {
   assert.ok(homeSource.includes(recoveryText), `home recovery UI is missing ${recoveryText}`);
 }
-assert.match(
-  homeSource,
-  /loadOwnedTexture\('textures\/grass\.jpg',[\s\S]*signal[\s\S]*configure:[\s\S]*texture\.anisotropy[\s\S]*settleOptionalTexture\(grassReady,[\s\S]*fallbackColor: 0x748048[\s\S]*timeoutMs: 3500[\s\S]*cancelGrass\([\s\S]*if \(grassAvailable\) renderer\.initTexture\(grassTex\)[\s\S]*renderer\.compile\(scene, camera\)/,
-  'Home grass does not use abort-owned decode readiness and GPU pre-warm',
-);
+// The home carries no 3D at all any more, so it loads no textures and needs no
+// GPU pre-warm. What still matters is that it never starts audible transports
+// before the app reveals it.
 assert.doesNotMatch(
   homeSource,
-  /new THREE\.TextureLoader\(\)/,
-  'Home bypassed the abort-owned texture loader',
+  /loadOwnedTexture|new THREE\.TextureLoader\(\)|renderer\.compile/,
+  'the flat home regained texture/GPU work',
 );
 {
   const activationIndex = homeSource.indexOf('const activate = () =>');
   const audioStartIndex = homeSource.indexOf('if (Audio.on) startBeds();');
-  const returnedIndex = homeSource.indexOf('return { update, dispose, whenReady, activate }');
+  const returnedIndex = homeSource.indexOf('return { flat: true,');
   assert.ok(
     activationIndex >= 0 && audioStartIndex > activationIndex && returnedIndex > audioStartIndex,
     'Home starts audio during build instead of post-reveal activation',

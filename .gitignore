@@ -29,6 +29,11 @@ IDEAS.md
 CHECKLIST.md
 checklists/
 .claude/
+# Codex reads AGENTS.md + .agents/skills the way Claude reads CLAUDE.md +
+# .claude/skills. Same content, same rule: it carries the vision and the
+# theology strategy, so it stays local with the rest of the juice.
+AGENTS.md
+.agents/
 # Anti-loop experiment ledger — a workflow doc like CHECKLIST/checklists, so it
 # stays local-only too (the public repo is code only). Flagged to the user.
 TRIED.md

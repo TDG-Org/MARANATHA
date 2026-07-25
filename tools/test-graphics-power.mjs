@@ -44,11 +44,21 @@ function slowFrames(graphics, count) {
   for (const event of ['pointerdown', 'keydown', 'wheel', 'touchstart']) {
     assert.match(appSource, new RegExp(`addEventListener\\(['\"]${event}['\"],\\s*noteActivity`));
   }
-  const homeSource = readFileSync(new URL('../src/screens/home.js', import.meta.url), 'utf8');
-  assert.doesNotMatch(homeSource, /animation:\s*[^;'"]*infinite/,
-    'home bypasses the frame governor with an infinite CSS animation');
-  assert.match(homeSource, /for \(const a of animatedNodes\)/,
-    'home node motion is not owned by the governed update loop');
+  // The home is now a flat DOM screen: it submits no GPU frames and runs no
+  // per-frame JS at all. Its motion is CSS, so the power contract moved from
+  // "the governed loop owns it" to "the compositor owns it and can be stopped".
+  const homeSource = readFileSync(new URL('../src/screens/home/index.js', import.meta.url), 'utf8');
+  assert.match(homeSource, /update\(\) \{\}/,
+    'the flat home regained per-frame JS work');
+  // Exactly one rAF is allowed: the single-shot reveal that flips `is-in` after
+  // the first paint. Anything more is a private animation loop running outside
+  // the governor, which is how a "free" menu quietly costs a core.
+  assert.equal(
+    (homeSource.match(/requestAnimationFrame/g) || []).length, 1,
+    'the home gained a private rAF loop outside the frame governor',
+  );
+  assert.match(homeSource, /requestAnimationFrame\(reveal\)/,
+    'the home’s one allowed rAF is no longer the single-shot reveal');
   const loaderSource = readFileSync(new URL('../src/ui/loader.js', import.meta.url), 'utf8');
   assert.match(loaderSource, /visible && !document\.hidden \? 'running' : 'paused'/,
     'loader animation state does not follow visibility');

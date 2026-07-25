@@ -33,7 +33,7 @@ const [
   read('../src/scenes/joseph3d/index.js'),
   read('../src/scenes/joseph3d/pit.js'),
   read('../src/engine/textureLoader.js'),
-  read('../src/screens/home.js'),
+  read('../src/screens/home/index.js'),
 ]);
 
 assert.deepEqual(SCENE1_CANONICAL_ORDER, [
@@ -82,8 +82,13 @@ assert.match(sceneSource, /grassTex = loadTiled\([^;]+THREE\.MirroredRepeatWrapp
   'Scene 1 grass no longer uses seam-safe mirrored wrapping');
 assert.match(sceneSource, /grassTex = loadTiled\('textures\/grass\.jpg', 76, 34,/,
   'Scene 1 grass facets are no longer using the finer approved tiling');
-assert.match(homeSource, /texture\.wrapS = texture\.wrapT = THREE\.MirroredRepeatWrapping/,
-  'Home grass no longer uses seam-safe mirrored wrapping');
+// The home is DOM/CSS/SVG only. `flat` is what lets the app hide the canvas and
+// submit ZERO GPU frames while the menu is up — the single largest idle-power
+// win in the app. It must never regress into a 3D screen by accident.
+assert.match(homeSource, /return \{ flat: true,/,
+  'the home screen no longer declares `flat` — the app would keep rendering GPU frames behind the menu');
+assert.doesNotMatch(homeSource, /from 'three'/,
+  'the home screen imported Three.js again — the flat menu must cost no WebGL work');
 assert.match(
   beatIndexSource,
   /if \(n >= 6\) stageTellingAmbient\(\)/,

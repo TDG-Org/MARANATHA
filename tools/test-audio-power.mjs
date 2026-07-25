@@ -788,7 +788,25 @@ console.log(
   + `actual compressed disk bytes ${(physicallyPresentLoopBytes / 1048576).toFixed(3)} MiB`
   + ' -> runtime explicit loop AudioBuffer allocation 0 MiB at 48 kHz',
 );
-if (physicallyMissingLoops.length) {
-  console.log(`missing optional loop files: ${physicallyMissingLoops.map((entry) => entry.key).join(', ')}`);
+// `available: true` + a `file` path is a PROMISE that the asset ships. When the
+// file is absent the loop silently degrades to a ~0.03-gain procedural pad,
+// which reads as "the music is gone" — exactly how camp_warm.mp3 went missing
+// without a single failing test. A declared asset that is not on disk is a
+// build error, never a warning.
+assert.deepEqual(
+  physicallyMissingLoops.map((entry) => entry.key),
+  [],
+  'manifest declares these looping assets available but the files are missing from public/audio'
+  + ' — either ship the file or set available:false so the fallback is deliberate',
+);
+const availableOneShots = AUDIO_MANIFEST.filter((entry) => (
+  entry.available && !entry.loop && entry.file
+));
+for (const entry of availableOneShots) {
+  const extension = entry.format ?? 'mp3';
+  await assert.doesNotReject(
+    stat(new URL(`../public/audio/${entry.file}.${extension}`, import.meta.url)),
+    `${entry.key} is marked available but audio/${entry.file}.${extension} is missing`,
+  );
 }
 console.log('narrator PCM: all lines retained -> at most 2 decoded lines; compressed bytes remain prefetched');
