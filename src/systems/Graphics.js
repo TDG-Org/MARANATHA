@@ -8,6 +8,12 @@ const PRESET_ORDER = ['low', 'medium', 'high'];
 const AUTO_START_CEILING = 'medium';
 const AUTO_SAMPLE_FRAMES = 600;
 const AUTO_COOLDOWN_FRAMES = 300;
+// Promotion thresholds, in measured update+submit milliseconds against a
+// 16.7ms budget. ~40% average with almost nothing near the budget is a machine
+// with real room, not one that is merely keeping up.
+const PROMOTE_AVG_MS = 7;
+const PROMOTE_SLOW_MS = 12;
+const PROMOTE_SLOW_RATIO = 0.02;
 
 export const GRAPHICS_PRESETS = {
   low: { label: 'Low', dprCap: 1, particleScale: 0.4, contactShadow: false, fogFar: 200, anisotropy: 1 },
@@ -96,6 +102,9 @@ export class GraphicsSystem {
     this.sampleFrames = Math.max(1, sampleFrames);
     this.cooldownFrames = Math.max(0, cooldownFrames);
     this._cooldown = 0;
+    this._s = null;        // cadence window (demotion)
+    this._w = null;        // measured-work window (promotion)
+    this._promoted = false; // at most one automatic step up per session
     this.subs = new Set();
   }
 
@@ -117,6 +126,7 @@ export class GraphicsSystem {
     this.name = name;
     this.provenance = 'explicit';
     this._s = null;
+    this._w = null;
     this._cooldown = 0;
     writeKey(this.storage, KEY, name);
 
@@ -154,6 +164,47 @@ export class GraphicsSystem {
 
     const next = nextLowerGraphicsPreset(this.name);
     if (next === this.name) return;
+    const previous = this.name;
+    this.name = next;
+    this._cooldown = this.cooldownFrames;
+    writeKey(this.storage, AUTO_KEY, next);
+    this._notify({ source: 'auto', previous, name: next });
+  }
+
+  // The other half of "auto picks what your machine can handle".
+  //
+  // sampleFrame() above judges CADENCE, which can only ever demote — a paced
+  // 60fps stream reads 16.7ms per frame whether the work took 3ms or 15ms, so
+  // dt genuinely cannot prove headroom (that is why D16 removed promotion).
+  // Measured WORK can. A machine that renders and submits a whole frame in a
+  // third of its budget is not being served by Medium, and before this the only
+  // way it ever reached High was the player finding the setting by hand.
+  //
+  // Deliberately timid: a big margin, a long window, ONE promotion per session,
+  // never on a phone, never over an explicit choice — and the cadence demotion
+  // above remains the safety net if the new tier turns out to be too much.
+  sampleWork(ms) {
+    if (!this.autoDetected || this._promoted || !Number.isFinite(ms)) return;
+    if (this.name === PRESET_ORDER[PRESET_ORDER.length - 1]) return;
+    if (this._cooldown > 0) return;
+    const nav = globalThis.navigator || {};
+    if (/Android|iPhone|iPad|Mobi/i.test(nav.userAgent || '')) return;
+
+    const w = this._w || (this._w = { n: 0, totalMs: 0, slow: 0 });
+    w.n += 1;
+    w.totalMs += ms;
+    if (ms > PROMOTE_SLOW_MS) w.slow += 1;
+    if (w.n < this.sampleFrames) return;
+
+    const averageMs = w.totalMs / w.n;
+    const slowRatio = w.slow / w.n;
+    this._w = null;
+    if (averageMs > PROMOTE_AVG_MS || slowRatio > PROMOTE_SLOW_RATIO) return;
+
+    const index = PRESET_ORDER.indexOf(this.name);
+    const next = PRESET_ORDER[index + 1];
+    if (!next) return;
+    this._promoted = true;
     const previous = this.name;
     this.name = next;
     this._cooldown = this.cooldownFrames;

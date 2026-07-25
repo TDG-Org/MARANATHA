@@ -5,15 +5,30 @@ import { createFramePacer } from './framePacer.js';
 // One renderer for the whole game. No real-time shadows (per the
 // performance mandate — lighting is painted into materials and fog),
 // so the renderer stays as cheap as WebGL allows.
-// D12 power: the GPU PICK follows the Graphics preset — this painterly load
-// (≤100 draws, ≤120k tris, unlit/toon) runs great on an integrated GPU, and
-// on dual-GPU laptops 'high-performance' would spin up the discrete chip
-// (fans + battery) for nothing. High is the deliberate opt-in. The context
-// is created once, so a preset change applies on the next reload.
+// THE GPU PICK.
+//
+// D12 asked for 'low-power' on anything but an explicit High, reasoning that a
+// painterly ≤100-draw scene does not need a discrete chip. Combined with D16
+// capping automatic quality at Medium and never promoting, that had a
+// consequence nobody intended: **a gaming PC ran the whole game on its
+// integrated GPU, forever**, unless the player happened to open Settings and
+// pick High by hand. On a desktop whose monitor hangs off the discrete card,
+// that is not merely slower — every frame is rendered on the weak chip and then
+// copied across. It is the difference between 25fps and a locked 60.
+//
+// 'default' is the correct request for an unknown machine: the browser already
+// knows whether it is on mains or battery, which GPU drives the display, and
+// what the OS power profile says. We only override it when we actually know
+// better than the browser does:
+//   · explicit High  -> 'high-performance' (the player asked for the good one)
+//   · Low, or a phone -> 'low-power' (battery and heat are the real budget)
+// The context is created once, so a preset change applies on the next reload.
 export function rendererPowerPreference(graphics = Graphics) {
-  return graphics?.provenance === 'explicit' && graphics?.name === 'high'
-    ? 'high-performance'
-    : 'low-power';
+  if (graphics?.provenance === 'explicit' && graphics?.name === 'high') return 'high-performance';
+  const nav = globalThis.navigator || {};
+  const mobile = /Android|iPhone|iPad|Mobi/i.test(nav.userAgent || '');
+  if (graphics?.name === 'low' || mobile) return 'low-power';
+  return 'default';
 }
 
 // Low is the explicit/budget-device preset: at its 1x DPR, disabling MSAA

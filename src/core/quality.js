@@ -113,6 +113,26 @@ export class DebugHud {
     if (this.el) this.el.style.display = this.enabled ? 'block' : 'none';
   }
 
+  // WHICH CHIP ACTUALLY GOT THE CONTEXT.
+  //
+  // The game once asked the browser for a 'low-power' GPU on every machine that
+  // had not explicitly chosen High — so a gaming PC quietly ran the entire game
+  // on its integrated graphics and there was no way to tell from the outside.
+  // A slow frame and a slow *chip* look identical in an fps counter; this line
+  // is what tells them apart, so it stays on the HUD.
+  _gpu() {
+    if (this._gpuName !== undefined) return this._gpuName;
+    this._gpuName = '(unknown)';
+    try {
+      const gl = this.renderer.getContext();
+      const ext = gl.getExtension('WEBGL_debug_renderer_info');
+      const raw = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : '';
+      // Driver strings are long and bracket-heavy: keep the useful middle.
+      if (raw) this._gpuName = String(raw).replace(/^ANGLE \(|\)$/g, '').slice(0, 58);
+    } catch { /* the extension is optional; the HUD survives without it */ }
+    return this._gpuName;
+  }
+
   frame(dtMs, updMs = 0, subMs = 0, eco = false) {
     if (!this.enabled || !this.el) return;
     this.acc += dtMs;
@@ -140,7 +160,8 @@ export class DebugHud {
         `fps ${this.fps}  (${this.ms} ms)${eco2}\n` +
         `script ${upd} ms · submit ${sub} ms\n` +
         `draw calls ${info.render.calls}  tris ${info.render.triangles}\n` +
-        `pixelRatio ${this.renderer.getPixelRatio().toFixed(2)}`;
+        `pixelRatio ${this.renderer.getPixelRatio().toFixed(2)}\n` +
+        `gpu ${this._gpu()}`;
     }
   }
 }

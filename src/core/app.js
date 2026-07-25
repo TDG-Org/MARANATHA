@@ -300,7 +300,15 @@ export function createApp(container) {
     // frame is design, not a struggling device, and must never shed DPR.
     // Same rule for the Graphics auto-tuner: it judges the machine on
     // full-rate frames alone, and only while the preset is still auto.
-    if (!busy && !paused && fps >= 60) { quality.frame(dt); Graphics.sampleFrame(dt); }
+    if (!busy && !paused && fps >= 60) {
+      quality.frame(dt);
+      Graphics.sampleFrame(dt);
+      // Cadence (dt) can prove a machine is STRUGGLING but never that it has
+      // room to spare: a paced 60fps stream reads 16.7ms whether the frame took
+      // 3ms or 15ms. Actual work does prove it, so promotion is judged on the
+      // update+submit time the HUD already measures.
+      Graphics.sampleWork(updMs + subMs);
+    }
     if (exposeDebugState && hud.el) {
       debugStateAcc += dt;
       if (debugStateAcc >= 250) {

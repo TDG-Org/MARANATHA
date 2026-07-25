@@ -181,9 +181,54 @@ function slowFrames(graphics, count) {
   assert.equal(detected.contactShadow, true,
     'default Medium lost the one-draw character grounding cue');
   assert.equal(detected.anisotropy, 4, 'default Medium lost signed-off ground filtering');
-  assert.equal(rendererPowerPreference(detected), 'low-power');
+  // An unknown desktop must ask for 'default', NOT 'low-power'. Forcing
+  // low-power handed a gaming PC's whole game to its integrated GPU and there
+  // was no way to see it from the outside — the browser already knows about
+  // mains/battery, the display's GPU, and the OS power profile.
+  assert.equal(rendererPowerPreference(detected), 'default',
+    'an unknown desktop is being forced onto low-power graphics again');
+  assert.equal(rendererPowerPreference({ name: 'low', provenance: 'auto' }), 'low-power',
+    'the Low preset should still ask for the efficient GPU');
+  assert.equal(rendererPowerPreference({ name: 'high', provenance: 'explicit' }), 'high-performance',
+    'an explicit High no longer asks for the fast GPU');
+
   for (let i = 0; i < 20; i += 1) detected.sampleFrame(5);
   assert.equal(detected.name, 'medium', 'paced fast deltas must never promote');
+
+  // ...but MEASURED WORK may. A machine finishing a frame in a third of its
+  // budget is not being served by Medium, and before this the only route up was
+  // the player finding the setting by hand.
+  const roomy = new GraphicsSystem({
+    storage: new MemoryStorage(), detectedPreset: 'high', sampleFrames: 4, cooldownFrames: 0,
+  });
+  assert.equal(roomy.name, 'medium');
+  for (let i = 0; i < 4; i += 1) roomy.sampleWork(3.2);
+  assert.equal(roomy.name, 'high', 'a machine with obvious headroom never reached High');
+  assert.equal(roomy.provenance, 'auto', 'an automatic promotion must not masquerade as a player choice');
+  for (let i = 0; i < 8; i += 1) roomy.sampleWork(3.2);
+  assert.equal(roomy.name, 'high', 'promotion must happen at most once per session');
+
+  // A machine that is merely keeping up must be left alone.
+  const busy = new GraphicsSystem({
+    storage: new MemoryStorage(), detectedPreset: 'high', sampleFrames: 4, cooldownFrames: 0,
+  });
+  for (let i = 0; i < 12; i += 1) busy.sampleWork(11);
+  assert.equal(busy.name, 'medium', 'a frame already using most of its budget was promoted anyway');
+
+  // One near-budget frame in the window is enough to stand down.
+  const spiky = new GraphicsSystem({
+    storage: new MemoryStorage(), detectedPreset: 'high', sampleFrames: 4, cooldownFrames: 0,
+  });
+  spiky.sampleWork(3); spiky.sampleWork(3); spiky.sampleWork(3); spiky.sampleWork(13);
+  assert.equal(spiky.name, 'medium', 'an occasional heavy frame did not block promotion');
+
+  // A hand-picked preset is sacred in both directions.
+  const chosen = new GraphicsSystem({
+    storage: new MemoryStorage(), detectedPreset: 'high', sampleFrames: 4, cooldownFrames: 0,
+  });
+  chosen.set('medium');
+  for (let i = 0; i < 12; i += 1) chosen.sampleWork(2);
+  assert.equal(chosen.name, 'medium', 'automatic promotion overrode an explicit player choice');
 
   const storage = new MemoryStorage({ 'maranatha-graphics-auto': 'high' });
   const remembered = new GraphicsSystem({ storage, detectedPreset: 'low' });
@@ -351,8 +396,11 @@ for (const hz of [60, 85, 90, 120, 140, 144, 165, 240]) {
   quality.set(1);
   graphics.set('high');
   assert.equal(quality.ratio, 2, 'reselecting explicit High may restore its full DPR');
-  assert.equal(rendererPowerPreference({ name: 'high', provenance: 'auto' }), 'low-power');
-  assert.equal(rendererPowerPreference({ name: 'medium', provenance: 'explicit' }), 'low-power');
+  // High is only *requested* when the player asked for it; an automatic High
+  // still leaves the choice of chip to the browser rather than forcing either
+  // extreme. Medium likewise — 'low-power' is reserved for Low and for phones.
+  assert.equal(rendererPowerPreference({ name: 'high', provenance: 'auto' }), 'default');
+  assert.equal(rendererPowerPreference({ name: 'medium', provenance: 'explicit' }), 'default');
   assert.equal(rendererAntialias({ name: 'high' }), true);
   assert.equal(rendererAntialias({ name: 'medium' }), true);
   assert.equal(rendererAntialias({ name: 'low' }), false,
