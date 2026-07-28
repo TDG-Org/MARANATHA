@@ -502,6 +502,10 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
   // particles, flock, ambient AI, fire lights and camp ambience all stay asleep,
   // so a backdrop costs a handful of static draws rather than a second scene.
   ctx.setDistantCamp = (on) => { camp.group.visible = !!on; };
+  // At the summit the world terrain sinks far below the cloud sea, so the
+  // celestial bow plays against sky alone (see dreamField's onSummit note).
+  const GROUND_Y = ground.position.y;
+  dream.onSummit = (on) => { ground.position.y = on ? GROUND_Y - 40 : GROUND_Y; };
 
   // --- sheep (independent of GLB load) ---
   // The 3 stray LAMBS sit DEEP in the camp, all WEST/SW of the pen in open

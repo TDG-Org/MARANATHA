@@ -391,6 +391,13 @@ export function makeTellingBeats(ctx, h) {
       { t: 'fade', on: true, ms: 1800 },
       { t: 'fn', fn: () => ctx.joseph.setGrief(false) },
       { t: 'title', heading: 'To be continued', sub: 'Genesis 37:12–17 — the road to Dothan', holdMs: 4200 },
+      // Hand the black over cleanly. finish() navigates, and navigation fades
+      // its own veil in over whatever is on screen — so leaving immediately
+      // meant a second black dissolving on top of the title card that had not
+      // finished leaving. Half a second of settled black and the only visible
+      // transition is the map fading up. (Nate: "the ending of every scene
+      // should fade smoothly back to the homepage".)
+      { t: 'wait', ms: 520 },
     ]);
     ctx.finish?.();
   }

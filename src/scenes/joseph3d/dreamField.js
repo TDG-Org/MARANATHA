@@ -557,7 +557,19 @@ export function buildDreamField() {
 
   // field elements that HIDE when we cut to the summit (they were dream 1)
   const fieldEls = [disc, wheat, center, ...outer, ...fogBanks, ...groundMist, beam, moonDisc, mountainGroup, cairns, fireflyPts, motes, borderBush, borderRock, floatRocks, floatHalos];
-  const setSummit = (on) => { summitGroup.visible = on; fieldEls.forEach((e) => { e.visible = !on; }); };
+  // The scene wires this so the summit can sink the WORLD ground out of frame.
+  // Nate: "when the stars moon and sun bow to him, hide the grass a little
+  // more, push it down or something to show more of the joseph and the stars!"
+  // The field's own grass already hides here, but the global terrain does not —
+  // it belongs to the camp — and from the peak it still crept into the bottom of
+  // the frame under a shot that should be nothing but a boy and the sky. The
+  // cloud sea is the floor of this moment.
+  let onSummitChange = null;
+  const setSummit = (on) => {
+    summitGroup.visible = on;
+    fieldEls.forEach((e) => { e.visible = !on; });
+    onSummitChange?.(on);
+  };
 
   let skyState = 0; // 0 idle · 1 descending (→mid) · 2 bowing (→low)
   const dampStep = (dt, rate) => 1 - Math.exp(-Math.max(0, dt) * rate);
@@ -569,6 +581,7 @@ export function buildDreamField() {
   return {
     group, FIELD, center, outer, sun, moon, stars, beam, SUMMIT_Y,
     showSummit: setSummit,
+    set onSummit(fn) { onSummitChange = fn; },
     // the moon shaft over the wheat field (dream 1)
     showMoon(k) { beam.material.opacity = k * 0.22; moonDisc.material.opacity = k * 0.9; },
     showSky(k) { setOpacity(k); },

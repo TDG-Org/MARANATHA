@@ -289,11 +289,41 @@ export function makeCampBeats(ctx, h) {
           // Land the full verse where its flock/report action has just been
           // enacted instead of announcing Joseph's report before the player
           // performs it during the opening pan.
-          await seq([
-            { t: 'letterbox', on: true },
-            { t: 'verse', verse: WEB.gen_37_2 },
-            { t: 'verseHide' },
-          ]);
+          // THE HISTORY IS ABOUT THE CAMP, SO SHOW THE CAMP.
+          //
+          // Nate: "have the camera show other parts around the camp or
+          // something when the narrator starts talking about the history a
+          // little, then cut to the next part where joseph and his father are
+          // in the tent!" This verse names Jacob's household, Joseph's age, the
+          // flock and his brothers — holding on two men standing still while it
+          // reads was the least interesting frame available.
+          //
+          // A slow inward orbit of the camp's populated heart runs UNDER the
+          // narration. The arc was measured, not chosen: looking in at the
+          // centre scores 251-347 weighted props and people from every angle,
+          // and -90 to -150 degrees is the richest stretch (331 -> 326, peaking
+          // 347). The beat then ends and the coat cuts to the tent interior.
+          let tourT = 0;
+          const TOUR = 18000;
+          const LOOK = { x: 0.5, y: 1.4, z: -3.0 };
+          ctx.camera.setPoseDriver((pose, dt) => {
+            tourT = Math.min(TOUR, tourT + dt);
+            const k = tourT / TOUR;
+            const e = k * k * (3 - 2 * k); // ease both ends — no start/stop jolt
+            const a = (-90 - 60 * e) * Math.PI / 180;
+            const r = 15 - 3.5 * e;
+            pose.pos.set(LOOK.x + Math.sin(a) * r, 6.2 - 1.2 * e, LOOK.z + Math.cos(a) * r);
+            pose.look.set(LOOK.x, LOOK.y, LOOK.z);
+          });
+          try {
+            await seq([
+              { t: 'letterbox', on: true },
+              { t: 'verse', verse: WEB.gen_37_2 },
+              { t: 'verseHide' },
+            ]);
+          } finally {
+            ctx.camera.setPoseDriver(null);
+          }
           resolve();
         },
       });
@@ -379,6 +409,10 @@ export function makeCampBeats(ctx, h) {
         jac.char.play('talk'); // the offering gesture
         await wait(1250);
         ctx.joseph.setCoat(true);       // the tunic settles over his shoulders
+        // The state line is not decoration — it is how a player who cannot
+        // read a low-poly face knows what the scene means. Every emotional
+        // turn raises one, and this is the only happy moment in the chapter.
+        ctx.hud.emote('Joseph is happy');
         ctx.sound('sfx.cloth_equip');
         ctx.sound('stinger.coat_gift');
         ctx.sparkle(4);
@@ -470,6 +504,14 @@ export function makeCampBeats(ctx, h) {
       { t: 'dialogueHide' },
       { t: 'verse', verse: WEB.gen_37_4 },
       { t: 'verseHide' },
+      // FORESHADOW. Nate: "right before that scene ends, have a badge pop up
+      // showing 'joseph feels something bad coming up' or something". The
+      // player has just watched two brothers turn against him while he was
+      // inside the tent, unaware — this is the only way he learns that Joseph
+      // senses it, and it makes the dream that follows land as a warning
+      // rather than a non sequitur.
+      { t: 'fn', fn: () => ctx.hud.emote('Joseph senses something is wrong', 3400) },
+      { t: 'hold', ms: 900 },
       { t: 'fn', fn: () => {
         ctx.npcs.freeze(ctx.cast.judah, false);
         ctx.npcs.freeze(ctx.cast.reuben, false);
