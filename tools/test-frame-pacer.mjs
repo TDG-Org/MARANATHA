@@ -3,15 +3,33 @@ import { createFramePacer, snapToRefresh } from '../src/core/framePacer.js';
 
 const SOURCE_RATES = [60, 75, 90, 120, 144, 165, 240];
 
+// A REAL DISPLAY IS NOT A METRONOME. rAF timestamps wobble by a fraction of a
+// millisecond, and the first version of this test drove a perfect stream — so it
+// passed while the pacer's period estimator (the minimum of a window, which a
+// jittered sample biases LOW by twice the jitter) mis-measured a 144Hz panel as
+// ~168Hz and collapsed the pacing to 48fps with a 16ms spread. WORSE than the
+// judder the change existed to remove, and green the whole time.
+//
+// Every case below therefore runs with jitter, and a deterministic generator so
+// a failure is reproducible.
+let rngState = 12345;
+const jitterRnd = () => {
+  rngState = (rngState * 1103515245 + 12345) & 0x7fffffff;
+  return rngState / 0x7fffffff;
+};
+
 // `observe` is what teaches the pacer the panel's period, exactly as the loop
 // does on every chained rAF callback.
-function run(sourceHz, targetFps, seconds = 10, { measure = true, allowOvershoot = true } = {}) {
+function run(sourceHz, targetFps, seconds = 10, {
+  measure = true, allowOvershoot = true, jitter = 0,
+} = {}) {
   const pacer = createFramePacer(0);
   pacer.allowOvershoot = allowOvershoot;
   const step = 1000 / sourceHz;
-  const duration = seconds * 1000;
+  const frames = Math.round((seconds * 1000) / step);
   const times = [];
-  for (let now = step; now <= duration + 0.001; now += step) {
+  for (let f = 1; f <= frames; f++) {
+    const now = f * step + (jitterRnd() - 0.5) * 2 * jitter;
     if (measure) pacer.observe(now, true);
     if (pacer.advance(now, targetFps)) times.push(now);
   }
@@ -39,30 +57,124 @@ function run(sourceHz, targetFps, seconds = 10, { measure = true, allowOvershoot
 console.log('display  request  ->  paced      frame gaps');
 for (const sourceHz of SOURCE_RATES) {
   for (const targetFps of [30, 60]) {
-    const r = run(sourceHz, targetFps);
+    const clean = run(sourceHz, targetFps);
     assert.equal(
-      r.displayHz, sourceHz,
-      `pacer measured ${r.displayHz}Hz on a ${sourceHz}Hz stream`,
+      clean.displayHz, sourceHz,
+      `pacer measured ${clean.displayHz}Hz on a ${sourceHz}Hz stream`,
     );
+    // Jitter may only ever show up as jitter. The frame must still land on the
+    // SAME whole multiple of the refresh, and the extra spread must be the
+    // display's own wobble (a uniform +-j on both ends of a gap spans up to 4j)
+    // rather than the pacer admitting the wrong refresh.
+    // Jitter is a property of the panel, so it is expressed as a FRACTION of
+    // that panel's refresh period (1.2ms means nothing on a 240Hz display —
+    // that is a third of a refresh, and no pacer can place a frame correctly
+    // when the timestamps are that wrong). The hard limit is a quarter of a
+    // period: a gap carries the wobble of BOTH its endpoints, and the admission
+    // window is half a refresh, which is the widest it can be without letting
+    // the neighbouring refresh through.
+    for (const share of [0, 0.05, 0.12]) {
+      const jitter = share * (1000 / sourceHz);
+      const r = run(sourceHz, targetFps, 8, { jitter });
+      assert.ok(
+        r.fps >= targetFps * 0.7,
+        `${sourceHz}Hz -> ${targetFps}fps (+-${jitter.toFixed(2)}ms) paced down to ${r.fps.toFixed(1)}fps`,
+      );
+      const perFrame = sourceHz / r.fps;
+      assert.ok(
+        Math.abs(perFrame - Math.round(perFrame)) < 0.02,
+        `${sourceHz}Hz -> ${r.fps.toFixed(1)}fps (+-${jitter.toFixed(2)}ms jitter) is ${perFrame.toFixed(2)} refreshes `
+        + 'per frame, not a whole number — the period estimate is being fooled by jitter',
+      );
+      assert.ok(
+        r.spread <= 4 * jitter + 0.35,
+        `${sourceHz}Hz -> ${targetFps}fps juddered beyond its +-${jitter.toFixed(2)}ms jitter: spread ${r.spread.toFixed(2)}ms`,
+      );
+      if (jitter === 0) {
+        console.log(
+          `${String(sourceHz).padStart(4)}Hz  ${String(targetFps).padStart(3)}fps  ->  `
+          + `${r.fps.toFixed(1).padStart(5)}fps  (every ${Math.round(perFrame)} refresh, spread ${r.spread.toFixed(1)}ms)`,
+        );
+      }
+    }
+  }
+}
+
+// BEYOND THE OPERATING LIMIT, DEGRADE — NEVER RUN AWAY.
+//
+// A quarter of a refresh is the hard ceiling (a gap carries the wobble of both
+// endpoints, and the admission window can be at most half a refresh without
+// letting the neighbouring refresh in), and the divisor multiplies the period's
+// estimation error on top of that. Past ~a fifth of a period the occasional
+// frame lands on the wrong refresh. A display wobbling that much is not
+// delivering steady frames anyway; what matters is that the pacer keeps
+// roughly the right rate instead of collapsing or spiralling.
+for (const sourceHz of [120, 240]) {
+  for (const targetFps of [30, 60]) {
+    const r = run(sourceHz, targetFps, 8, { jitter: 0.28 * (1000 / sourceHz) });
     assert.ok(
-      r.spread < 0.001,
-      `${sourceHz}Hz -> ${targetFps}fps still juddered: frame gaps span ${r.spread.toFixed(1)}ms`,
+      r.fps >= targetFps * 0.7 && r.fps <= sourceHz * 1.02,
+      `${sourceHz}Hz at severe jitter ran away to ${r.fps.toFixed(1)}fps`,
     );
-    // Never below 70% of what was asked for, and a whole multiple of a refresh.
+    // Past the limit a frame can be MISSED, and a missed frame costs a whole
+    // interval, not a refresh. One is tolerable; a pile-up is not.
     assert.ok(
-      r.fps >= targetFps * 0.7,
-      `${sourceHz}Hz -> ${targetFps}fps paced down to ${r.fps.toFixed(1)}fps`,
-    );
-    const perFrame = sourceHz / r.fps;
-    assert.ok(
-      Math.abs(perFrame - Math.round(perFrame)) < 0.01,
-      `${sourceHz}Hz -> ${r.fps.toFixed(1)}fps is ${perFrame.toFixed(2)} refreshes per frame, not a whole number`,
-    );
-    console.log(
-      `${String(sourceHz).padStart(4)}Hz  ${String(targetFps).padStart(3)}fps  ->  `
-      + `${r.fps.toFixed(1).padStart(5)}fps  (every ${Math.round(perFrame)} refresh, spread ${r.spread.toFixed(1)}ms)`,
+      r.spread <= (1000 / targetFps) * 1.15,
+      `${sourceHz}Hz at severe jitter lost more than one frame in a row (spread ${r.spread.toFixed(2)}ms)`,
     );
   }
+}
+
+// A tie in the snapping must not flap. Eco 30 on a 165Hz panel is EXACTLY as
+// far from every 5th refresh (33fps) as from every 6th (27.5fps); a measurement
+// wobbling by a hundredth of a millisecond used to flip the choice back and
+// forth, and every flip re-anchored the deadline (measured: a 7-10ms spread in
+// an otherwise even stream).
+{
+  const tie = run(165, 30, 8, { jitter: 0.5 });
+  assert.ok(tie.spread <= 2.4, `a tied divisor flapped under jitter: spread ${tie.spread.toFixed(2)}ms`);
+}
+
+// A pause resets the deadline. The chosen divisor has to be invalidated with
+// it, or the next frame reuses an interval of zero and lets EVERY refresh
+// through (measured: a resume paced 144 instead of 72).
+{
+  const pacer = createFramePacer(0);
+  let now = 0;
+  for (let f = 0; f < 200; f++) { now += 1000 / 144; pacer.observe(now, true); pacer.advance(now, 60); }
+  pacer.reset(now);
+  let ticks = 0;
+  for (let f = 0; f < 144 * 2; f++) {
+    now += 1000 / 144;
+    pacer.observe(now, true);
+    if (pacer.advance(now, 60)) ticks += 1;
+  }
+  assert.ok(
+    Math.abs(ticks / 2 - 72) <= 2,
+    `after a pause the pacer ran at ${(ticks / 2).toFixed(1)}fps instead of 72`,
+  );
+}
+
+// The panel can change under a running session (a window dragged to another
+// monitor). The estimate must follow it and settle even again.
+{
+  const pacer = createFramePacer(0);
+  let now = 0;
+  for (let f = 0; f < 144 * 4; f++) { now += 1000 / 144; pacer.observe(now, true); pacer.advance(now, 60); }
+  const times = [];
+  for (let f = 0; f < 60 * 8; f++) {
+    now += 1000 / 60;
+    pacer.observe(now, true);
+    if (pacer.advance(now, 60)) times.push(now);
+  }
+  assert.equal(pacer.displayHz, 60, `pacer stayed on the old panel (${pacer.displayHz}Hz)`);
+  const gaps = [];
+  for (let i = 1; i < times.length; i++) gaps.push(times[i] - times[i - 1]);
+  const settled = gaps.slice(-120);
+  assert.ok(
+    Math.max(...settled) - Math.min(...settled) < 0.01,
+    'the pacer never settled evenly after the display rate changed',
+  );
 }
 
 // A capable desktop asking for its panel's own rate gets exactly that.

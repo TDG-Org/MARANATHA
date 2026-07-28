@@ -106,6 +106,30 @@ function slowFrames(graphics, count) {
     }
   }
 
+  // The hover light is MARKUP in atlas.js and a SELECTOR in styles.js. A typo in
+  // either leaves the stops with no hover feedback at all and nothing to see —
+  // the same silent-failure shape as a pose driver that never runs. Check they
+  // still refer to the same thing, and that the paint-y version is gone.
+  {
+    const { nodeHtml } = await import('../src/screens/home/atlas.js');
+    const markup = nodeHtml({
+      id: 'joseph', ord: 'I', title: 'Joseph', passage: 'Gen 37', era: 'patriarchs',
+      size: 44, x: 100, y: 200, tier: 'major', status: 'todo', built: true,
+      reachable: true, blurb: '',
+    });
+    assert.match(markup, /data-hoverglow="1"/, 'chapter stops lost their hover light');
+    assert.match(markup, /data-hoverglow[^>]*transition:opacity/, 'the hover light no longer fades');
+    assert.doesNotMatch(markup, /brightness/, 'a brightness filter came back onto the stops');
+    assert.match(
+      stylesSource, /\.mr-node:hover \[data-hoverglow\][^{]*\{[^}]*opacity: *1/,
+      'the stylesheet no longer lights the hover glow it is paired with',
+    );
+    assert.doesNotMatch(
+      stylesSource, /\.mr-node:hover[^{]*\{[^}]*filter:/,
+      'the chapter stops hover with a filter again',
+    );
+  }
+
   // The road's dashes may never march again: the generated backdrop still ships
   // the design's mrDash, so the screen has to keep rewriting it on the way in.
   assert.match(homeSource, /animRe\('Dash'\), 'animation:mrShimmer/,
