@@ -24,6 +24,7 @@ const [
   pitSource,
   textureLoaderSource,
   homeSource,
+  dreamFieldSource,
 ] = await Promise.all([
   read('../src/scenes/joseph3d/beats/dream.js'),
   read('../src/scenes/joseph3d/beats/telling.js'),
@@ -34,6 +35,7 @@ const [
   read('../src/scenes/joseph3d/pit.js'),
   read('../src/engine/textureLoader.js'),
   read('../src/screens/home/index.js'),
+  read('../src/scenes/joseph3d/dreamField.js'),
 ]);
 
 assert.deepEqual(SCENE1_CANONICAL_ORDER, [
@@ -557,6 +559,15 @@ assert.match(
   );
 }
 assert.match(tellingSource, /Enough, Joseph\. What is this dream you have dreamed\?/);
+// Nate asked for the NEAR rocks to bounce three separate times before the right
+// ones were found: the magical stones at r 17.5+ always bobbed, but the border
+// boulders at r ~14.3-15.4 — the ones actually in his eyeline — were written
+// once at build and never touched again. Both must animate, and the boulders
+// must never dip through the ground.
+assert.match(dreamFieldSource, /writeBorderRocks\(t\)/,
+  'the dream border boulders stopped animating — the near rocks are stationary again');
+assert.match(dreamFieldSource, /const rise = 0\.45 \+ rnd\(\) \* 0\.4;[\s\S]*rise \+ 0\.45 \+ rnd\(\) \* 0\.45/,
+  'the border boulder arc no longer guarantees its hover exceeds its rise (they would sink through the ground)');
 assert.match(dreamSource, /setNameTagSuppressed\?\.\(ctx\.joseph, true\)/);
 assert.match(dreamSource, /ctx\.sunSprite\.visible = false/);
 assert.match(
