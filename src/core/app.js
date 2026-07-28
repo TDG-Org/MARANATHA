@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { createRenderer, startLoop } from './renderer.js';
-import { detectTier, AdaptiveQuality, DebugHud } from './quality.js';
+import { detectTier, AdaptiveQuality, DebugHud, RateGovernor } from './quality.js';
 import { disposeDeep } from './dispose.js';
 import { createVeil } from '../ui/veil.js';
 import { createLoader } from '../ui/loader.js';
@@ -245,17 +245,40 @@ export function createApp(container) {
   let lastInput = performance.now();
   let navT = performance.now();
   let liveFps = 60; // what the loop actually ran this tick (for #debug honesty)
+  let requestedFps = 60; // what the governor ASKED for (eco vs full rate)
   const noteActivity = () => { lastInput = performance.now(); };
   window.addEventListener('pointerdown', noteActivity, { passive: true });
   window.addEventListener('keydown', noteActivity, { passive: true });
   window.addEventListener('wheel', noteActivity, { passive: true });
   window.addEventListener('touchstart', noteActivity, { passive: true });
-  const targetFps = () => {
+
+  // ── THE FULL-RATE CEILING ──────────────────────────────────────────────────
+  //
+  // The game used to be hard-capped at 60 everywhere. On the 144Hz panel a
+  // gaming PC actually has, 60 is not even a rate the display can serve evenly
+  // (16.7ms is 2.4 refreshes), so the cap bought no smoothness AND left more
+  // than half the machine's frames on the table. Full rate is now the panel's
+  // own rate, up to a sane ceiling, and the pacer snaps it to a whole multiple
+  // of the refresh so every frame lands on a real vsync.
+  //
+  // Phones and an explicit Low keep 60: there the budget is heat and battery,
+  // and the pacer prefers an even 45 over a ragged 60 for them.
+  const SMOOTH_CEILING = 144;
+  const mobile = /Android|iPhone|iPad|Mobi/i.test(navigator.userAgent || '');
+  const rate = new RateGovernor({ ceiling: SMOOTH_CEILING, floor: 60 });
+  Graphics.subscribe((_g, change) => { if (change?.source === 'explicit') rate.reset(); });
+  const fullRateFps = (displayHz) => {
+    if (mobile || Graphics.name === 'low') return 60;
+    const hz = Number.isFinite(displayHz) && displayHz > 0 ? displayHz : 60;
+    return Math.max(60, Math.min(hz, rate.ceiling));
+  };
+  const targetFps = (displayHz) => {
     const now = performance.now();
-    if (now - lastInput < POWER.activeMs) return 60;
-    if (now - navT < POWER.graceMs) return 60;
-    if (current?.instance?.fullRate?.()) return 60;
-    return POWER.ecoFps;
+    const active = now - lastInput < POWER.activeMs
+      || now - navT < POWER.graceMs
+      || !!current?.instance?.fullRate?.();
+    requestedFps = active ? fullRateFps(displayHz) : POWER.ecoFps;
+    return requestedFps;
   };
 
   const app = {
@@ -291,11 +314,18 @@ export function createApp(container) {
     // the preview tab runs hidden and rAF/screenshots are paused there).
     get scene() { return current?.scene; },
     get instance() { return current?.instance; },
-    get power() { return { fps: liveFps, eco: liveFps < 60 }; },
+    // eco is what the governor ASKED for, not a number below 60: a 55fps pace
+    // on a 165Hz panel is full rate, and a 72 on a 144Hz one certainly is.
+    get power() { return { fps: liveFps, eco: requestedFps <= POWER.ecoFps }; },
   };
 
-  loopController = startLoop((dt, now, fps) => {
+  loopController = startLoop((dt, now, fps, pacing) => {
     liveFps = fps;
+    const eco = requestedFps <= POWER.ecoFps;
+    // Everything that judges "is this machine keeping up?" must judge against
+    // the pace actually being asked for. A flat 16.7ms assumption would call a
+    // struggling 144Hz machine healthy and would never shed anything.
+    const budgetMs = 1000 / (pacing?.pacedFps || fps || 60);
     let updMs = 0, subMs = 0;
     if (current && !busy) {
       if (!paused) {
@@ -320,14 +350,17 @@ export function createApp(container) {
     // frame is design, not a struggling device, and must never shed DPR.
     // Same rule for the Graphics auto-tuner: it judges the machine on
     // full-rate frames alone, and only while the preset is still auto.
-    if (!busy && !paused && fps >= 60) {
-      quality.frame(dt);
-      Graphics.sampleFrame(dt);
+    if (!busy && !paused && !eco) {
+      quality.frame(dt, budgetMs);
+      Graphics.sampleFrame(dt, budgetMs);
       // Cadence (dt) can prove a machine is STRUGGLING but never that it has
-      // room to spare: a paced 60fps stream reads 16.7ms whether the frame took
-      // 3ms or 15ms. Actual work does prove it, so promotion is judged on the
-      // update+submit time the HUD already measures.
-      Graphics.sampleWork(updMs + subMs);
+      // room to spare: a paced stream reads its budget back whether the frame
+      // took 3ms or 15ms. Actual work does prove it, so promotion is judged on
+      // the update+submit time the HUD already measures.
+      Graphics.sampleWork(updMs + subMs, budgetMs);
+      // ...and if even the pace itself cannot be held, come down a whole step
+      // rather than serving uneven frames.
+      rate.frame(dt, budgetMs);
     }
     if (exposeDebugState && hud.el) {
       debugStateAcc += dt;
@@ -343,7 +376,7 @@ export function createApp(container) {
     // resolution), not in the game code. That split diagnoses any device.
     // D12: an eco-governed tick is LABELED so a 30fps reading is never
     // mistaken for lag.
-    hud.frame(dt, updMs, subMs, fps < 60);
+    hud.frame(dt, updMs, subMs, eco, pacing);
   }, targetFps);
 
   return app;

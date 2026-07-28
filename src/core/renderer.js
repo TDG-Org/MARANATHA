@@ -66,7 +66,12 @@ export function startLoop(tick, getFps = () => 60) {
   let running = false;
   let enabled = true;
   let visible = !document.hidden;
+  let wokeChained = false; // was THIS callback scheduled straight off rAF?
   const pacer = createFramePacer(performance.now());
+  // A phone (or an explicit Low) would rather render an even 45 than an uneven
+  // 60; a desktop would rather have the extra frames. Read live so changing the
+  // preset takes effect without a reload.
+  const mobile = /Android|iPhone|iPad|Mobi/i.test(globalThis.navigator?.userAgent || '');
 
   // Skipping the WORK is only half the saving; the other half is not waking up
   // at all. Chained straight, rAF calls back at the panel's refresh rate — 144
@@ -94,31 +99,55 @@ export function startLoop(tick, getFps = () => 60) {
   // right number and looks like judder, which is the worst possible outcome for
   // a change made in the name of smoothness. Half a 60Hz period of slack costs
   // a couple of cheap callbacks and buys the alignment back.
-  const ARM_EARLY_MS = 8;
-  const FULL_RATE = 60;
-  const arm = (fps, delay) => {
-    if (fps < FULL_RATE && delay > ARM_EARLY_MS) {
-      gap = setTimeout(() => { gap = 0; if (running) raf = requestAnimationFrame(frame); }, delay - ARM_EARLY_MS);
+  // The timer does not draw the frame — it only asks for the next rAF, and that
+  // request lands on the NEXT vsync. Now that a frame admitted late RE-ANCHORS
+  // the rhythm (rather than catching up with a short frame, which looks worse),
+  // a timer that fires after its deadline costs a whole refresh EVERY frame —
+  // a 60Hz eco measured 20fps instead of 30 under 9ms of slop. The margin has
+  // to beat realistic Windows timer slop; it is paid for in a couple of cheap
+  // callbacks that return immediately.
+  const ARM_EARLY_MS = 12;
+  // Sleep only for a genuinely slow pace. Every full-rate cadence the display
+  // can serve — 144, 120, 90, 72, 60, 55 — stays chained to rAF so its frames
+  // land ON vsync; a timer is for eco, where two frames in three were empty
+  // callbacks anyway. (Before the pacer snapped to the panel, this compared
+  // against a flat 60 and would now put an even 72fps on a timer.)
+  const CHAIN_ABOVE_FPS = 45;
+  const arm = (delay) => {
+    const paced = pacer.pacedFps;
+    if (paced > 0 && paced < CHAIN_ABOVE_FPS && delay > ARM_EARLY_MS) {
+      gap = setTimeout(() => {
+        gap = 0;
+        if (!running) return;
+        wokeChained = false;
+        raf = requestAnimationFrame(frame);
+      }, delay - ARM_EARLY_MS);
       return;
     }
+    wokeChained = true;
     raf = requestAnimationFrame(frame);
   };
 
   const frame = (now) => {
     if (!running) return;
-    const fps = getFps();
+    // Measure the panel BEFORE pacing to it (see framePacer): only a chained
+    // callback is exactly one refresh after the last.
+    pacer.observe(now, wokeChained);
+    pacer.allowOvershoot = !mobile && Graphics?.name !== 'low';
+    const fps = getFps(pacer.displayHz);
     if (!pacer.advance(now, fps)) {
-      arm(fps, pacer.timeUntilDue(now));
+      arm(pacer.timeUntilDue(now));
       return;
     }
-    tick(pacer.dt, now, fps);
-    arm(fps, pacer.timeUntilDue(performance.now()));
+    tick(pacer.dt, now, pacer.pacedFps || fps, pacer);
+    arm(pacer.timeUntilDue(performance.now()));
   };
 
   const startInternal = () => {
     if (running || !enabled || !visible) return;
     running = true;
     pacer.reset(performance.now());
+    wokeChained = false;
     raf = requestAnimationFrame(frame);
   };
   const stopInternal = () => {

@@ -40,24 +40,33 @@ export class AdaptiveQuality {
     renderer.setPixelRatio(this.ratio);
   }
 
-  frame(dtMs) {
+  // budgetMs is the frame time the loop is actually PACING to. It used to be
+  // assumed to be 16.7 because the game was hard-capped at 60; now that the
+  // pacer snaps to the display (72 on a 144Hz panel, 55 on a 165Hz one), a
+  // fixed threshold would call a healthy 13.9ms cadence "fine" forever on a
+  // struggling high-refresh machine and would never fire at all. The ratios
+  // below are the old numbers expressed against the budget, so a 60fps target
+  // behaves exactly as it did.
+  frame(dtMs, budgetMs = 1000 / 60) {
     if (!Number.isFinite(dtMs) || dtMs <= 0 || this.ratio <= this.min) return;
+    const budget = Number.isFinite(budgetMs) && budgetMs > 0 ? budgetMs : 1000 / 60;
+    const overMs = budget * 1.32;
     const sample = this._window || (this._window = { n: 0, totalMs: 0, over22: 0 });
     sample.n += 1;
     sample.totalMs += dtMs;
-    if (dtMs > 22) sample.over22 += 1;
+    if (dtMs > overMs) sample.over22 += 1;
     if (sample.n < this._sampleFrames) return;
 
     // Alternating 10/30ms frames are visibly uneven and average only 50fps,
     // but the old +1/-1 vote cancelled them to zero forever. Judge a bounded
     // window by BOTH achieved cadence and its share of missed frame budgets.
     // Fractional-refresh pacing (for example 90Hz's healthy 11/22ms rhythm)
-    // remains safe because its average stays close to 16.7ms.
+    // remains safe because its average stays close to the budget.
     const averageMs = sample.totalMs / sample.n;
     const overBudgetRatio = sample.over22 / sample.n;
     this._window = null;
-    const struggling = averageMs > 20.5
-      || (averageMs > 18.5 && overBudgetRatio >= 0.25);
+    const struggling = averageMs > budget * 1.23
+      || (averageMs > budget * 1.11 && overBudgetRatio >= 0.25);
     if (struggling) this.set(Math.max(this.min, this.ratio - 0.25));
   }
 
@@ -85,6 +94,50 @@ export class AdaptiveQuality {
     const height = globalThis.window?.innerHeight || 1;
     this.renderer.setSize(width, height);
     this.onChange?.(next);
+  }
+}
+
+// ── HOW FAST THE DISPLAY MAY BE ASKED TO GO ─────────────────────────────────
+//
+// Letting a capable desktop render at its panel's rate is what turns a "gaming
+// PC stuck at 60" into a gaming PC. But a machine that CANNOT hold 144 goes
+// straight back to uneven frames — the exact problem the snapping fixed — so
+// the ceiling has to be able to come down.
+//
+// It judges achieved cadence against the pace actually requested, and it is
+// STICKY-DOWN for the same reason DPR is: a paced stream can prove a machine is
+// struggling, never that it has room. Coming down one whole step (144 -> 72)
+// keeps landing on real refresh boundaries, so a demotion is still even.
+export class RateGovernor {
+  constructor({ ceiling = 144, floor = 60, sampleFrames = 240 } = {}) {
+    this.max = ceiling;
+    this.ceiling = ceiling;
+    this.floor = floor;
+    this.sampleFrames = Math.max(1, sampleFrames);
+    this._w = null;
+  }
+
+  reset() {
+    this.ceiling = this.max;
+    this._w = null;
+  }
+
+  frame(dtMs, budgetMs) {
+    if (this.ceiling <= this.floor) return;
+    if (!Number.isFinite(dtMs) || dtMs <= 0) return;
+    const budget = Number.isFinite(budgetMs) && budgetMs > 0 ? budgetMs : 1000 / 60;
+    const w = this._w || (this._w = { n: 0, totalMs: 0, missed: 0 });
+    w.n += 1;
+    w.totalMs += dtMs;
+    if (dtMs > budget * 1.35) w.missed += 1;
+    if (w.n < this.sampleFrames) return;
+    const averageMs = w.totalMs / w.n;
+    const missedRatio = w.missed / w.n;
+    this._w = null;
+    // Demanding on purpose: one hitch must not halve the frame rate forever.
+    if (averageMs > budget * 1.25 && missedRatio >= 0.4) {
+      this.ceiling = Math.max(this.floor, Math.round(this.ceiling / 2));
+    }
   }
 }
 
@@ -133,8 +186,9 @@ export class DebugHud {
     return this._gpuName;
   }
 
-  frame(dtMs, updMs = 0, subMs = 0, eco = false) {
+  frame(dtMs, updMs = 0, subMs = 0, eco = false, pacing = null) {
     if (!this.enabled || !this.el) return;
+    if (pacing) this._pacing = pacing;
     this.acc += dtMs;
     this.frames += 1;
     this.updAcc = (this.updAcc || 0) + updMs;
@@ -156,8 +210,19 @@ export class DebugHud {
       this.subAcc = 0;
       this.ecoFrames = 0;
       const info = this.renderer.info;
+      // WHAT THE PANEL CAN ACTUALLY SERVE.
+      //
+      // "60fps" on a 144Hz monitor is not 60 even frames, it is 2/3/2/3
+      // refreshes — right average, visible judder. The game now paces to a
+      // whole multiple of the measured refresh, so this line names both: the
+      // display's own rate and the cadence being rendered against it. A 72
+      // beside a 144 is one frame every second refresh, which is as smooth as
+      // that panel can be at that rate.
+      const pace = this._pacing?.displayHz
+        ? `  ·  display ${this._pacing.displayHz}Hz → paced ${this._pacing.pacedFps}`
+        : '';
       this.el.textContent =
-        `fps ${this.fps}  (${this.ms} ms)${eco2}\n` +
+        `fps ${this.fps}  (${this.ms} ms)${eco2}${pace}\n` +
         `script ${upd} ms · submit ${sub} ms\n` +
         `draw calls ${info.render.calls}  tris ${info.render.triangles}\n` +
         `pixelRatio ${this.renderer.getPixelRatio().toFixed(2)}\n` +

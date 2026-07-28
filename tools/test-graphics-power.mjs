@@ -5,7 +5,7 @@ import {
   GraphicsSystem,
   particleCapacity,
 } from '../src/systems/Graphics.js';
-import { AdaptiveQuality } from '../src/core/quality.js';
+import { AdaptiveQuality, RateGovernor } from '../src/core/quality.js';
 import { createFramePacer } from '../src/core/framePacer.js';
 import { rendererAntialias, rendererPowerPreference, startLoop } from '../src/core/renderer.js';
 
@@ -264,6 +264,72 @@ for (const hz of [60, 85, 90, 120, 140, 144, 165, 240]) {
     samples += 1;
   }
   assert.equal(graphics.name, 'medium', `${hz}Hz healthy cadence falsely demoted`);
+}
+
+// ── EVERY "IS THIS MACHINE KEEPING UP?" JUDGEMENT IS BUDGET-RELATIVE ───────
+// The thresholds used to be absolute milliseconds, which quietly assumed the
+// game was capped at 60fps. It no longer is: a 144Hz panel is paced to 72 and
+// has a 13.9ms budget, so a flat 20.5ms "struggling" line would never fire no
+// matter how badly that machine was doing, and a 7ms "has room to spare" line
+// would promote a machine with none.
+{
+  const budget = 1000 / 72; // a 144Hz panel, every second refresh
+  const graphics = new GraphicsSystem({
+    storage: new MemoryStorage(), detectedPreset: 'medium', sampleFrames: 60, cooldownFrames: 0,
+  });
+  // 18ms frames are healthy at 60fps and hopeless at 72.
+  for (let i = 0; i < 60; i += 1) graphics.sampleFrame(18, budget);
+  assert.equal(graphics.name, 'low', 'a struggling high-refresh machine was judged against a 60fps budget');
+
+  const roomy = new GraphicsSystem({
+    storage: new MemoryStorage(), detectedPreset: 'medium', sampleFrames: 60, cooldownFrames: 0,
+  });
+  // 6ms of work is 36% of a 16.7ms budget (promote) but 43% of a 13.9ms one.
+  for (let i = 0; i < 60; i += 1) roomy.sampleWork(6, budget);
+  assert.equal(roomy.name, 'medium', 'promotion ignored the tighter high-refresh budget');
+  for (let i = 0; i < 60; i += 1) roomy.sampleWork(6, 1000 / 60);
+  assert.equal(roomy.name, 'high', 'the same work at a 60fps budget should still promote');
+
+  // A 60fps budget must behave EXACTLY as it did before the change.
+  const legacy = new GraphicsSystem({
+    storage: new MemoryStorage(), detectedPreset: 'medium', sampleFrames: 60, cooldownFrames: 0,
+  });
+  for (let i = 0; i < 60; i += 1) legacy.sampleFrame(18);
+  assert.equal(legacy.name, 'medium', '18ms frames at 60fps are healthy and must not demote');
+}
+
+// The full-rate ceiling is sticky-down: a machine that cannot hold its panel's
+// rate steps to the next whole divisor rather than serving uneven frames, and
+// one healthy stretch can never be undone by a single hitch.
+{
+  const holding = new RateGovernor({ ceiling: 144, floor: 60, sampleFrames: 60 });
+  for (let i = 0; i < 60; i += 1) holding.frame(1000 / 144, 1000 / 144);
+  assert.equal(holding.ceiling, 144, 'a machine holding its panel rate was demoted');
+
+  const hitch = new RateGovernor({ ceiling: 144, floor: 60, sampleFrames: 60 });
+  for (let i = 0; i < 59; i += 1) hitch.frame(1000 / 144, 1000 / 144);
+  hitch.frame(120, 1000 / 144);
+  assert.equal(hitch.ceiling, 144, 'one hitch halved the frame rate');
+
+  const struggling = new RateGovernor({ ceiling: 144, floor: 60, sampleFrames: 60 });
+  for (let i = 0; i < 60; i += 1) struggling.frame(1000 / 90, 1000 / 144);
+  assert.equal(struggling.ceiling, 72, 'a machine that cannot hold 144 stayed there');
+  for (let i = 0; i < 60; i += 1) struggling.frame(1000 / 40, 1000 / 72);
+  assert.equal(struggling.ceiling, 60, 'the ceiling did not reach its floor');
+  for (let i = 0; i < 120; i += 1) struggling.frame(1000 / 20, 1000 / 60);
+  assert.equal(struggling.ceiling, 60, 'the ceiling fell through its floor');
+  struggling.reset();
+  assert.equal(struggling.ceiling, 144, 'an explicit preset change must restore the ceiling');
+}
+
+// eco is what the governor ASKED for, never "a number below 60": on a 165Hz
+// panel full rate is paced to 55, and mistaking that for eco would disable
+// adaptive quality entirely.
+{
+  const appSource = readFileSync(new URL('../src/core/app.js', import.meta.url), 'utf8');
+  assert.match(appSource, /const eco = requestedFps <= POWER\.ecoFps/);
+  assert.doesNotMatch(appSource, /fps *< *60/);
+  assert.match(appSource, /const budgetMs = 1000 \/ \(pacing\?\.pacedFps/);
 }
 
 // Alternating fast/late frames used to cancel in the old +1/-1 vote forever,

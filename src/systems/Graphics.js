@@ -8,11 +8,15 @@ const PRESET_ORDER = ['low', 'medium', 'high'];
 const AUTO_START_CEILING = 'medium';
 const AUTO_SAMPLE_FRAMES = 600;
 const AUTO_COOLDOWN_FRAMES = 300;
-// Promotion thresholds, in measured update+submit milliseconds against a
-// 16.7ms budget. ~40% average with almost nothing near the budget is a machine
-// with real room, not one that is merely keeping up.
-const PROMOTE_AVG_MS = 7;
-const PROMOTE_SLOW_MS = 12;
+// Promotion thresholds, expressed as a FRACTION of the frame budget actually
+// being paced to. ~40% average with almost nothing near the budget is a machine
+// with real room, not one that is merely keeping up. They were once absolute
+// milliseconds, which silently assumed a 60fps cap; a 144Hz machine has a 6.9ms
+// budget, and promoting it on a 7ms average would have been promoting a machine
+// with no headroom at all.
+const FRAME_BUDGET_MS = 1000 / 60;
+const PROMOTE_AVG_RATIO = 7 / FRAME_BUDGET_MS;   // 0.42 of the budget
+const PROMOTE_SLOW_RATIO_MS = 12 / FRAME_BUDGET_MS; // 0.72 of the budget
 const PROMOTE_SLOW_RATIO = 0.02;
 
 export const GRAPHICS_PRESETS = {
@@ -139,17 +143,18 @@ export class GraphicsSystem {
   // frames). Sustained slowness may repeatedly step down, with a cooldown.
   // There is deliberately no timed promotion: deadline-paced dt cannot prove
   // CPU/GPU headroom. Only an explicit player choice can move quality up.
-  sampleFrame(ms) {
+  sampleFrame(ms, budgetMs = FRAME_BUDGET_MS) {
     if (!this.autoDetected || this.name === 'low' || !Number.isFinite(ms)) return;
     if (this._cooldown > 0) {
       this._cooldown -= 1;
       return;
     }
+    const budget = Number.isFinite(budgetMs) && budgetMs > 0 ? budgetMs : FRAME_BUDGET_MS;
 
     const sample = this._s || (this._s = { n: 0, totalMs: 0, over22: 0 });
     sample.n += 1;
     sample.totalMs += ms;
-    if (ms > 22) sample.over22 += 1;
+    if (ms > budget * 1.32) sample.over22 += 1;
     if (sample.n < this.sampleFrames) return;
 
     // Judge achieved cadence over a window. Fractional monitor schedules are
@@ -158,8 +163,8 @@ export class GraphicsSystem {
     const averageMs = sample.totalMs / sample.n;
     const overBudgetRatio = sample.over22 / sample.n;
     this._s = null;
-    const struggling = averageMs > 20.5
-      || (averageMs > 18.5 && overBudgetRatio >= 0.25);
+    const struggling = averageMs > budget * 1.23
+      || (averageMs > budget * 1.11 && overBudgetRatio >= 0.25);
     if (!struggling) return;
 
     const next = nextLowerGraphicsPreset(this.name);
@@ -183,23 +188,24 @@ export class GraphicsSystem {
   // Deliberately timid: a big margin, a long window, ONE promotion per session,
   // never on a phone, never over an explicit choice — and the cadence demotion
   // above remains the safety net if the new tier turns out to be too much.
-  sampleWork(ms) {
+  sampleWork(ms, budgetMs = FRAME_BUDGET_MS) {
     if (!this.autoDetected || this._promoted || !Number.isFinite(ms)) return;
     if (this.name === PRESET_ORDER[PRESET_ORDER.length - 1]) return;
     if (this._cooldown > 0) return;
     const nav = globalThis.navigator || {};
     if (/Android|iPhone|iPad|Mobi/i.test(nav.userAgent || '')) return;
+    const budget = Number.isFinite(budgetMs) && budgetMs > 0 ? budgetMs : FRAME_BUDGET_MS;
 
     const w = this._w || (this._w = { n: 0, totalMs: 0, slow: 0 });
     w.n += 1;
     w.totalMs += ms;
-    if (ms > PROMOTE_SLOW_MS) w.slow += 1;
+    if (ms > budget * PROMOTE_SLOW_RATIO_MS) w.slow += 1;
     if (w.n < this.sampleFrames) return;
 
     const averageMs = w.totalMs / w.n;
     const slowRatio = w.slow / w.n;
     this._w = null;
-    if (averageMs > PROMOTE_AVG_MS || slowRatio > PROMOTE_SLOW_RATIO) return;
+    if (averageMs > budget * PROMOTE_AVG_RATIO || slowRatio > PROMOTE_SLOW_RATIO) return;
 
     const index = PRESET_ORDER.indexOf(this.name);
     const next = PRESET_ORDER[index + 1];
