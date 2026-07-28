@@ -306,18 +306,41 @@ export function makeCampBeats(ctx, h) {
           let tourT = 0;
           const TOUR = 18000;
           const LOOK = { x: 0.5, y: 1.4, z: -3.0 };
-          ctx.camera.setPoseDriver((pose, dt) => {
-            tourT = Math.min(TOUR, tourT + dt);
-            const k = tourT / TOUR;
+          const tourPose = (k) => {
             const e = k * k * (3 - 2 * k); // ease both ends — no start/stop jolt
             const a = (-90 - 60 * e) * Math.PI / 180;
             const r = 15 - 3.5 * e;
-            pose.pos.set(LOOK.x + Math.sin(a) * r, 6.2 - 1.2 * e, LOOK.z + Math.cos(a) * r);
-            pose.look.set(LOOK.x, LOOK.y, LOOK.z);
-          });
+            return {
+              x: LOOK.x + Math.sin(a) * r,
+              y: 6.2 - 1.2 * e,
+              z: LOOK.z + Math.cos(a) * r,
+            };
+          };
           try {
             await seq([
               { t: 'letterbox', on: true },
+              // The tour opens 15u out and 6.2u up. Reaching that from a
+              // shoulder-height follow camera standing at the tent door is not a
+              // move, it is a different shot — so it is CUT to under a short
+              // dip, the same grammar every other stage change here uses.
+              { t: 'fade', on: true, ms: 200 },
+              { t: 'fn', fn: () => {
+                const p = tourPose(0);
+                ctx.camera.cutTo({
+                  angle: Math.atan2(LOOK.x - p.x, LOOK.z - p.z),
+                  target: LOOK,
+                  distance: Math.hypot(p.x - LOOK.x, p.z - LOOK.z),
+                  height: p.y - LOOK.y,
+                  lookHeight: 0,
+                });
+                ctx.camera.setPoseDriver((pose, dt) => {
+                  tourT = Math.min(TOUR, tourT + dt);
+                  const q = tourPose(tourT / TOUR);
+                  pose.pos.set(q.x, q.y, q.z);
+                  pose.look.set(LOOK.x, LOOK.y, LOOK.z);
+                });
+              } },
+              { t: 'fade', on: false, ms: 260 },
               { t: 'verse', verse: WEB.gen_37_2 },
               { t: 'verseHide' },
             ]);
@@ -341,11 +364,13 @@ export function makeCampBeats(ctx, h) {
       t: 'fn',
       fn: async () => {
         jac.char.play('talk');
-        twoShot('jacob', 'joseph', {
+        // Wait for the LENS, not for a number that happens to match the one
+        // passed in: the reframe is now priced by how far it has to swing.
+        const plan = twoShot('jacob', 'joseph', {
           ms: 1250, distMin: 3.2, distMax: 3.35,
           height: 1.9, look: 1.18, towardB, responsiveSpeaker: 'a',
         });
-        await wait(1250);
+        await wait(plan.moveMs);
       },
     });
     await seq([
@@ -385,11 +410,13 @@ export function makeCampBeats(ctx, h) {
       // D11: distance capped + a touch lower — the lens stays INSIDE the tent.
       // D13: swung 0.6 rad toward Joseph's side so we watch FATHER'S FACE give
       // the coat, never the back of his head.
-      { t: 'fn', fn: () => twoShot('jacob', 'joseph', {
-        ms: 1500, distMax: 3.4, height: 1.9, look: 1.2,
-        towardB: 0.6, responsiveSpeaker: 'a',
-      }) },
-      { t: 'wait', ms: 1500 },
+      { t: 'fn', fn: async () => {
+        const plan = twoShot('jacob', 'joseph', {
+          ms: 1500, distMax: 3.4, height: 1.9, look: 1.2,
+          towardB: 0.6, responsiveSpeaker: 'a',
+        });
+        await wait(plan.moveMs);
+      } },
       { t: 'fn', fn: async () => {
         // Jacob carries it to his son — a real per-frame walk (D8: the old
         // timer-stepped loop was the same quantized shuffle as the lone walk)
@@ -402,12 +429,13 @@ export function makeCampBeats(ctx, h) {
         await ctx.npcs.sendTo(jac, tx, tz, { speed: 0.8 });
         ctx.npcs.freeze(jac, true);
         jac.char.turnToward(dx, dz);
-        twoShot('jacob', 'joseph', {
+        // re-frame the CLOSED-UP pair — his face, inside the tent
+        const giftPlan = twoShot('jacob', 'joseph', {
           ms: 1250, distMax: 3.3, height: 1.85, look: 1.2,
           towardB: 0.6, responsiveSpeaker: 'a',
-        }); // re-frame the CLOSED-UP pair — his face, inside the tent
+        });
         jac.char.play('talk'); // the offering gesture
-        await wait(1250);
+        await wait(giftPlan.moveMs);
         ctx.joseph.setCoat(true);       // the tunic settles over his shoulders
         // The state line is not decoration — it is how a player who cannot
         // read a low-poly face knows what the scene means. Every emotional

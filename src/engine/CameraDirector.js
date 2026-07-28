@@ -107,7 +107,26 @@ export class CameraDirector {
   // polled beat loops — visible 16–20Hz stepping (Nate: "very very jittery").
   // The driver runs inside frame() with real dt; any new cinematicMoveTo()/
   // release() clears it (a new shot supersedes).
-  setPoseDriver(fn) { this._poseDriver = fn || null; }
+  // A driver only ever ran if a pose already existed (frame() calls it as
+  // `if (this.pose && this._poseDriver)`), because every call site happened to
+  // install one after a cutTo. One did not: the camp tour under Genesis 37:2 was
+  // installed straight from follow mode and therefore did NOTHING AT ALL, in
+  // total silence — measured, 0 calls in 30 frames. Seeding the pose from the
+  // live lens makes that impossible: the takeover is seamless (the pose IS the
+  // current camera until the driver writes to it) and a driver can never again
+  // be a no-op nobody notices.
+  setPoseDriver(fn) {
+    this._poseDriver = fn || null;
+    if (!fn || this.pose) return;
+    this.pose = {
+      pos: this.camera.position.clone(),
+      look: this._renderLook.clone(),
+    };
+    this.poseK = 1;
+    this._poseDir = 0;
+    this._poseMoveK = 1;
+    this._posePath = 'linear';
+  }
 
   // D9: a TRUE still — even the idle breathing sine stops (the finale's held
   // final frame). Any new cinematicMoveTo()/release() wakes the camera again.

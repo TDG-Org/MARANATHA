@@ -23,6 +23,12 @@ import * as THREE from 'three';
 import { ColliderWorld } from '../src/engine/collision.js';
 import { buildCamp } from '../src/scenes/joseph3d/props.js';
 import { TELLING_AMBIENT_SLOTS, COAT_ENVY_SPECTATOR_SLOTS } from '../src/scenes/joseph3d/beats/helpers.js';
+import {
+  TELLING_JOSEPH_MARK,
+  TELLING_LONE_MARK,
+  TELLING_WALKOFF_CAMERA,
+  TELLING_FINAL_CAMERA,
+} from '../src/scenes/joseph3d/beats/telling.js';
 
 // The camp builders need this much of a canvas for their procedural glows.
 globalThis.document = {
@@ -147,7 +153,37 @@ const FLOOR = 165;
 const judged = shots.filter((s) => IN_CAMP(s.target));
 assert.ok(judged.length >= 1, `no in-camp authored shots were found to judge (${shots.length} parsed)`);
 
-const results = judged.map((s) => ({ ...s, score: backdropScore(s) }));
+// ---- the MOVING shots, which the parser above cannot see ---------------------
+// A camera whose target is a function of a live position never appears in the
+// scan, and that is exactly where the reported bug was hiding: the last two
+// shots of the whole story track Joseph as he walks away, and both pointed at
+// open ground. They are exported as data now precisely so they can be judged,
+// and a tracked shot is judged on the WORST frame of the move — being correct
+// only at the two ends is not being correct.
+const walkPath = (k) => ({
+  x: TELLING_JOSEPH_MARK.x + (TELLING_LONE_MARK.x - TELLING_JOSEPH_MARK.x) * k,
+  z: TELLING_JOSEPH_MARK.z + (TELLING_LONE_MARK.z - TELLING_JOSEPH_MARK.z) * k,
+});
+const trackedWorst = (shot, path) => {
+  let worst = Infinity;
+  for (let k = 0; k <= 1.0001; k += 0.1) {
+    worst = Math.min(worst, backdropScore({ ...shot, target: path(k) }));
+  }
+  return worst;
+};
+const moving = [
+  {
+    beat: 'telling', line: 'TELLING_WALKOFF_CAMERA', ...TELLING_WALKOFF_CAMERA,
+    target: TELLING_LONE_MARK, score: trackedWorst(TELLING_WALKOFF_CAMERA, walkPath),
+  },
+  {
+    beat: 'telling', line: 'TELLING_FINAL_CAMERA', ...TELLING_FINAL_CAMERA,
+    target: TELLING_LONE_MARK,
+    score: backdropScore({ ...TELLING_FINAL_CAMERA, target: TELLING_LONE_MARK }),
+  },
+];
+
+const results = [...judged.map((s) => ({ ...s, score: backdropScore(s) })), ...moving];
 const empty = results.filter((r) => r.score < FLOOR);
 assert.deepEqual(
   empty.map((r) => `${r.beat}.js:${r.line} angle ${r.angle} -> backdrop ${r.score}`),

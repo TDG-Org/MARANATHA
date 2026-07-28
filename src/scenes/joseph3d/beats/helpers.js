@@ -487,6 +487,40 @@ export const MAX_GROUP_HEAD_OCCLUSION = 0.08;
 export const MAX_VISIBLE_DIALOGUE_ROUTE_MS = 3200;
 export const MAX_VISIBLE_GROUP_ROUTE_MS = 4200;
 export const MIN_VISIBLE_DIALOGUE_MOVE_MS = 1200;
+// ── HOW FAST A LENS MAY SWING AROUND A SUBJECT ──────────────────────────────
+//
+// Every visible reframe was given a flat ~1.2s no matter how far it had to go.
+// A dialogue REVERSE — behind Judah's shoulder to behind Reuben's — is about
+// 130 degrees of arc, so it was orbiting the pair at nearly two radians a
+// second. That is not a camera move, it is a whip, and it crosses the line
+// between the speakers on the way past. Nate: "sometimes it just jumps and cuts
+// camera angles like a glitch".
+//
+// 0.42 rad/s (about 24 degrees a second) is a stately orbit. Anything that
+// cannot be covered at that speed inside the visible-route ceiling is not a
+// move at all — it is a CUT, and it gets the short dip that this scene already
+// uses as its cut grammar everywhere else.
+export const MAX_ORBIT_RAD_PER_S = 0.42;
+// The bearing a camera sits on, as CameraDirector means it: the lens is at
+// target - (sin a, cos a) * distance, so its bearing FROM the target is a + PI.
+export function cameraAngleFrom(cameraPos, target) {
+  return Math.atan2(cameraPos.x - target.x, cameraPos.z - target.z) - Math.PI;
+}
+export function shortestAngleDelta(from, to) {
+  let d = to - from;
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  return d;
+}
+// The time a visible reframe needs so it never exceeds the orbit speed.
+export function comfortableRouteMs(fromAngle, toAngle, authoredMs) {
+  const swing = Math.abs(shortestAngleDelta(fromAngle, toAngle));
+  return Math.max(
+    MIN_VISIBLE_DIALOGUE_MOVE_MS,
+    authoredMs || 0,
+    (swing / MAX_ORBIT_RAD_PER_S) * 1000,
+  );
+}
 
 export function projectedHeadOcclusion(a, b) {
   const near = a.depth <= b.depth ? a : b;
@@ -690,29 +724,30 @@ export function makeHelpers(ctx) {
     authoredMs,
     maxVisibleMs,
   }) => {
-    // Short visible reverses read as a snap even when mathematically eased.
-    // Covered one-frame cuts never enter this helper; every visible dialogue
-    // reframe gets at least 1.2s to travel cleanly around the audience.
-    const comfortableSpec = {
-      ...spec,
-      duration: Math.max(
-        MIN_VISIBLE_DIALOGUE_MOVE_MS,
-        spec.duration ?? authoredMs,
-      ),
-    };
-    const moveMs = ctx.camera.cinematicMoveTo(comfortableSpec)
-      ?? comfortableSpec.duration;
+    // Short visible reverses read as a snap even when mathematically eased, and
+    // long ones read as a whip. Price the move by how far the lens actually has
+    // to swing around this subject, not by a flat authored number: at most
+    // MAX_ORBIT_RAD_PER_S, never under the 1.2s floor.
+    const from = cameraAngleFrom(ctx.camera.camera.position, spec.target);
+    const duration = comfortableRouteMs(
+      from,
+      spec.angle,
+      spec.duration ?? authoredMs,
+    );
+    const comfortableSpec = { ...spec, duration };
+    const moveMs = ctx.camera.cinematicMoveTo(comfortableSpec) ?? duration;
     if (moveMs <= maxVisibleMs) {
       await wait(moveMs);
       return { covered: false, moveMs };
     }
 
-    // Responsive portrait wides can sit 18u+ from the circle. Orbiting all
-    // that way at a calm speed produced 16-second "stalls"; accelerating the
-    // same route made it whip past heads. Cover only those exceptional scale
-    // changes with a short cinematic dip, land the composition under black,
-    // then reveal the exact authored endpoint.
-    await ctx.cinema.fade(true, 180);
+    // Too far to travel calmly, so it is not a travel: it is a CUT. That covers
+    // the classic dialogue reverse (about 130 degrees, which used to whip round
+    // the pair in 1.2s and cross the line on the way) and the responsive
+    // portrait wides that sit 18u+ from the circle. Land the composition under
+    // a short dip and reveal the exact authored endpoint — an edit, not a
+    // blackout.
+    await ctx.cinema.fade(true, 150);
     ctx.camera.cutTo({
       ...comfortableSpec,
       path: 'linear',
@@ -720,8 +755,8 @@ export function makeHelpers(ctx) {
       arcRadius: 0,
       arcDirection: 0,
     });
-    await ctx.cinema.fade(false, 220);
-    return { covered: true, moveMs: 400 };
+    await ctx.cinema.fade(false, 190);
+    return { covered: true, moveMs: 340 };
   };
   const groupShot = (names, {
     angle,
@@ -873,7 +908,14 @@ export function makeHelpers(ctx) {
     });
     const groupArc = Math.hypot(a.x - FIRE.x, a.z - FIRE.z) < 5.5
       && Math.hypot(b.x - FIRE.x, b.z - FIRE.z) < 5.5;
-    const moveMs = ms <= 1 ? 1 : Math.max(ms, MIN_VISIBLE_DIALOGUE_MOVE_MS);
+    // Same orbit law as every other visible reframe. Callers must await the
+    // returned moveMs rather than a hard-coded twin of `ms`, or a line can
+    // begin while the lens is still travelling.
+    const moveMs = ms <= 1 ? 1 : comfortableRouteMs(
+      cameraAngleFrom(ctx.camera.camera.position, plan.target),
+      plan.angle,
+      ms,
+    );
     ctx.camera.cinematicMoveTo({
       angle: plan.angle,
       target: plan.target,

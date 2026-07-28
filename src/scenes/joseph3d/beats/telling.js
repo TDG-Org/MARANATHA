@@ -2,6 +2,30 @@ import { WEB } from '../../../data/versesWEB.js';
 import { planGroupCamera } from './helpers.js';
 
 export const TELLING_JOSEPH_MARK = Object.freeze({ x: 0.9, z: -4.1 });
+// Where Joseph ends the chapter, standing apart from the family.
+export const TELLING_LONE_MARK = Object.freeze({ x: -4.6, z: -2.0 });
+
+// THE LAST TWO SHOTS OF THE STORY.
+//
+// They used to sit at 0.90pi and 0.95pi, which point out at open ground and the
+// ridge line. Measured against the camp census that is a backdrop of 120 and 97
+// — the second-emptiest angle available anywhere in the sweep — at the exact
+// moment the chapter lands. Nate reported it in capitals: "YOU ARE STILL
+// SHOWING THE BACK OF THE CAMP WHERE IT'S EMPTY AND ON MOUNTAINS WITH THAT
+// CAMERA ANGLE AT THE END OF THIS STORY".
+//
+// 0.42pi was chosen by sweeping every angle and taking the WORST frame of the
+// tracked walk (225 here, against 120), so it cannot merely be good at the two
+// ends. It also keeps the same side of the axis as the 0.52 reaction shot
+// before it, so the reframe is a 45-degree drift rather than a reverse.
+// They live here as data because the pose driver that tracks the walk has to
+// use the same numbers, and it used to carry its own copy of them.
+export const TELLING_WALKOFF_CAMERA = Object.freeze({
+  angle: Math.PI * 0.42, distance: 6.4, height: 3.1, lookHeight: 1.2,
+});
+export const TELLING_FINAL_CAMERA = Object.freeze({
+  angle: Math.PI * 0.42, distance: 4.4, height: 2.1, lookHeight: 1.3,
+});
 
 export async function finishNarratedHold({
   verseResult,
@@ -338,32 +362,28 @@ export function makeTellingBeats(ctx, h) {
       { t: 'verseHide' },
     ]);
 
-    const lone = { x: -4.6, z: -2.0 };
+    const lone = TELLING_LONE_MARK;
     ctx.joseph.turnToward(lone.x - ctx.joseph.position.x, lone.z - ctx.joseph.position.z);
     await seq([
       {
         t: 'cam',
-        angle: Math.PI * 0.9,
+        ...TELLING_WALKOFF_CAMERA,
         target: () => ({ x: ctx.joseph.position.x, z: ctx.joseph.position.z }),
-        distance: 6.4,
-        height: 3.1,
-        lookHeight: 1.2,
         duration: 3200,
         path: 'groupArc',
         arcCenter: FIRE,
         arcRadius: 6.4,
       },
       { t: 'fn', fn: async () => {
-        const angle = Math.PI * 0.9;
-        const distance = 6.4;
+        const { angle, distance, height, lookHeight } = TELLING_WALKOFF_CAMERA;
         ctx.camera.setPoseDriver((pose) => {
           const p = ctx.joseph.position;
           pose.pos.set(
             p.x - Math.sin(angle) * distance,
-            3.1,
+            height,
             p.z - Math.cos(angle) * distance,
           );
-          pose.look.set(p.x, 1.2, p.z);
+          pose.look.set(p.x, lookHeight, p.z);
         });
         ctx.joseph.setGrief(true, 0.42);
         ctx.hud.emote('Joseph is sad');
@@ -376,14 +396,13 @@ export function makeTellingBeats(ctx, h) {
       } },
     ]);
     await seq([
+      // The last image of the chapter: the same side of the axis, easing in
+      // closer. A push-in, not a reframe — nothing on screen changes place.
       {
         t: 'cam',
-        angle: Math.PI * 0.95,
+        ...TELLING_FINAL_CAMERA,
         target: () => ({ x: ctx.joseph.position.x, z: ctx.joseph.position.z }),
-        distance: 4.4,
-        height: 2.1,
-        lookHeight: 1.3,
-        duration: 2000,
+        duration: 2400,
         path: 'arc',
       },
       { t: 'wait', ms: 900 },

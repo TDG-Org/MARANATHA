@@ -196,6 +196,87 @@ assert.ok(
   `partial first-pose release jumped ${blendReleaseStep.toFixed(3)}u in one frame`,
 );
 
+// ── A POSE DRIVER MUST NEVER BE A SILENT NO-OP ─────────────────────────────
+// frame() only calls the driver when a pose exists, and every call site
+// happened to install one after a cutTo — except the camp tour under Genesis
+// 37:2, which was installed straight from follow mode. It ran zero times, for
+// weeks, with nothing to show for it. Installing a driver now seeds the pose
+// from the live lens, and the takeover is seamless because that pose IS the
+// camera until the driver writes to it.
+{
+  const lens = new THREE.PerspectiveCamera(46, 16 / 9, 0.1, 400);
+  const director = new CameraDirector(lens);
+  director.setTarget(new THREE.Vector3(0, 0, 0));
+  director.frame(16);
+  const before = lens.position.clone();
+  let ran = 0;
+  director.setPoseDriver((pose) => { ran += 1; pose.pos.set(15, 6.2, -3); });
+  // The seeded pose must not move the camera before the driver decides to.
+  const seeded = new CameraDirector(lens);
+  seeded.setTarget(new THREE.Vector3(0, 0, 0));
+  seeded.frame(16);
+  const beforeSeed = lens.position.clone();
+  seeded.setPoseDriver((pose) => { pose.pos.copy(beforeSeed); });
+  seeded.frame(16);
+  assert.ok(
+    lens.position.distanceTo(beforeSeed) < 0.06,
+    `seeding a pose driver moved the camera ${lens.position.distanceTo(beforeSeed).toFixed(3)}u on its own`,
+  );
+  for (let i = 0; i < 20; i++) director.frame(16);
+  assert.ok(ran >= 20, `a pose driver installed from follow mode ran ${ran} times in 20 frames`);
+  assert.ok(before !== null);
+}
+
+// ── NO VISIBLE REFRAME MAY WHIP AROUND ITS SUBJECT ─────────────────────────
+// Every reframe used to get a flat ~1.2s regardless of distance, so a dialogue
+// REVERSE (behind one shoulder to behind the other, about 130 degrees) orbited
+// the pair at nearly 2 rad/s and crossed the line between the speakers on the
+// way past. A reverse is a CUT in any film grammar; only small adjustments are
+// moves. The rule is a speed, and this is where it is enforced.
+{
+  const { comfortableRouteMs, cameraAngleFrom, shortestAngleDelta, MAX_ORBIT_RAD_PER_S,
+    MAX_VISIBLE_DIALOGUE_ROUTE_MS, MIN_VISIBLE_DIALOGUE_MOVE_MS } =
+    await import('../src/scenes/joseph3d/beats/helpers.js');
+
+  // The bearing helper must agree with how CameraDirector places a lens.
+  for (const angle of [0, 0.7, -1.9, Math.PI * 0.42, Math.PI]) {
+    const target = { x: 1.4, z: -3.2 };
+    const pos = {
+      x: target.x - Math.sin(angle) * 5,
+      z: target.z - Math.cos(angle) * 5,
+    };
+    assert.ok(
+      Math.abs(shortestAngleDelta(cameraAngleFrom(pos, target), angle)) < 1e-9,
+      `cameraAngleFrom disagrees with the director at ${angle}`,
+    );
+  }
+
+  const swingMs = (rad) => comfortableRouteMs(0, rad, 1200);
+  // A small adjustment still takes the comfortable floor, never less.
+  assert.equal(swingMs(0.2), MIN_VISIBLE_DIALOGUE_MOVE_MS);
+  // A classic OTS reverse cannot be travelled inside the visible ceiling, so
+  // the caller covers it — which is the whole point.
+  const reverse = Math.PI - 0.87;
+  assert.ok(
+    swingMs(reverse) > MAX_VISIBLE_DIALOGUE_ROUTE_MS,
+    `a ${(reverse * 180 / Math.PI).toFixed(0)}deg dialogue reverse would still be travelled visibly `
+    + `(${swingMs(reverse).toFixed(0)}ms <= ${MAX_VISIBLE_DIALOGUE_ROUTE_MS}ms) — that is the whip`,
+  );
+  // ...and nothing that IS travelled visibly exceeds the orbit speed.
+  for (const rad of [0.1, 0.3, 0.6, 0.9, 1.2, 1.34]) {
+    const ms = swingMs(rad);
+    if (ms > MAX_VISIBLE_DIALOGUE_ROUTE_MS) continue;
+    assert.ok(
+      (rad / ms) * 1000 <= MAX_ORBIT_RAD_PER_S + 1e-9,
+      `a ${rad.toFixed(2)}rad reframe travels at ${((rad / ms) * 1000).toFixed(2)}rad/s`,
+    );
+  }
+  console.log(
+    `Camera orbit law: <=${MAX_ORBIT_RAD_PER_S}rad/s; a ${(reverse * 180 / Math.PI).toFixed(0)}deg reverse `
+    + `would need ${swingMs(reverse).toFixed(0)}ms so it cuts instead.`,
+  );
+}
+
 console.log(
   `Camera continuity passed; linear first step ${firstStep.toFixed(4)}u, `
   + `arc first step ${arcFirstStep.toFixed(4)}u, min arc radius ${minArcRadius.toFixed(3)}u, `
