@@ -89,7 +89,12 @@ export function createApp(container) {
   // 12s readiness deadline and bounced back to home every time, while the same
   // navigation from a non-flat screen loaded fine. Visibility keeps the buffer.
   const isFlat = () => !!current?.instance?.flat;
-  const showCanvas = (on) => { renderer.domElement.style.visibility = on ? '' : 'hidden'; };
+  const showCanvas = (on) => {
+    renderer.domElement.style.visibility = on ? '' : 'hidden';
+    // A flat screen has no cinema letterbox to clear, so the #debug stats
+    // drop back into the corner instead of floating (see index.html).
+    document.body.classList.toggle('mr-flat-screen', !on);
+  };
   const paint = () => {
     if (!current || isFlat()) return;
     renderer.render(current.scene, camera);

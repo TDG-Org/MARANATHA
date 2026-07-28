@@ -34,6 +34,13 @@
     body.mr-letterbox-on #debug {
       bottom: calc(11vh + 18px + env(safe-area-inset-bottom));
     }
+    /* D26 (Nate): on a FLAT screen — the home map, the About/Support panels —
+       there is no cinema bar to clear and the About/Support links live at the
+       TOP now, so the 58px lift left the stats floating in mid-air. Sit them
+       down in the corner where they belong. */
+    body.mr-flat-screen #debug {
+      bottom: calc(12px + env(safe-area-inset-bottom));
+    }
 
     /* D8 phone pass: the dialogue + verse boxes shrink to compact sizes on
        small screens (inline styles set the desktop look; these win on phones). */

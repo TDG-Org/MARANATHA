@@ -172,42 +172,11 @@ export function buildPitStage(tex = {}) {
     }),
   );
   wall.position.set(PIT.x, -2.0, PIT.z); group.add(wall);
-  // A little hand-laid masonry gives the cistern wall readable history. Four
-  // staggered courses share ONE instanced box draw; no texture, shader, or
-  // per-frame work is added. The stones sit against the wall rather than over
-  // the shaft, so the fall camera and Joseph remain fully clear.
-  const COURSE_ROWS = 4;
-  const COURSE_STONES = 20;
-  const blockGeo = new THREE.BoxGeometry(0.52, 0.22, 0.11);
-  const masonry = new THREE.InstancedMesh(
-    blockGeo,
-    new THREE.MeshBasicMaterial({ color: 0xffffff, fog: true }),
-    COURSE_ROWS * COURSE_STONES,
-  );
-  const block = new THREE.Object3D();
-  const blockColor = new THREE.Color();
-  for (let row = 0; row < COURSE_ROWS; row++) {
-    const radius = 1.94 - row * 0.025;
-    const y = -0.58 - row * 0.92;
-    for (let i = 0; i < COURSE_STONES; i++) {
-      const index = row * COURSE_STONES + i;
-      const a = ((i + (row % 2) * 0.5) / COURSE_STONES) * Math.PI * 2;
-      block.position.set(
-        PIT.x + Math.cos(a) * radius,
-        y + ((i + row) % 3 - 1) * 0.018,
-        PIT.z + Math.sin(a) * radius,
-      );
-      block.rotation.set(0, Math.PI / 2 - a, 0);
-      block.scale.set(0.9 + ((i * 7 + row) % 5) * 0.055, 0.92 + (i % 2) * 0.08, 1);
-      block.updateMatrix();
-      masonry.setMatrixAt(index, block.matrix);
-      blockColor.set([0x574b52, 0x63575b, 0x4c444f][(i + row) % 3]);
-      masonry.setColorAt(index, blockColor);
-    }
-  }
-  masonry.instanceMatrix.needsUpdate = true;
-  masonry.instanceColor.needsUpdate = true;
-  group.add(masonry);
+  // (D26) The hand-laid instanced masonry that used to stand in for stonework
+  // is GONE. Nate supplied a real brick texture, and two masonries on one wall
+  // read as neither: the courses fought the photographed brick and the
+  // silhouette went muddy. The wall's texture is the stonework now — which is
+  // also 80 fewer instances and one fewer draw call.
   const floor = new THREE.Mesh(new THREE.CircleGeometry(1.95, 20), new THREE.MeshBasicMaterial({ color: 0x0c0a12, fog: true }));
   floor.rotation.x = -Math.PI / 2; floor.position.set(PIT.x, -4.0, PIT.z); group.add(floor);
   // only a whisper of light reaches the floor around him now
