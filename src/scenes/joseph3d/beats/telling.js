@@ -245,7 +245,7 @@ export function makeTellingBeats(ctx, h) {
       { t: 'say', who: 'Joseph', text: 'I dreamed again: the sun, moon, and eleven stars bowed to me.', color: J.Joseph },
       { t: 'dialogueHide' },
       { t: 'verse', verse: WEB.gen_37_9 },
-      { t: 'wait', ms: 1100 },
+      { t: 'hold', ms: 1100 },
       { t: 'verseHide' },
       groupShot(['joseph', ...BROTHERS], {
         angle: Math.PI,
@@ -287,7 +287,7 @@ export function makeTellingBeats(ctx, h) {
         );
       } },
       { t: 'verse', verse: WEB.gen_37_10 },
-      { t: 'wait', ms: 1400 },
+      { t: 'hold', ms: 1400 },
       { t: 'verseHide' },
     ]);
   }
@@ -310,7 +310,11 @@ export function makeTellingBeats(ctx, h) {
       { t: 'grade', mood: 'tenseDay', ms: 2000 },
       { t: 'fn', fn: () => { ctx.storyEvent?.('envy'); } },
       { t: 'verse', verse: WEB.gen_37_11 },
-      { t: 'wait', ms: 1300 },
+      // `hold`, not `wait`: these exist to give the closing line room, so Skip
+      // must collapse them with the narration. They used to run their full
+      // 1300 + 1200ms regardless, which is why skipping the last line looked
+      // like it did nothing at all.
+      { t: 'hold', ms: 1300 },
       { t: 'fn', fn: () => {
         jac.char.turnToward(
           ctx.joseph.position.x - jac.pos.x,
@@ -330,7 +334,7 @@ export function makeTellingBeats(ctx, h) {
         ms: 1800,
         arcRadius: 6.4,
       }),
-      { t: 'wait', ms: 1200 },
+      { t: 'hold', ms: 1200 },
       { t: 'verseHide' },
     ]);
 

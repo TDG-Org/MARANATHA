@@ -492,6 +492,16 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
     }
   };
   ctx.setStage = setStage;
+  // The real camp as a DISTANT BACKDROP, without waking any of its life.
+  //
+  // Nate: "when brothers are walking back, it should show the ACTUAL camp, but
+  // further away since it's bigger, but still clearly visible! not a little tiny
+  // mock up camp". The geometry was already right — the pit sits 62u from the
+  // camp and the brothers walk within 13 degrees of its bearing — the camp was
+  // simply switched off with the rest of the stage. This shows the set only:
+  // particles, flock, ambient AI, fire lights and camp ambience all stay asleep,
+  // so a backdrop costs a handful of static draws rather than a second scene.
+  ctx.setDistantCamp = (on) => { camp.group.visible = !!on; };
 
   // --- sheep (independent of GLB load) ---
   // The 3 stray LAMBS sit DEEP in the camp, all WEST/SW of the pen in open

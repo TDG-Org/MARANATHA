@@ -469,6 +469,12 @@ export function makeColdOpen(ctx, h) {
         // outside as a stray white disc over the brothers' walk-off.
         P.setSkyLight(0);
         P.setMealGlow(1);
+        // They are walking home. Show the REAL camp out there rather than the
+        // three stand-in silhouettes that used to fake it — same direction,
+        // 62u away, hazed by the scene's own fog into a true distance. Its
+        // life stays asleep; this is set dressing, not a second stage.
+        ctx.setDistantCamp?.(true);
+        P.campTents.visible = false;
         const mealSlots = [
           { x: P.MEAL.x - 1.5, z: P.MEAL.z + 0.6 },
           { x: P.MEAL.x + 0.1, z: P.MEAL.z - 1.25 },
@@ -494,13 +500,22 @@ export function makeColdOpen(ctx, h) {
         duration: 1,
         awaitMs: false,
       },
-      { t: 'fade', on: false, ms: 700 },
       { t: 'fn', fn: async () => {
         // D13 (Nate: "they walk then they stop in place"): the walk runs right
         // through the hold and INTO the fade — the old version finished its
         // travel loop and then stood there moon-walking for 900ms. Nobody
         // stops; the black takes them.
+        //
+        // D26 (Nate: "they are walking in place, then they actually start
+        // moving"): the OTHER end of the same shot. The walk ANIMATION started
+        // behind the black, but the reveal fade was a separate awaited step, so
+        // the movement tween below did not begin until 700ms after the picture
+        // was already up — and for those 700ms five men played a walk cycle on
+        // the spot. The travel starts FIRST now and the black lifts over it, so
+        // the first visible frame already has them moving.
         const D = 6100; let fading = false; let exitFade = null; // slow — no one hurries, no one looks back
+        const revealFade = ctx.cinema.fade(false, 700);
+        revealFade.catch((e) => { if (!isAbortError(e)) console.error('[cold-open reveal fade]', e); });
         ctx.camera.setPoseDriver((pose) => {
           let cx = 0, cz = 0;
           B.forEach((n) => { cx += n.pos.x; cz += n.pos.z; });
@@ -530,6 +545,8 @@ export function makeColdOpen(ctx, h) {
       // lands over the sound of a child crying at the bottom of a well.
       { t: 'fade', on: true, ms: 600 },
       { t: 'fn', fn: () => {
+        // Back down the shaft: the distant camp has no business in this frame.
+        ctx.setDistantCamp?.(false);
         jRoot.rotation.set(0, 0, 0);     // upright again (behind the black)
         jRoot.rotation.order = 'XYZ';    // the fall's yaw-then-pitch order ends here
         jRoot.position.set(P.PIT.x + 0.15, -4.0, P.PIT.z + 0.1);

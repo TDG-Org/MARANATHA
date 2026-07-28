@@ -233,7 +233,7 @@ export function buildPitStage(tex = {}) {
   group.add(mealGlow);
 
   return {
-    group, PIT, MEAL, coatProp, skyLight, shaftLight,
+    group, PIT, MEAL, coatProp, skyLight, shaftLight, campTents,
     // The stage owner drives this instead of hiding the light (see above).
     setShaft(k) { shaftLight.intensity = 1.05 * k; },
     setSkyLight(k) { skyLight.material.opacity = 0.9 * k; },

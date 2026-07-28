@@ -112,6 +112,7 @@ export class Sequencer {
   }
 
   async run(steps) {
+    this.lastVerseSkipped = false;
     this.running = true;
     const c = this.ctx;
     // D6: the quest banner stands down whenever a sequence is playing (it must
@@ -137,9 +138,17 @@ export class Sequencer {
         case 'title':
           await awaitWork(() => c.cinema.titleCard(s));
           break;
-        case 'verse':
-          await awaitWork(() => c.verseCard.show(s.verse));
+        case 'verse': {
+          // Remember whether the player SKIPPED this line. Everything authored
+          // after a verse — the hold on the frame, the reaction beat — exists to
+          // give the narration room, so if the narration was cut short those
+          // holds must collapse with it. Without this, Skip stopped the voice
+          // and then the scene sat through several seconds of timed steps, which
+          // reads as "skip did nothing" (Nate, on the closing line).
+          const verseResult = await awaitWork(() => c.verseCard.show(s.verse));
+          this.lastVerseSkipped = verseResult?.status === 'skipped';
           break;
+        }
         case 'verseHide':
           c.verseCard.hide();
           break;
@@ -191,6 +200,11 @@ export class Sequencer {
           break;
         case 'wait':
           await wait(s.ms ?? 500);
+          break;
+        // A hold that belongs to the narration: full length normally, gone the
+        // instant the player skips the line it was giving room to.
+        case 'hold':
+          if (!this.lastVerseSkipped) await wait(s.ms ?? 500);
           break;
         case 'fn':
           await awaitWork(() => s.fn?.(c));

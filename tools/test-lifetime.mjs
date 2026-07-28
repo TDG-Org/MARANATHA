@@ -80,6 +80,44 @@ for (const paused of [false, true]) {
   }
 }
 
+// SKIPPING THE LAST LINE MUST ACTUALLY SKIP.
+//
+// The Skip button ends the narrated LINE. But the beats then hold the frame to
+// give that line room — and those holds used to be plain `wait` steps that ran
+// their full length regardless, so the closing verse stopped speaking and the
+// scene sat there for seconds. Nate: "when i skip narrator, at the very end, it
+// doesnt seem to skip?" A `hold` collapses with the line it belongs to.
+{
+  const { Sequencer } = await import('../src/engine/Sequencer.js');
+  const run = async (status) => {
+    let waited = 0;
+    const seq = new Sequencer({
+      isPaused: () => false,
+      verseCard: { show: async () => ({ status }), hide() {} },
+      cinema: { letterbox: async () => {}, titleCard: async () => {} },
+      dialogue: { say: async () => {}, hide() {} },
+      camera: { setDrift() {}, cinematicMoveTo: () => 0, cutTo: () => 0 },
+      hud: { setCutscene() {}, setLetterbox() {} },
+    });
+    const realWait = globalThis.setTimeout;
+    globalThis.setTimeout = (fn, ms = 0) => { waited += ms; return realWait(fn, 0); };
+    await seq.run([
+      { t: 'verse', verse: { text: 'x' } },
+      { t: 'hold', ms: 1300 },
+      { t: 'wait', ms: 90 },
+      { t: 'hold', ms: 1200 },
+      { t: 'verseHide' },
+    ]);
+    globalThis.setTimeout = realWait;
+    return waited;
+  };
+  const spoken = await run('spoken');
+  const skipped = await run('skipped');
+  assert.ok(spoken >= 2500, `an unskipped closing line should hold its full ~2500ms, held ${spoken}`);
+  assert.ok(skipped < 200, `a SKIPPED closing line still held ${skipped}ms of narration holds`);
+  assert.ok(skipped >= 90, 'a plain wait must survive a skip — only narration holds collapse');
+}
+
 {
   const motion = new CutsceneMotion();
   const run = motion.tween(5000, () => {});
