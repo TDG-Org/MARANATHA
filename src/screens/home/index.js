@@ -2,6 +2,7 @@ import { STORIES, ERAS } from '../../data/stories.js';
 import { statusOf } from '../../systems/SaveSystem.js';
 import { Audio } from '../../systems/AudioSystem.js';
 import { Graphics } from '../../systems/Graphics.js';
+import { Settings } from '../../systems/Settings.js';
 import { openSettings } from '../../ui/settings.js';
 import { BACKDROP_HTML, ROAD_HTML, VIGNETTE_HTML } from './backdrop.js';
 import { PALETTES, paletteKeyForNow } from './palettes.js';
@@ -83,7 +84,10 @@ export function buildHome({ app, params = {} }) {
   let disposed = false;
 
   const query = new URLSearchParams(window.location.hash.split('?')[1] || '');
-  const paletteKey = paletteKeyForNow(query.get('time'));
+  // The player's chosen backdrop wins over the clock; 'auto' (the default)
+  // keeps matching the time of day. A ?time= override still beats both, for QA.
+  const chosenSky = Settings.data?.sky && Settings.data.sky !== 'auto' ? Settings.data.sky : null;
+  const paletteKey = paletteKeyForNow(query.get('time') || chosenSky);
   const palette = PALETTES[paletteKey];
   const quiet = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false;
 

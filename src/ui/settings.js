@@ -137,6 +137,54 @@ export function openSettings({ onReset } = {}) {
   panel.append(gfxWrap);
   paintGfx();
 
+  // --- Backdrop (the home map's time of day) --------------------------------
+  // Nate: "allow the user in the settings to change the background, and toggle
+  // off 'match with time of day' and all that!" Auto follows the clock; picking
+  // a sky pins it so the map stops changing under the player. It applies the
+  // next time the map is built, which is said plainly rather than implied.
+  const SKIES = [
+    ['auto', 'Auto'], ['dawn', 'Dawn'], ['day', 'Day'], ['dusk', 'Dusk'], ['night', 'Night'],
+  ];
+  const skyWrap = document.createElement('div');
+  skyWrap.style.cssText = 'margin:20px 0 6px; font-family:"Segoe UI",system-ui,sans-serif;';
+  const skyHead = document.createElement('div');
+  skyHead.style.cssText = 'display:flex; justify-content:space-between; font-size:13.5px; margin-bottom:8px; opacity:0.9;';
+  const skyName = document.createElement('span'); skyName.textContent = 'Map backdrop';
+  const skyHint = document.createElement('span');
+  skyHint.style.cssText = 'font-size:11.5px; opacity:0.6;';
+  skyHead.append(skyName, skyHint);
+  const skyRow = document.createElement('div');
+  skyRow.style.cssText = 'display:flex; gap:6px; flex-wrap:wrap;';
+  const skyBtns = {};
+  const paintSky = () => {
+    const cur = Settings.get('sky') || 'auto';
+    Object.entries(skyBtns).forEach(([k, b]) => {
+      const on = cur === k;
+      b.style.background = on ? '#f2b880' : 'rgba(255,255,255,0.06)';
+      b.style.color = on ? '#241f38' : '#fdf6e3';
+      b.style.fontWeight = on ? '700' : '500';
+    });
+    skyHint.textContent = cur === 'auto'
+      ? 'matching the time of day'
+      : 'your choice · shows next time the map opens';
+  };
+  SKIES.forEach(([key, label]) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = label;
+    b.style.cssText = [
+      'flex:1 0 auto', 'min-width:58px', 'padding:8px 6px', 'border-radius:9px', 'cursor:pointer',
+      'font:600 12.5px "Segoe UI",system-ui,sans-serif',
+      'border:1px solid rgba(242,184,128,0.4)', 'transition:filter 140ms ease',
+    ].join(';');
+    b.onclick = () => { Audio.uiClick?.(); Settings.set('sky', key); paintSky(); };
+    skyBtns[key] = b;
+    skyRow.append(b);
+  });
+  skyWrap.append(skyHead, skyRow);
+  panel.append(skyWrap);
+  paintSky();
+
   // --- HUD toggle ---
   const hudRow = document.createElement('label');
   hudRow.style.cssText = [

@@ -4,7 +4,9 @@ import { Audio } from './AudioSystem.js';
 // localStorage. Master volume stays owned by AudioSystem (its own key); this
 // layer owns Music / SFX / Narrator / HUD and applies them on boot.
 const KEY = 'maranatha-settings-v1';
-const DEFAULTS = { music: 0.8, sfx: 0.9, voice: 1.0, hud: true };
+// `sky` is the home's backdrop. 'auto' follows the clock (dawn/day/dusk/night);
+// any other value pins that one and stops the map changing under the player.
+const DEFAULTS = { music: 0.8, sfx: 0.9, voice: 1.0, hud: true, sky: 'auto' };
 
 function read() {
   try {
