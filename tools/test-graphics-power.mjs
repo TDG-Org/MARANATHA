@@ -77,6 +77,35 @@ function slowFrames(graphics, count) {
       );
     }
   }
+  // ── AND NEITHER MAY A TRANSITION ────────────────────────────────────────
+  // The keyframe law above only covers the vista's idle motion. Everything the
+  // player actually TOUCHES is a `transition`, and those were never audited:
+  // the Start Story button animated `letter-spacing`, so hovering the one
+  // button the whole menu is built around ran a layout pass over the panel
+  // subtree on every frame of a 300ms transition. The full-screen map band
+  // animated `filter`, re-running a 7px blur over the entire viewport ~18 times
+  // every time the player opened About.
+  //
+  // Banned outright: anything that forces LAYOUT, and anything that re-filters
+  // a full-screen surface. Paint-only properties on small controls (background,
+  // border-color, colour) stay allowed — they are a different order of cost.
+  const FORBIDDEN_TRANSITIONS = [
+    'letter-spacing', 'word-spacing', 'width', 'height', 'top', 'left', 'right',
+    'bottom', 'margin', 'padding', 'font-size', 'line-height', 'filter',
+    'backdrop-filter', 'all',
+  ];
+  for (const [, selector, body] of stylesSource.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
+    const transition = body.match(/(?:^|;)\s*transition:\s*([^;]+)/);
+    if (!transition) continue;
+    for (const part of transition[1].split(',')) {
+      const prop = part.trim().split(/\s+/)[0].toLowerCase();
+      assert.ok(
+        !FORBIDDEN_TRANSITIONS.includes(prop),
+        `"${selector.trim()}" transitions "${prop}" — that is a layout or full-surface repaint on every frame of the transition`,
+      );
+    }
+  }
+
   // The road's dashes may never march again: the generated backdrop still ships
   // the design's mrDash, so the screen has to keep rewriting it on the way in.
   assert.match(homeSource, /animRe\('Dash'\), 'animation:mrShimmer/,

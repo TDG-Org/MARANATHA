@@ -321,25 +321,40 @@ export function buildHome({ app, params = {} }) {
     return (panelRight + viewRight) / 2;
   }
 
+  // Dragging the road calls applyCamera on every pointer frame. It used to
+  // re-query the stage for the four sun/moon elements each time and rewrite an
+  // identical `transition` string on a dozen elements — style work the browser
+  // then has to recompute, for a value that had not changed. Resolve the
+  // elements once and write only what actually differs.
+  const lumEls = ['[data-lum]', '[data-lumglow]', '[data-lumring]', '[data-moonlight]']
+    .map((sel) => stage.querySelector(sel))
+    .filter(Boolean);
+  let lastTransition = null;
+  let lastAtGate = null;
   function applyCamera(animate) {
     const transition = animate ? 'transform 680ms cubic-bezier(.22,.72,.2,1)' : 'none';
     const x = Math.round(offset);
-    road.style.transition = transition;
+    if (transition !== lastTransition) {
+      lastTransition = transition;
+      road.style.transition = transition;
+      for (const layer of parallax) layer.el.style.transition = transition;
+      for (const el of lumEls) el.style.transition = transition;
+    }
     road.style.transform = `translate3d(${x}px,0,0)`;
     for (const layer of parallax) {
-      layer.el.style.transition = transition;
       layer.el.style.transform = `translate3d(${Math.round(x * layer.factor)}px,0,0)`;
     }
     // The sun/moon travels with the farthest band so the hilltop crosses stay
     // silhouetted against it, and never slides under the story panel.
     const dx = Math.max(Math.round(x * 0.05), Math.min(0, 540 - palette.lum.x));
-    for (const sel of ['[data-lum]', '[data-lumglow]', '[data-lumring]', '[data-moonlight]']) {
-      const el = stage.querySelector(sel);
-      if (!el) continue;
-      el.style.transition = transition;
+    for (const el of lumEls) {
       el.style.transform = `translate(-50%,-50%) translate3d(${dx}px,0,0)`;
     }
-    root.classList.toggle('at-gate', x <= minOffset + 2);
+    const atGate = x <= minOffset + 2;
+    if (atGate !== lastAtGate) {
+      lastAtGate = atGate;
+      root.classList.toggle('at-gate', atGate);
+    }
   }
 
   // ---- selection -----------------------------------------------------------

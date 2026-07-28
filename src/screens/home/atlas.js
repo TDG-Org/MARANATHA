@@ -154,6 +154,13 @@ export function nodeHtml(n) {
     ? `<span data-halo="1" style="position:absolute; left:0; top:0; width:${Math.round(n.size * 2.3)}px; height:${Math.round(n.size * 2.3)}px; transform:translate(-50%,-50%); border-radius:50%; background:radial-gradient(circle,rgba(255,206,140,.3) 0%,rgba(255,206,140,0) 66%); pointer-events:none"></span>`
     : '';
 
+  // The hover light. It used to be `filter: brightness(1.1)` on the stop
+  // itself, transitioned — a filter animation on 35 stops sitting inside the
+  // one big promoted road layer. This fades an already-painted glow instead,
+  // which the compositor does on its own, and it reads better: the stop lights
+  // UP rather than washing out.
+  const hoverGlow = `<span data-hoverglow="1" style="position:absolute; left:0; top:0; width:${Math.round(n.size * 2.6)}px; height:${Math.round(n.size * 2.6)}px; transform:translate(-50%,-50%); border-radius:50%; background:radial-gradient(circle,rgba(255,228,178,.42) 0%,rgba(255,206,140,0) 64%); opacity:0; transition:opacity 240ms ease; pointer-events:none"></span>`;
+
   const glyph = lit
     ? (done
       ? '<span style="font-size:26px; line-height:1; color:#2b1a10">✔</span>'
@@ -189,7 +196,7 @@ export function nodeHtml(n) {
   const label = `Chapter ${n.ord} — ${n.title}, ${n.passage}${lit ? '' : ' (coming soon)'}`;
   return `<button type="button" class="mr-node" data-node="${n.id}" aria-label="${label}"
     style="position:absolute; left:${n.x}px; top:${n.y}px; width:0; height:0; padding:0; border:0; background:none; color:inherit; font:inherit; cursor:pointer">
-    ${halo}
+    ${halo}${hoverGlow}
     <span data-circle="1" style="position:absolute; left:0; top:0; width:${n.size}px; height:${n.size}px; transform:translate(-50%,-50%); border-radius:50%; display:flex; align-items:center; justify-content:center; background:${bg}; border:2px solid ${border}; box-shadow:${shadow}">${glyph}</span>
     <span style="position:absolute; left:0; top:${-half - 26}px; transform:translateX(-50%); font:600 ${ordSize}px Georgia,serif; letter-spacing:.24em; color:${ordColor}; white-space:nowrap; pointer-events:none">${n.ord}</span>
     <span style="position:absolute; left:0; top:${half + 13}px; transform:translateX(-50%); font:600 ${labelSize}px 'Segoe UI',system-ui,sans-serif; color:${labelColor}; letter-spacing:.04em; white-space:nowrap; text-shadow:0 2px 9px rgba(4,14,20,.85); pointer-events:none">${n.title}</span>

@@ -42,10 +42,14 @@ export const UI_CSS = `
 .mr-still .mr-band *, .mr-still .mr-band { animation-play-state: paused !important; }
 /* The map behind an open About/Support panel. It is ALREADY parked by
    .mr-still before this applies, so the blur is rasterised once instead of
-   re-running the convolution on every animated frame. */
+   re-running the convolution on every animated frame.
+   And it is rasterised ONCE, not eighteen times: this used to carry a
+   300ms filter transition, which re-ran a 7px convolution over the entire
+   viewport on every frame of the fade. On a large screen that is the single
+   most expensive thing the menu could possibly do, and it happened every time
+   the player opened About. The panel's own fade covers the change. */
 .mr-home.mr-behind-panel .mr-band { filter: blur(7px) saturate(.9) brightness(.66); }
 .mr-home.mr-behind-panel .mr-ui { opacity: .25; transition: opacity 260ms ease; pointer-events: none; }
-.mr-home .mr-band { transition: filter 300ms ease; }
 
 .mr-band { position: absolute; left: 0; top: 0; right: 0; overflow: hidden; }
 .mr-stage {
@@ -72,8 +76,9 @@ export const UI_CSS = `
 [data-roadwrap].is-grabbing { cursor: grabbing; }
 
 /* ---- chapter stops ---- */
-.mr-node { transition: transform 260ms cubic-bezier(.2,.8,.3,1), filter 260ms ease; }
-.mr-node:hover { transform: translateY(-7px); filter: brightness(1.1); }
+.mr-node { transition: transform 260ms cubic-bezier(.2,.8,.3,1); }
+.mr-node:hover { transform: translateY(-7px); }
+.mr-node:hover [data-hoverglow], .mr-node:focus-visible [data-hoverglow] { opacity: 1; }
 .mr-node.is-selected [data-circle] { outline: 2px solid rgba(255,240,214,.9); outline-offset: 7px; }
 .mr-node:focus { outline: none; }
 .mr-node:focus-visible [data-circle] { outline: 3px solid #fff6e6; outline-offset: 7px; }
@@ -172,19 +177,20 @@ export const UI_CSS = `
   background: linear-gradient(150deg,#fff2d8 0%,#ffdca6 34%,#f2b880 62%,#e0a05f 100%);
   box-shadow: 0 14px 34px rgba(255,178,96,.3), 0 0 0 1px rgba(120,70,26,.18),
               inset 0 1px 0 rgba(255,255,255,.85), inset 0 -2px 6px rgba(150,88,32,.24);
-  transition: transform 220ms cubic-bezier(.2,.8,.3,1), box-shadow 300ms ease, letter-spacing 300ms ease;
+  /* NO LAYOUT PROPERTY MAY BE TRANSITIONED HERE. This used to animate
+     letter-spacing, which changes the button's intrinsic width — so hovering
+     the one button the whole menu is built around ran a layout pass over the
+     panel subtree on every frame of a 300ms transition, and the label visibly
+     reflowed while it did. The glow stays: a box-shadow repaints one small
+     element, which is a different order of cost from re-laying-out its parent. */
+  transition: transform 220ms cubic-bezier(.2,.8,.3,1), box-shadow 300ms ease;
 }
 .mr-start::before {
   content: ''; position: absolute; left: -40%; top: -120%; width: 44%; height: 340%;
   background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,.5), rgba(255,255,255,0));
   transform: rotate(18deg); pointer-events: none;
 }
-.mr-start:hover:not(:disabled) {
-  transform: translateY(-3px); letter-spacing: .19em;
-  box-shadow: 0 20px 46px rgba(255,186,104,.46), 0 0 34px rgba(255,206,140,.4),
-              0 0 0 1px rgba(120,70,26,.2), inset 0 1px 0 rgba(255,255,255,.9),
-              inset 0 -2px 6px rgba(150,88,32,.24);
-}
+.mr-start:hover:not(:disabled) { transform: translateY(-3px); }
 .mr-start:active:not(:disabled) { transform: translateY(-1px); }
 .mr-start.is-locked {
   background: rgba(255,255,255,.1); color: #fdf6e3; opacity: .6;
