@@ -1,33 +1,31 @@
 import { Audio } from '../systems/AudioSystem.js';
-import { BACKDROP_HTML, VIGNETTE_HTML } from './home/backdrop.js';
-import { PALETTES, paletteKeyForNow } from './home/palettes.js';
 
-// ABOUT + SUPPORT — pop-outs, not places.
+// ABOUT + SUPPORT — panels the LIVE home owns.
 //
-// These used to be full 3D screens: each built its own sky, ridges, ground, sun
-// and sixty drifting motes, and kept the render loop submitting frames the whole
-// time somebody read three paragraphs. Nate: *"instead of creating whole pages
-// for them, just have a big pop out in th middle and blur the background, for
-// both of them, and clicking outside the box just goes back to the normal home
-// screen, but still have a small simple X on the top right!"*
+// They were screens once: each built a sky, ridges, ground, sun and sixty
+// drifting motes, and kept the renderer submitting frames while somebody read
+// three paragraphs. Then they were flat screens with a still copy of the vista
+// painted behind them — which still NAVIGATED, and Nate caught what that costs:
+// *"it does pop out but on their own pages because the music also stops and i
+// dont see the home page in the background even though it's blurred"*.
 //
-// So they declare `flat` now — no WebGL, no frames — and what sits behind the
-// card is the home's own painted vista, drawn ONCE with every animation stripped
-// and a blur over it. A still blurred layer is rasterised a single time and then
-// merely composited; that is the whole difference between a backdrop and a
-// running scene.
+// Navigating disposes the home. The home owns the menu music, so the music
+// stopped; and "the background" was a photograph of the home rather than the
+// home. So these do not navigate at all now. `openPanel()` mounts an overlay
+// over the running home: its music keeps playing, its vista is the real one
+// behind the glass, and closing is just un-mounting a div.
+//
+// The blur is affordable because of the order it is done in: the vista is
+// PARKED first (the existing `.mr-still` class stops every animation), and only
+// then blurred. A still layer is rasterised once and composited; blurring a
+// layer that is still animating would re-run the convolution every frame, which
+// is the one thing this project forbids over live content.
 //
 // Static-site friendly: Support uses a Stripe PAYMENT LINK (no backend). Nate
 // replaces STRIPE_PAYMENT_LINK below.
 export const STRIPE_PAYMENT_LINK = 'https://buy.stripe.com/REPLACE_WITH_YOUR_LINK';
 
-// Every `animation:` declaration out of the copy. The vista behind a dialog is
-// wallpaper; it must not ask the compositor for a single frame.
-const STILL = BACKDROP_HTML.replace(/animation:\s*mr[A-Za-z]+[^;"]*;?/g, '');
-
-function popout({ app, heading, passage }) {
-  const palette = PALETTES[paletteKeyForNow()];
-
+function popout({ onClose, heading, passage }) {
   const root = document.createElement('div');
   root.className = 'mr-page';
   root.style.cssText = [
@@ -38,23 +36,11 @@ function popout({ app, heading, passage }) {
     'opacity:0', 'transition:opacity 320ms ease',
   ].join(';');
 
-  // the still vista, blurred back so the card owns the eye
+  // Only a dim wash here. The blur belongs to the REAL home underneath, which
+  // stays mounted and keeps playing its music; the home applies it to its own
+  // vista after parking the animations (see openPanel's caller).
   const behind = document.createElement('div');
-  behind.style.cssText = [
-    'position:absolute', 'inset:0', 'overflow:hidden',
-    `background:${palette.sky}`, 'pointer-events:none',
-  ].join(';');
-  const world = document.createElement('div');
-  world.style.cssText = [
-    'position:absolute', 'left:50%', 'top:50%',
-    'width:1440px', 'height:810px', 'margin:-405px 0 0 -720px',
-    'transform:scale(1.25)', 'filter:blur(9px) saturate(.85) brightness(.62)',
-  ].join(';');
-  world.innerHTML = STILL + VIGNETTE_HTML;
-  behind.append(world);
-  const dim = document.createElement('div');
-  dim.style.cssText = 'position:absolute; inset:0; background:rgba(3,6,16,.55);';
-  behind.append(dim);
+  behind.style.cssText = 'position:absolute; inset:0; background:rgba(3,6,16,.42);';
   root.append(behind);
 
   // the card
@@ -123,15 +109,11 @@ function popout({ app, heading, passage }) {
     card.style.transform = 'translateY(0)';
   });
 
-  // No one-shot latch, and no retry loop here either. app.navigate() is
-  // busy-guarded but now QUEUES a request made mid-transition, so one call is
-  // always enough. (The obvious `if (leaving) return; leaving = true;` guard was
-  // a trap: opening this pop-out is itself a ~2s navigation, so an early Escape
-  // got refused while the latch had already flipped, and the page could then
-  // never be closed by anything.)
+  // Closing is a local un-mount, not a navigation, so it is instant and can
+  // never be refused by a router that happens to be busy.
   const leave = () => {
     Audio.uiClick?.();
-    app.navigate('home');
+    onClose();
   };
 
   close.onclick = leave;
@@ -147,9 +129,9 @@ function popout({ app, heading, passage }) {
   return { body, cleanup };
 }
 
-export function buildAbout({ app }) {
+export function openAboutPanel({ onClose }) {
   const { body, cleanup } = popout({
-    app, heading: 'About MARANATHA', passage: '“Maranatha — Come, Lord.”',
+    onClose, heading: 'About MARANATHA', passage: '“Maranatha — Come, Lord.”',
   });
   body.innerHTML = `
     <p style="margin:0 0 14px;"><strong>MARANATHA</strong> is a Bible game — a biblically accurate
@@ -165,12 +147,12 @@ export function buildAbout({ app }) {
     only</strong> — there is no account, and nothing is ever sent to a server.</p>
     <p style="margin:0; opacity:0.82;">Made with care, for the God who keeps His promises. <em>Come, Lord.</em></p>
   `;
-  return { flat: true, update() {}, dispose: cleanup, whenReady: Promise.resolve(true) };
+  return cleanup;
 }
 
-export function buildSupport({ app }) {
+export function openSupportPanel({ onClose }) {
   const { body, cleanup } = popout({
-    app, heading: 'Support MARANATHA', passage: 'Keep it free for everyone',
+    onClose, heading: 'Support MARANATHA', passage: 'Keep it free for everyone',
   });
   body.innerHTML = `
     <p style="margin:0 0 14px;">MARANATHA is <strong>free, with no ads and no accounts</strong> — and
@@ -201,5 +183,5 @@ export function buildSupport({ app }) {
     }
   };
   body.append(btn, note);
-  return { flat: true, update() {}, dispose: cleanup, whenReady: Promise.resolve(true) };
+  return cleanup;
 }

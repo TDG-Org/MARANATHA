@@ -21,18 +21,20 @@ app.register('home', buildHome);
 app.registerLazy('joseph', () => import('./scenes/joseph3d/index.js').then((m) => m.buildJoseph3D));
 app.registerLazy('legacy-joseph', () => import('./scenes/joseph/index.js').then((m) => m.buildJoseph));
 app.registerLazy('playground', () => import('./screens/playground.js').then((m) => m.buildPlayground));
-app.registerLazy('about', () => import('./screens/pages.js').then((m) => m.buildAbout));
-app.registerLazy('support', () => import('./screens/pages.js').then((m) => m.buildSupport));
+// About and Support are NOT routes. They are panels the home opens over itself,
+// so its music keeps playing and the real map stays behind them (see pages.js).
 
 Audio.registerManifest(AUDIO_MANIFEST);
 mountVolumeControl();
 mountSkipButton();
+const openPanel = /about/.test(location.hash) ? 'about'
+  : /support/.test(location.hash) ? 'support'
+    : null;
 app.navigate(
   /playground/.test(location.hash) ? 'playground'
     : /legacy-joseph/.test(location.hash) ? 'legacy-joseph'
-      : /about/.test(location.hash) ? 'about'
-        : /support/.test(location.hash) ? 'support'
-          : 'home',
+      : 'home',
+  openPanel ? { openPanel } : undefined,
 );
 
 // Debug/testing handle (harmless in production; used by automated playtests).

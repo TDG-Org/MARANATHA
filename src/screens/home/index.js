@@ -546,7 +546,7 @@ export function buildHome({ app, params = {} }) {
       return;
     }
     const page = e.target.closest?.('[data-page]');
-    if (page) { Audio.uiClick(); app.navigate(page.dataset.page); }
+    if (page) { Audio.uiClick(); openPanel(page.dataset.page); }
   });
 
   startBtn.onclick = () => {
@@ -583,6 +583,39 @@ export function buildHome({ app, params = {} }) {
   observer?.observe(root);
   const graphicsOff = Graphics.subscribe?.(() => relayout());
 
+  // ---- About / Support panels ----------------------------------------------
+  // These are NOT screens. Navigating away would dispose this home — taking its
+  // music with it — and the "blurred background" would be a photograph of the
+  // map rather than the map. They mount over the living home instead.
+  //
+  // Order matters for the blur: park the vista FIRST (`.mr-still` stops every
+  // animation), then blur. Blurring a surface that is still animating re-runs
+  // the convolution every frame; blurring a parked one rasterises once.
+  let closePanel = null;
+  const setPanelBlur = (on) => {
+    root.classList.toggle('mr-behind-panel', on);
+    syncMotion(on);
+  };
+  function openPanel(name) {
+    if (closePanel) closePanel();
+    setPanelBlur(true);
+    const onClose = () => {
+      closePanel = null;
+      setPanelBlur(false);
+      cleanup?.();
+    };
+    let cleanup = null;
+    const load = name === 'support'
+      ? import('../pages.js').then((m) => m.openSupportPanel({ onClose }))
+      : import('../pages.js').then((m) => m.openAboutPanel({ onClose }));
+    load.then((dispose) => {
+      cleanup = dispose;
+      // Closed again before the chunk arrived — do not leave an orphan panel.
+      if (!closePanel) dispose();
+    }).catch((e) => { console.error('[home] panel failed', e); setPanelBlur(false); });
+    closePanel = () => { closePanel = null; setPanelBlur(false); cleanup?.(); };
+  }
+
   // ---- motion gate ---------------------------------------------------------
   // A menu is where a player parks. The vista is CSS, so it lives on the
   // compositor and never touches the frame governor — but "not on the main
@@ -592,9 +625,11 @@ export function buildHome({ app, params = {} }) {
   // watching. Hidden tabs are already stopped by the browser; an UNFOCUSED but
   // visible window is not, and that is exactly the second-monitor case. Both
   // stop here, and the motion picks up where it left off on the way back.
-  const syncMotion = () => {
+  let panelParked = false;
+  const syncMotion = (forcePark) => {
     if (disposed) return;
-    root.classList.toggle('mr-still', document.hidden || !document.hasFocus());
+    if (typeof forcePark === 'boolean') panelParked = forcePark;
+    root.classList.toggle('mr-still', panelParked || document.hidden || !document.hasFocus());
   };
   document.addEventListener('visibilitychange', syncMotion);
   window.addEventListener('blur', syncMotion);
@@ -633,11 +668,15 @@ export function buildHome({ app, params = {} }) {
   // that is still hidden gets no frames, so a timer backs it up — the map must
   // never be left sitting at opacity 0.
   const reveal = () => { if (!disposed) root.classList.add('is-in'); };
+  // #about / #support still work as links: they land on the map and open
+  // their panel over it, which is what they always should have done.
+  if (params.openPanel) setTimeout(() => { if (!disposed) openPanel(params.openPanel); }, 260);
   requestAnimationFrame(reveal);
   const revealTimer = setTimeout(reveal, 80);
 
   function dispose() {
     disposed = true;
+    closePanel?.();
     clearTimeout(revealTimer);
     window.removeEventListener('pointerdown', startBeds);
     window.removeEventListener('keydown', onKeyDown);

@@ -40,6 +40,12 @@ export const UI_CSS = `
 .mr-home.is-in { opacity: 1; }
 .mr-quiet .mr-band *, .mr-quiet .mr-band { animation: none !important; }
 .mr-still .mr-band *, .mr-still .mr-band { animation-play-state: paused !important; }
+/* The map behind an open About/Support panel. It is ALREADY parked by
+   .mr-still before this applies, so the blur is rasterised once instead of
+   re-running the convolution on every animated frame. */
+.mr-home.mr-behind-panel .mr-band { filter: blur(7px) saturate(.9) brightness(.66); }
+.mr-home.mr-behind-panel .mr-ui { opacity: .25; transition: opacity 260ms ease; pointer-events: none; }
+.mr-home .mr-band { transition: filter 300ms ease; }
 
 .mr-band { position: absolute; left: 0; top: 0; right: 0; overflow: hidden; }
 .mr-stage {
