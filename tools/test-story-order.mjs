@@ -568,6 +568,14 @@ assert.match(dreamFieldSource, /writeBorderRocks\(t\)/,
   'the dream border boulders stopped animating — the near rocks are stationary again');
 assert.match(dreamFieldSource, /const rise = 0\.45 \+ rnd\(\) \* 0\.4;[\s\S]*rise \+ 0\.45 \+ rnd\(\) \* 0\.45/,
   'the border boulder arc no longer guarantees its hover exceeds its rise (they would sink through the ground)');
+// The bushes share that ring at the same distance and read as stones in dream
+// light. If only the boulders move, two thirds of the near ring is still frozen.
+assert.match(dreamFieldSource, /if \(borderBush && borderBushSpots\)/,
+  'the dream border bushes went static again — most of the near ring would be frozen');
+// An InstancedMesh caches the bounding sphere from its build-time matrices, so
+// a ring that now rises must opt out of frustum culling or it can pop away.
+assert.match(dreamFieldSource, /borderRock\.frustumCulled = false;[\s\S]*borderBush\.frustumCulled = false;/,
+  'the animated border ring can be frustum-culled against its stale bounding sphere');
 assert.match(dreamSource, /setNameTagSuppressed\?\.\(ctx\.joseph, true\)/);
 assert.match(dreamSource, /ctx\.sunSprite\.visible = false/);
 assert.match(

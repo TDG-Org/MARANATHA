@@ -200,6 +200,7 @@ export function buildDreamField() {
   // They rise off the earth and ride the same slow arc now. The bushes keep
   // their feet down, so the border still reads as a border.
   let borderRockSpots = null;
+  let borderBushSpots = null;
   {
     const bushGeo = (() => {
       const a = new THREE.SphereGeometry(0.55, 7, 6); a.translate(0, 1.0, 0); a.scale(1, 1.5, 1);
@@ -214,6 +215,7 @@ export function buildDreamField() {
       if (Math.abs(da) < 0.42) continue; // the northern gap — the way up the mountain
       const r = 14.3 + rnd() * 1.1;
       const spot = [FIELD.x + Math.sin(a) * r, FIELD.z + Math.cos(a) * r, 0.85 + rnd() * 0.7, rnd() * 6];
+      spot.push(rnd() * Math.PI * 2); // [4] phase — bushes lean, rocks ride
       if (i % 3 === 0) {
         // [x, z, scale, yaw, phase, speed, rise, hover]
         // phase, speed, rise, hover. The hover ALWAYS exceeds the rise, so the
@@ -221,7 +223,7 @@ export function buildDreamField() {
         // through the earth reads as a bug, not as wonder. These sit nearer the
         // player than the far stones, so they ride a gentler arc.
         const rise = 0.45 + rnd() * 0.4;
-        spot.push(rnd() * Math.PI * 2, 0.24 + rnd() * 0.18, rise, rise + 0.45 + rnd() * 0.45);
+        spot.push(0.24 + rnd() * 0.18, rise, rise + 0.45 + rnd() * 0.45); // [5]=speed [6]=rise [7]=hover
         rockSpots.push(spot);
       } else bushSpots.push(spot);
     }
@@ -236,23 +238,47 @@ export function buildDreamField() {
     borderBush = mkRing(bushGeo, 0x2a3555, bushSpots);
     borderRock = mkRing(rockGeo2, 0x394260, rockSpots);
     borderRockSpots = rockSpots;
+    borderBushSpots = bushSpots;
+    // An InstancedMesh caches the bounding sphere it computed from the matrices
+    // it had at build. These rise up to ~2.4u above that, so without this the
+    // whole ring can be frustum-culled away at a glancing angle and pop.
+    borderRock.frustumCulled = false;
+    borderBush.frustumCulled = false;
   }
 
   // Composed by hand straight into the instance buffer, the same way the sheep
   // are: a Y-lift and a yaw is one sin and one cos, not an Object3D round trip.
   const brd = new THREE.Object3D();
   const writeBorderRocks = (t) => {
-    if (!borderRock || !borderRockSpots) return;
-    for (let i = 0; i < borderRockSpots.length; i++) {
-      const s = borderRockSpots[i];
-      const y = s[7] + Math.sin(t * s[5] + s[4]) * s[6];
-      brd.position.set(s[0], y, s[1]);
-      brd.rotation.set(Math.sin(t * 0.21 + s[4]) * 0.06, s[3] + Math.sin(t * 0.13 + s[4]) * 0.09, 0);
-      brd.scale.setScalar(s[2]);
-      brd.updateMatrix();
-      borderRock.setMatrixAt(i, brd.matrix);
+    if (borderRock && borderRockSpots) {
+      for (let i = 0; i < borderRockSpots.length; i++) {
+        const s = borderRockSpots[i];
+        const y = s[7] + Math.sin(t * s[5] + s[4]) * s[6];
+        brd.position.set(s[0], y, s[1]);
+        brd.rotation.set(Math.sin(t * 0.21 + s[4]) * 0.06, s[3] + Math.sin(t * 0.13 + s[4]) * 0.09, 0);
+        brd.scale.setScalar(s[2]);
+        brd.updateMatrix();
+        borderRock.setMatrixAt(i, brd.matrix);
+      }
+      borderRock.instanceMatrix.needsUpdate = true;
     }
-    borderRock.instanceMatrix.needsUpdate = true;
+    // The bushes share the ring at the same distance, and in dream light these
+    // dark blue-grey blobs read as rounded stones. Leaving them frozen would
+    // have left two thirds of the near ring dead-still — the same complaint,
+    // waiting to be made again. They are PLANTS though, so they keep their feet
+    // on the ground and breathe and lean instead of floating.
+    if (borderBush && borderBushSpots) {
+      for (let i = 0; i < borderBushSpots.length; i++) {
+        const s = borderBushSpots[i];
+        const ph = s[4];
+        brd.position.set(s[0], 0, s[1]);
+        brd.rotation.set(Math.sin(t * 0.5 + ph) * 0.05, s[3], Math.cos(t * 0.42 + ph) * 0.05);
+        brd.scale.set(s[2], s[2] * (1 + Math.sin(t * 0.6 + ph) * 0.035), s[2]);
+        brd.updateMatrix();
+        borderBush.setMatrixAt(i, brd.matrix);
+      }
+      borderBush.instanceMatrix.needsUpdate = true;
+    }
   };
   writeBorderRocks(0);
 
