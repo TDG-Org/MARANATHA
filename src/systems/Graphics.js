@@ -15,6 +15,9 @@ const AUTO_COOLDOWN_FRAMES = 300;
 // budget, and promoting it on a 7ms average would have been promoting a machine
 // with no headroom at all.
 const FRAME_BUDGET_MS = 1000 / 60;
+// The UA never changes mid-session; sampleWork runs every full-rate frame and
+// must not evaluate a fresh RegExp + rescan the UA string each time.
+const IS_MOBILE_UA = /Android|iPhone|iPad|Mobi/i.test(globalThis.navigator?.userAgent || '');
 const PROMOTE_AVG_RATIO = 7 / FRAME_BUDGET_MS;   // 0.42 of the budget
 const PROMOTE_SLOW_RATIO_MS = 12 / FRAME_BUDGET_MS; // 0.72 of the budget
 const PROMOTE_SLOW_RATIO = 0.02;
@@ -196,8 +199,7 @@ export class GraphicsSystem {
     if (!this.autoDetected || this._promoted || !Number.isFinite(ms)) return;
     if (this.name === PRESET_ORDER[PRESET_ORDER.length - 1]) return;
     if (this._cooldown > 0) return;
-    const nav = globalThis.navigator || {};
-    if (/Android|iPhone|iPad|Mobi/i.test(nav.userAgent || '')) return;
+    if (IS_MOBILE_UA) return; // hoisted: never a per-frame RegExp + UA rescan
     const budget = Number.isFinite(budgetMs) && budgetMs > 0 ? budgetMs : FRAME_BUDGET_MS;
 
     const w = this._w || (this._w = { n: 0, totalMs: 0, slow: 0 });
