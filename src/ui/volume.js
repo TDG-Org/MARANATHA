@@ -33,6 +33,10 @@ export function mountVolumeControl() {
     Audio.setVolume(Number(slider.value) / 100);
   });
   window.addEventListener('keydown', (e) => {
+    // Auto-repeat would flip mute at ~30Hz (localStorage write + gain
+    // automation + narrator kill per flip); browser shortcuts (Ctrl/Cmd+M)
+    // are not ours to consume.
+    if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.key === 'm' || e.key === 'M') {
       Audio.unlock();
       Audio.toggleMute();
