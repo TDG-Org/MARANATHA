@@ -116,20 +116,33 @@ export function createPauseMenu({ app, isInputOn, setInput, onSettings, onHome }
     }
   }
 
+  let hideT = 0;
   function show() {
     if (open) return;
     open = true;
     freeze(true);
+    clearTimeout(hideT);
+    overlay.style.backdropFilter = ''; // the world is frozen again — blur is legal
+    overlay.style.pointerEvents = '';
     overlay.style.display = 'flex';
-    requestAnimationFrame(() => { overlay.style.opacity = '1'; });
-    overlay.style.opacity = '1'; // hidden-tab safe (no rAF)
+    // A transition never starts on an element leaving display:none in the
+    // same style recalc — force one reflow, then raise opacity. A reflow is
+    // hidden-tab safe (unlike a rAF, which may never fire there).
+    void overlay.offsetWidth;
+    overlay.style.opacity = '1';
   }
 
   function close({ navigating = false } = {}) {
     if (!open) return;
     open = false;
+    // Let the declared 200ms fade actually play before the box is removed —
+    // but drop the blur NOW: the canvas unfreezes on this same tick, and
+    // backdrop-filter over a live canvas is banned (D9).
+    overlay.style.backdropFilter = 'none';
+    overlay.style.pointerEvents = 'none'; // the fading ghost must not eat clicks
     overlay.style.opacity = '0';
-    overlay.style.display = 'none';
+    clearTimeout(hideT);
+    hideT = setTimeout(() => { if (!open) overlay.style.display = 'none'; }, 220);
     freeze(false, { restoreInput: !navigating });
   }
 
