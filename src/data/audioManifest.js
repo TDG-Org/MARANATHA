@@ -67,6 +67,17 @@ export const AUDIO_MANIFEST = [
   { key: 'sfx.fall_whoosh', bus: 'sfx', loop: false, seconds: 3, file: 'sfx/fall_whoosh', fallback: 'whooshDown', available: false, purpose: 'soft airy rush under the slow-motion fall (procedural whoosh until a real file lands)', scene: 'joseph3d-1' },
   { key: 'sfx.march_loop', bus: 'sfx', loop: true, seconds: 10, file: 'sfx/march_loop', fallback: null, available: false, purpose: 'five men walking on dry ground — under the cold-open march (SILENT until the file lands — 🔴 NATE.md)', scene: 'joseph3d-1' },
 
+  // --- Noah, scene 1: the ark under construction (Genesis 6) ---
+  // Drop-a-file slots. All SILENT until a real file lands (fallback: null) —
+  // the building site borrows amb.camp_wind for its wind-and-birds bed and
+  // amb.fire_crackle for the pitch fires, which are honest stand-ins; the rows
+  // below are the sounds that are genuinely missing. See nate-drop/NATE.md.
+  { key: 'amb.shipyard', bus: 'sfx', loop: true, seconds: 40, file: 'ambient/shipyard', fallback: null, available: false, purpose: 'the work itself: distant adzes, sawing, mallets on pegs, men calling — the bed that makes the site inhabited', scene: 'noah-1' },
+  { key: 'sfx.adze', bus: 'sfx', loop: false, seconds: 0.5, file: 'sfx/adze', fallback: null, available: false, purpose: 'a single adze stroke into timber', scene: 'noah-1' },
+  { key: 'sfx.mallet_peg', bus: 'sfx', loop: false, seconds: 0.4, file: 'sfx/mallet_peg', fallback: 'thump', available: false, purpose: 'a mallet driving a treenail home', scene: 'noah-1' },
+  { key: 'sfx.footstep_wood', bus: 'sfx', loop: false, seconds: 0.15, file: 'sfx/footstep_wood', fallback: 'footstep', available: false, purpose: 'footfall on a timber deck (the whole interior)', scene: 'noah-1' },
+  { key: 'music.build', bus: 'music', loop: true, seconds: 90, file: 'music/build', fallback: 'musicWarmBed', available: false, purpose: 'patient, unhurried score for the years of building — obedience, not spectacle', scene: 'noah-1' },
+
   // --- Narrator VO (file-first; naming: vo/<story>/<scene>/<line-id>) ---
   // GENERATED, not recorded: `npm run vo` bakes every line below as an mp3
   // (en-US-AndrewNeural, 24kHz 48kbps mono) straight from versesWEB.js — one

@@ -22,6 +22,7 @@ app.register('home', buildHome, { flat: true });
 // parse the legacy game/playground, and those developer routes never occupy a
 // normal player's memory.
 app.registerLazy('joseph', () => import('./scenes/joseph3d/index.js').then((m) => m.buildJoseph3D));
+app.registerLazy('noah', () => import('./scenes/noah/index.js').then((m) => m.buildNoahArk));
 app.registerLazy('legacy-joseph', () => import('./scenes/joseph/index.js').then((m) => m.buildJoseph));
 app.registerLazy('playground', () => import('./screens/playground.js').then((m) => m.buildPlayground));
 // About and Support are NOT routes. They are panels the home opens over itself,

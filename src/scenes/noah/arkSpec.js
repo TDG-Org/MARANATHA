@@ -109,7 +109,15 @@ export const HULL = {
 
 // --- the door ----------------------------------------------------------------
 // Genesis 6:16 (WEB): "You shall set the door of the ship in its side."
-// Genesis 7:16 (WEB): "...and Yahweh shut him in."
+// Genesis 7:16 (WEB): "...then the LORD shut him in."
+//
+// EDITION NOTE. ebible.org publishes six World English Bible editions and only
+// ONE of them ("eng-web", the Classic) renders the divine name "Yahweh"; the
+// other five print "the LORD". This project is on `engwebp` - the updated WEB,
+// 66-book protocanon - which is the majority form and the one the narrator is
+// already written for (Narrator.js normalises "LORD"). Across Genesis 6-8 the
+// edition choice changes ten verses, so it is pinned here rather than left to
+// whoever types the next one.
 //
 // ONE door, in the SIDE, at the lower deck, reached by a ramp from the ground.
 // Sized so the largest animals and the loaded ramp traffic pass: 6 cubits wide,
@@ -142,7 +150,7 @@ export const WINDOW = {
   height: CUBIT,                 // 0.457
   // "finished to a cubit upward" read literally: the band IS the top cubit of
   // the wall, its head at the eaves.
-  sillY: EAVES_Y - CUBIT,        // 13.259
+  sillY: EAVES_Y - CUBIT,        // 14.809 in world y (the blocks are in this)
 };
 
 // --- what the player walks on ------------------------------------------------
@@ -195,12 +203,19 @@ export const RAMPS = [
 ];
 
 // --- the boarding ramp from the ground --------------------------------------
+// The ramp from the ground in through the door. Derived, not guessed: the run
+// is whatever length gives the slope below, so the ramp cannot silently become
+// a cliff if the hull is ever raised on taller blocks.
 export const BOARDING = {
   width: 4.2,
-  // From the ground up to the door sill — a real climb now the hull stands on
-  // its blocks. About 1:6, which loaded animals walk without hesitating.
-  zOuter: ARK.halfWidth + 12.6,
-  zInner: ARK.halfWidth - HULL.skin,
+  slope: 0.17,   // about 1:6 — loaded animals walk this without hesitating
+  x: DOOR.x,
+  get x0() { return this.x - this.width / 2; },
+  get x1() { return this.x + this.width / 2; },
+  // The inner end lands just inside the door; the outer end wherever the slope
+  // reaches the ground.
+  zInner: ARK.halfWidth - HULL.skin - 0.5,
+  get zOuter() { return this.zInner + DOOR.sillY / this.slope; },
 };
 
 // --- colours -----------------------------------------------------------------

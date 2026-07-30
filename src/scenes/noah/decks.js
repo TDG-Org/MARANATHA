@@ -3,7 +3,7 @@ import { mergeGeometries, dyeGeometry, toonMat } from '../../engine/world.js';
 import { DeckField } from '../../engine/DeckField.js';
 import {
   DECK_Y, DECK_PITCH, DECK_CLEAR, DECK_STRUCTURE, HOLD, CORRIDOR,
-  RAMP, RAMPS, DOOR, HULL, ARK, COLORS, BILGE,
+  RAMP, RAMPS, DOOR, HULL, ARK, COLORS, BILGE, BOARDING,
 } from './arkSpec.js';
 
 // THE THREE DECKS — the part the player actually stands on.
@@ -158,10 +158,12 @@ export function buildDecks(wood) {
   // --- the boarding ramp, from the ground in through the door ------------------
   // Genesis 7:16 — they went in. Something has to carry them up to a sill more
   // than a person's height above the ground.
+  // BOARDING is the single source of truth for this ramp — the site's trestles
+  // are placed from it too, so the legs cannot end up under thin air.
   const board = {
-    x0: DOOR.x - 2.1, x1: DOOR.x + 2.1,
-    zOuter: ARK.halfWidth + 9.2,
-    zInner: ARK.halfWidth - HULL.skin - 0.5,
+    x0: BOARDING.x0, x1: BOARDING.x1,
+    zInner: BOARDING.zInner,
+    zOuter: BOARDING.zOuter,
   };
   {
     const len = board.zOuter - board.zInner;
