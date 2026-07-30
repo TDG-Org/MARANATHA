@@ -194,8 +194,8 @@ assert.match(
 );
 assert.match(
   appSource,
-  /function disposeCurrent[\s\S]*lifetime\.abort[\s\S]*instance\.dispose[\s\S]*disposeDeep\(current\.scene\)[\s\S]*postFX\?\.reset\(\)[\s\S]*current = null/,
-  'failed scenes do not release every shell-owned resource',
+  /function disposeCurrent[\s\S]*lifetime\.abort[\s\S]*instance\.dispose[\s\S]*disposeDeep\(current\.scene\)[\s\S]*postFX\?\.reset\(\)[\s\S]*current = null[\s\S]*if \(hud\?\.el\)/,
+  'failed scenes do not release every shell-owned resource (and hud must be null-guarded pre-engine — an unguarded deref stranded the player on black)',
 );
 
 // THE ENGINE IS NOT PART OF BOOT: the menu is pure DOM, so the app shell must
@@ -219,8 +219,13 @@ assert.match(
 );
 assert.match(
   appSource,
-  /if \(!entry\.flat && !renderer\) await ensureEngine\(\);/,
-  'a non-flat navigation no longer ensures the engine behind the loader',
+  /if \(!entry\.flat && !renderer\) \{\s*await waitWithDeadline\(\s*ensureEngine\(\), 12000/,
+  'the engine fetch lost its 12s deadline — a wedged download would hold the loader forever with busy latched',
+);
+assert.match(
+  appSource,
+  /\)\.catch\(\(error\) => \{\s*enginePromise = null;\s*throw error;\s*\}\);/,
+  'an engine-load timeout no longer clears the cached promise — the retry would re-await the wedged fetch',
 );
 assert.match(
   appSource,

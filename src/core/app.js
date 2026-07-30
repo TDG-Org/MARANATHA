@@ -187,7 +187,10 @@ export function createApp(container) {
     postFX?.reset();
     current = null;
     debugStateAcc = 0;
-    if (hud.el) delete hud.el.dataset.sceneState;
+    // hud is null until the engine chunk lands — an unguarded deref here ran
+    // AFTER the veil covered and the old screen was torn down, stranding the
+    // player on black (caught by the branch's adversarial review).
+    if (hud?.el) delete hud.el.dataset.sceneState;
   }
 
   // A navigation asked for while another is still running is REMEMBERED, not
@@ -222,9 +225,19 @@ export function createApp(container) {
       try {
         // The engine (Three.js + renderer + loop) is not in the boot chunk —
         // the first non-flat navigation pays for it here, under the same
-        // loader that covers the scene chunk and its assets. A failed fetch
-        // falls into the recovery path below like any failed screen.
-        if (!entry.flat && !renderer) await ensureEngine();
+        // loader that covers the scene chunk and its assets. A failed OR
+        // WEDGED fetch falls into the recovery path below like any failed
+        // screen: the largest download in the app gets the same 12s deadline
+        // every sibling load path has, and a timeout clears the cached
+        // promise so the player's retry starts a fresh import.
+        if (!entry.flat && !renderer) {
+          await waitWithDeadline(
+            ensureEngine(), 12000, `Engine load for "${key}" timed out`,
+          ).catch((error) => {
+            enginePromise = null;
+            throw error;
+          });
+        }
         await build(key, params);
       } catch (error) {
         console.error(`[app] screen "${key}" failed to build; returning home`, error);
