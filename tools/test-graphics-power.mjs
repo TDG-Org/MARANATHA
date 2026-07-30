@@ -297,6 +297,22 @@ function slowFrames(graphics, count) {
     'a prior desktop auto result overrode current low-end detection');
 }
 
+// A session that demoted to Low must still be able to earn the designed
+// low→medium work promotion. sampleFrame is the only cooldown decrementer,
+// and hiding that decrement behind its Low early-return froze the cooldown
+// forever — sampleWork then returned early for the rest of the session.
+{
+  const graphics = new GraphicsSystem({
+    storage: new MemoryStorage(), detectedPreset: 'medium', sampleFrames: 4, cooldownFrames: 6,
+  });
+  for (let i = 0; i < 4; i += 1) graphics.sampleFrame(26);
+  assert.equal(graphics.name, 'low', 'setup: sustained slowness should demote to Low');
+  for (let i = 0; i < 6; i += 1) graphics.sampleFrame(16); // the cooldown must drain even at Low
+  for (let i = 0; i < 4; i += 1) graphics.sampleWork(3);
+  assert.equal(graphics.name, 'medium',
+    'the low→medium work promotion is unreachable after a demotion to Low (frozen cooldown)');
+}
+
 // Exact 60-render/s cadence on fractional high-refresh displays alternates
 // short and long frame deltas. The integrated pacer+tuner must never mistake
 // that healthy schedule for sustained slowness.

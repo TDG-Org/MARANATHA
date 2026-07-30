@@ -144,11 +144,15 @@ export class GraphicsSystem {
   // There is deliberately no timed promotion: deadline-paced dt cannot prove
   // CPU/GPU headroom. Only an explicit player choice can move quality up.
   sampleFrame(ms, budgetMs = FRAME_BUDGET_MS) {
-    if (!this.autoDetected || this.name === 'low' || !Number.isFinite(ms)) return;
+    if (!this.autoDetected || !Number.isFinite(ms)) return;
+    // The cooldown counts down even at Low: this is the ONLY decrementer, and
+    // sampleWork() — the designed low→medium promotion — waits behind it.
+    // Behind the Low early-return it froze forever after a demotion to Low.
     if (this._cooldown > 0) {
       this._cooldown -= 1;
       return;
     }
+    if (this.name === 'low') return;
     const budget = Number.isFinite(budgetMs) && budgetMs > 0 ? budgetMs : FRAME_BUDGET_MS;
 
     const sample = this._s || (this._s = { n: 0, totalMs: 0, over22: 0 });
