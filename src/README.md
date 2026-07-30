@@ -71,9 +71,16 @@ Where everything lives. One line per module; folders ordered by how often you'll
 
 - `app.js` — renderer/camera/loop owner, lazy screen navigation, readiness recovery,
   stopped loading/pause gates, zero-dt prepaint, and post-reveal screen activation
-- `renderer.js` (one WebGLRenderer + rAF loop) · `quality.js` (tier detect, adaptive DPR,
-  #debug HUD) · `deadline.js` (bounded async gate) · `lazyScreen.js` (retry-safe import
-  identity/cache) · `dispose.js` (deep GPU free)
+- `renderer.js` — one WebGLRenderer + the rAF loop: GPU power preference, eco sleeping,
+  and it feeds the pacer the chained callbacks it measures the panel from
+- `framePacer.js` — measures the display's real refresh period and paces every frame to a
+  WHOLE MULTIPLE of it, so frames land on vsync instead of averaging out to the right
+  number while stuttering (`snapToRefresh` is the pure, testable core)
+- `quality.js` — tier detect · `AdaptiveQuality` (sticky-down DPR) · `RateGovernor` (the
+  full-rate ceiling, sticky-down) · the `#debug` HUD. Every threshold is a fraction of the
+  PACED budget, never an absolute millisecond count
+- `deadline.js` (bounded async gate) · `lazyScreen.js` (retry-safe import identity/cache) ·
+  `dispose.js` (deep GPU free)
 
 ## `screens/` + `data/`
 
@@ -92,7 +99,9 @@ Where everything lives. One line per module; folders ordered by how often you'll
   performance transforms (de-blurred clouds, no `mix-blend-mode`, no live
   filters, far-band sway dropped, bands tagged) and prints a counted report,
   so a regression in the design shows up as a changed count.
-- `screens/pages.js` (About/Support) · `screens/playground.js` (#playground test bench)
+- `screens/pages.js` — About/Support. NOT routes: they are panels the home opens over
+  itself, so its music keeps playing and the real map stays behind them
+- `screens/playground.js` (#playground test bench)
 - `data/versesWEB.js` (WEB scripture — verified verbatim; + NARRATION + routing table) ·
   `data/audioManifest.js` (every sound key → file/fallback) · `data/stories.js` (the 35
   chapters + eras; `sceneKey` marks which are built) · `data/verses.js` (legacy BSB, 2D only)
