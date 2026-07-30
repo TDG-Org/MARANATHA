@@ -69,6 +69,13 @@ export class MoodGrading {
   grade(name, ms = 2400) {
     const m = this.moods[name];
     if (!m) { console.warn('[grading] unknown mood', name); return Promise.resolve(); }
+    // A grade interrupting a running tween SUPERSEDES it: settle the old
+    // promise (resolve, not reject — the look was replaced, not failed) so an
+    // awaiting Sequencer step can never hang on a silently dropped resolve.
+    if (this._tween) {
+      this._tween.resolve();
+      this._tween = null;
+    }
     this.current = name;
     const r = this.r;
     r.sky.setColors(m.skyTop, m.skyBottom, ms);
