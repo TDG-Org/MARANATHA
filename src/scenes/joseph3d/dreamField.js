@@ -574,6 +574,9 @@ export function buildDreamField() {
   let skyState = 0; // 0 idle · 1 descending (→mid) · 2 bowing (→low)
   const dampStep = (dt, rate) => 1 - Math.exp(-Math.max(0, dt) * rate);
   const setOpacity = (k) => bodies.forEach((b) => {
+    // Opacity 0 still costs a draw + additive blend per sprite: all 15 bodies
+    // rendered invisibly through the whole first dream. Visibility gates them.
+    b.visible = k > 0;
     b.userData.halo.material.opacity = k * (b === sun ? 0.9 : b === moon ? 0.8 : 0.95);
     if (b.userData.core) b.userData.core.material.opacity = k * 0.9;
   });
@@ -583,7 +586,10 @@ export function buildDreamField() {
     showSummit: setSummit,
     set onSummit(fn) { onSummitChange = fn; },
     // the moon shaft over the wheat field (dream 1)
-    showMoon(k) { beam.material.opacity = k * 0.22; moonDisc.material.opacity = k * 0.9; },
+    showMoon(k) {
+      beam.visible = moonDisc.visible = k > 0; // same law as the sky bodies
+      beam.material.opacity = k * 0.22; moonDisc.material.opacity = k * 0.9;
+    },
     showSky(k) { setOpacity(k); },
     descendSky() { skyState = 1; },
     bowSky() { skyState = 2; },
@@ -592,6 +598,9 @@ export function buildDreamField() {
       setOpacity(0);
       beam.material.opacity = 0; moonDisc.material.opacity = 0;
       setSummit(false);
+      // setSummit(false) re-shows every field element — re-hide the two the
+      // moon owns (they come back through showMoon, not the summit switch).
+      beam.visible = false; moonDisc.visible = false;
       bodies.forEach((b) => b.position.copy(b.userData.high));
     },
     update(dt, t) {
@@ -661,14 +670,17 @@ export function buildDreamField() {
       }
       const rise = bowedCount / outer.length;
       center.scale.setScalar(1.25 + rise * 0.35);
-      // celestial bodies: twinkle + descend/bow toward their target
-      bodies.forEach((b) => {
-        const tw = 1 + Math.sin(t * 2 + b.userData.twinkle) * 0.08;
-        if (b.userData.core) b.userData.core.material.rotation = t * 0.3 + b.userData.twinkle;
-        b.scale.setScalar(tw);
-        if (skyState === 1) b.position.lerp(b.userData.mid, dampStep(dt, 0.0006));
-        else if (skyState === 2) b.position.lerp(b.userData.low, dampStep(dt, 0.0012));
-      });
+      // celestial bodies: twinkle + descend/bow toward their target — but an
+      // invisible idle sky (all of dream 1) animates nothing.
+      if (bodies[0].visible || skyState !== 0) {
+        bodies.forEach((b) => {
+          const tw = 1 + Math.sin(t * 2 + b.userData.twinkle) * 0.08;
+          if (b.userData.core) b.userData.core.material.rotation = t * 0.3 + b.userData.twinkle;
+          b.scale.setScalar(tw);
+          if (skyState === 1) b.position.lerp(b.userData.mid, dampStep(dt, 0.0006));
+          else if (skyState === 2) b.position.lerp(b.userData.low, dampStep(dt, 0.0012));
+        });
+      }
     },
     setParticleScale(scale) {
       const safe = Number.isFinite(scale) ? Math.max(0, scale) : 1;
