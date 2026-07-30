@@ -90,7 +90,9 @@ export class Interactables {
       if (!this.enabled || this.busy || ev.target !== this.dom) {
         this._hasHoverPoint = false;
         this._hoverDirty = false;
-        this.dom.style.cursor = '';
+        // Change-gated like update()'s twin write: an ungated style write here
+        // runs at mouse polling rate for the whole length of every cutscene.
+        if (this.dom.style.cursor !== '') this.dom.style.cursor = '';
         return;
       }
       this._hoverPoint.clientX = ev.clientX;
@@ -193,8 +195,11 @@ export class Interactables {
       this._lastSource = best.label;
       this._label.textContent = this._touch ? best.label : `[E]  ${best.label}`;
     }
-    const x = (this._v.x * 0.5 + 0.5) * window.innerWidth;
-    const y = (-this._v.y * 0.5 + 0.5) * window.innerHeight;
+    // The cached full-viewport rect (invalidated on resize above) is the same
+    // number as window.innerWidth/Height — without the forced-layout read.
+    const r = this._rect || (this._rect = (this.dom || document.body).getBoundingClientRect());
+    const x = (this._v.x * 0.5 + 0.5) * r.width;
+    const y = (-this._v.y * 0.5 + 0.5) * r.height;
     if (Math.abs(x - (this._lastX ?? -9)) > 0.5 || Math.abs(y - (this._lastY ?? -9)) > 0.5) {
       this._lastX = x; this._lastY = y;
       this.pill.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) translate(-50%, -100%)`;
