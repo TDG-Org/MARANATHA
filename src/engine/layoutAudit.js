@@ -16,6 +16,17 @@ import * as THREE from 'three';
 // corner posts) — different groups must keep clear air (level-layout law 2).
 const EPS = 0.05;
 
+// A collider MAY carry a vertical span (minY/maxY — see ColliderWorld). One
+// without a span is felt at any height, exactly as before, so every pre-ark
+// scene audits identically.
+function spansOverlap(a, b) {
+  const aLo = a.minY ?? -Infinity;
+  const aHi = a.maxY ?? Infinity;
+  const bLo = b.minY ?? -Infinity;
+  const bHi = b.maxY ?? Infinity;
+  return aLo < bHi - 1e-6 && bLo < aHi - 1e-6;
+}
+
 export function auditLayout({ colliderWorld, ground, zones = [], stages = [], decorations = [] } = {}) {
   const findings = [];
   const statics = colliderWorld?.statics || [];
@@ -25,6 +36,13 @@ export function auditLayout({ colliderWorld, ground, zones = [], stages = [], de
     for (let j = i + 1; j < statics.length; j++) {
       const a = statics[i], b = statics[j];
       if (a.group && a.group === b.group) continue;
+      // Two colliders at different HEIGHTS do not overlap, however much their
+      // footprints share. This audit was written when every collider was
+      // infinitely tall, which was true of every scene until the ark: there,
+      // deck-1 stanchions sit directly over the building blocks the hull stands
+      // on, and a flat audit called all 84 of those pairs a collision. An audit
+      // that cries wolf is one nobody reads.
+      if (!spansOverlap(a, b)) continue;
       const depth = overlapDepth(a, b);
       if (depth > EPS) {
         findings.push({

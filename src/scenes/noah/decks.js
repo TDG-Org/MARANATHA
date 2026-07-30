@@ -48,6 +48,21 @@ function subtractAll(outer, holes) {
 // ceiling, and it has to be there.
 const SLAB = 0.30;
 
+// THREE DECKS SHOULD READ AS THREE PLACES.
+//
+// The tsohar band is at the top of the ship, so light falls from above and dies
+// on the way down: the top deck is a daylight deck, the second is dim, the
+// lower one is a lamplit gloom. Baking that into the vertex colours of the
+// floors and the structure costs nothing at all and does more for the interior
+// than any number of lights would - and, critically, it never changes the
+// point-light COUNT, which is part of every lit material's shader cache key
+// (D24: changing it recompiles the world mid-stride).
+const DECK_TONE = [0.70, 0.90, 1.14];
+const toneHex = (k) => {
+  const v = Math.max(0, Math.min(255, Math.round(255 * k)));
+  return (v << 16) | (v << 8) | v;
+};
+
 function slabGeometry(r, topY, color) {
   const g = new THREE.BoxGeometry(r.maxX - r.minX, SLAB, r.maxZ - r.minZ);
   g.translate((r.minX + r.maxX) / 2, topY - SLAB / 2, (r.minZ + r.maxZ) / 2);
@@ -132,7 +147,7 @@ export function buildDecks(wood) {
     const rects = subtractAll(holdRect, cut);
     deckRects.push(rects);
     rects.forEach((r) => {
-      slabGeos.push(slabGeometry(r, y, 0xffffff));
+      slabGeos.push(slabGeometry(r, y, toneHex(DECK_TONE[deck])));
       floors.addFloor({ ...r, y, id: `deck${deck + 1}` });
     });
   });
@@ -219,7 +234,7 @@ export function buildDecks(wood) {
     for (let x = HOLD.minX + 1.0; x < HOLD.maxX; x += BEAM_SPACING) {
       const crosses = hatch && x > hatch.minX - 0.4 && x < hatch.maxX + 0.4;
       if (!crosses) {
-        beams.push({ x, y, z: 0 });
+        beams.push({ x, y, z: 0, deck: d });
         continue;
       }
       // A beam cannot run through an open hatchway, but the deck still needs
@@ -229,34 +244,45 @@ export function buildDecks(wood) {
       const keep = (below.b - below.a) >= (above.b - above.a) ? below : above;
       const span = keep.b - keep.a;
       if (span < 0.8) continue;
-      beams.push({ x, y, z: (keep.a + keep.b) / 2, sz: span / FULL_Z });
+      beams.push({ x, y, z: (keep.a + keep.b) / 2, sz: span / FULL_Z, deck: d });
     }
   }
   const beamMesh = instanced(beamGeo, wood.matTimber(), beams, 0xdccdb8);
+  // Per-instance tone, so a beam belongs to the deck it hangs over.
+  {
+    const c = new THREE.Color();
+    beams.forEach((b, n) => { c.setScalar(DECK_TONE[b.deck] * 0.95); beamMesh.setColorAt(n, c); });
+    if (beamMesh.instanceColor) beamMesh.instanceColor.needsUpdate = true;
+  }
   beamMesh.name = 'ark-beams';
   group.add(beamMesh);
   disposables.push(beamGeo);
 
   // Stanchions: the posts under the beams down the centre line, off the corridor
   // so they never stand in the walking route.
-  const postGeo = new THREE.BoxGeometry(0.26, 1, 0.26);
+  const postGeo = new THREE.BoxGeometry(0.21, 1, 0.21);
   const posts = [];
   for (let d = 0; d < 3; d++) {
     const y = DECK_Y[d];
     const h = (d < 2 ? DECK_Y[d + 1] : DECK_Y[2] + DECK_PITCH) - SLAB - y;
     for (let x = HOLD.minX + 2.2; x < HOLD.maxX; x += BEAM_SPACING * 2) {
-      for (const z of [-CORRIDOR.halfWidth - 0.42, CORRIDOR.halfWidth + 0.42]) {
+      for (const z of [-CORRIDOR.halfWidth - 0.72, CORRIDOR.halfWidth + 0.72]) {
         if (hatches.some((hh) => x > hh.minX - 0.5 && x < hh.maxX + 0.5
           && z > hh.minZ - 0.5 && z < hh.maxZ + 0.5)) continue;
-        posts.push({ x, y: y + h / 2, z, sy: h });
+        posts.push({ x, y: y + h / 2, z, sy: h, deck: d });
         colliders.push({
-          type: 'circle', x, z, r: 0.30, group: 'ark-post',
+          type: 'circle', x, z, r: 0.26, group: 'ark-post',
           minY: y, maxY: y + h,
         });
       }
     }
   }
   const postMesh = instanced(postGeo, wood.matTimber(), posts, 0xefe2cd);
+  {
+    const c = new THREE.Color();
+    posts.forEach((p, n) => { c.setScalar(DECK_TONE[p.deck]); postMesh.setColorAt(n, c); });
+    if (postMesh.instanceColor) postMesh.instanceColor.needsUpdate = true;
+  }
   postMesh.name = 'ark-posts';
   group.add(postMesh);
   disposables.push(postGeo);
@@ -290,23 +316,23 @@ export function buildDecks(wood) {
     const span = { minY: y, maxY: top };
     // the two long sides
     colliders.push({
-      type: 'aabb', group: `ark-wall-${deck}`, ...span,
+      type: 'aabb', group: `ark-shell-${deck}`, ...span,
       minX: HOLD.minX - 4, maxX: HOLD.maxX + 4,
       minZ: HOLD.halfWidth, maxZ: HOLD.halfWidth + WALL,
     });
     colliders.push({
-      type: 'aabb', group: `ark-wall-${deck}`, ...span,
+      type: 'aabb', group: `ark-shell-${deck}`, ...span,
       minX: HOLD.minX - 4, maxX: HOLD.maxX + 4,
       minZ: -HOLD.halfWidth - WALL, maxZ: -HOLD.halfWidth,
     });
     // the bulkheads fore and aft
     colliders.push({
-      type: 'aabb', group: `ark-bulkhead-${deck}`, ...span,
+      type: 'aabb', group: `ark-shell-${deck}`, ...span,
       minX: HOLD.minX - WALL, maxX: HOLD.minX,
       minZ: -HOLD.halfWidth - 1, maxZ: HOLD.halfWidth + 1,
     });
     colliders.push({
-      type: 'aabb', group: `ark-bulkhead-${deck}`, ...span,
+      type: 'aabb', group: `ark-shell-${deck}`, ...span,
       minX: HOLD.maxX, maxX: HOLD.maxX + WALL,
       minZ: -HOLD.halfWidth - 1, maxZ: HOLD.halfWidth + 1,
     });
@@ -316,7 +342,7 @@ export function buildDecks(wood) {
   // Rather than splitting the wall run, the doorway punches a gap by replacing
   // the +Z deck-1 wall with two pieces.
   {
-    const i = colliders.findIndex((c) => c.group === 'ark-wall-0' && c.minZ === HOLD.halfWidth);
+    const i = colliders.findIndex((c) => c.group === 'ark-shell-0' && c.minZ === HOLD.halfWidth);
     const wall = colliders[i];
     colliders.splice(i, 1,
       { ...wall, maxX: board.x0 - 0.5 },

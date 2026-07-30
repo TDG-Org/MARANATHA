@@ -127,7 +127,22 @@ export function buildNoahArk({ scene, camera, renderer, app, signal = null }) {
   arkGroup.add(decks.group);
   decks.colliders.forEach((c) => colliders.add(c));
 
-  const site = buildSite(wood);
+  // The ground is FLAT across the building site and rolls beyond it, so anything
+  // placed out in the landscape has to be planted on the terrain rather than on
+  // y=0. Sampled once per prop at build time — 400-odd raycasts, then never
+  // again — which is what stopped the far treeline hovering and sinking.
+  const groundRay = new THREE.Raycaster();
+  const groundDown = new THREE.Vector3(0, -1, 0);
+  const groundFrom = new THREE.Vector3();
+  ground.updateMatrixWorld(true);
+  const heightAt = (x, z) => {
+    groundFrom.set(x, 80, z);
+    groundRay.set(groundFrom, groundDown);
+    const hit = groundRay.intersectObject(ground, false)[0];
+    return hit ? hit.point.y : 0;
+  };
+
+  const site = buildSite(wood, { heightAt });
   scene.add(site.group);
   site.colliders.forEach((c) => colliders.add(c));
 
@@ -179,13 +194,13 @@ export function buildNoahArk({ scene, camera, renderer, app, signal = null }) {
         lanternAnchors.push({ x, y, z, deck: d });
         const body = new THREE.CylinderGeometry(0.17, 0.20, 0.34, 7);
         body.translate(x, y, z);
-        g.push(dyeGeometry(body, COLORS.ironDark));
+        g.push(dyeGeometry(body, 0x6e6a63));
         const hook = new THREE.BoxGeometry(0.05, 0.5, 0.05);
         hook.translate(x, y + 0.4, z);
-        g.push(dyeGeometry(hook, COLORS.ironDark));
+        g.push(dyeGeometry(hook, 0x57534d));
       }
     }
-    const m = new THREE.Mesh(mergeGeometries(g), wood.matTimber());
+    const m = new THREE.Mesh(mergeGeometries(g), toonMat(0xffffff, { vertexColors: true }));
     m.geometry.computeVertexNormals();
     m.name = 'lanterns';
     arkGroup.add(m);
@@ -211,12 +226,13 @@ export function buildNoahArk({ scene, camera, renderer, app, signal = null }) {
   // both sides. On the top deck that is a ribbon of daylight, and shafts of it
   // falling in are the single prettiest thing in the interior.
   const shafts = new THREE.Group();
+  let shaftOpacity = 0.20;
   {
     const tex = shaftTexture();
     for (let x = HOLD.minX + 6; x < HOLD.maxX; x += 9.5) {
       for (const side of [-1, 1]) {
         const st = station(x / ARK.halfLength);
-        const w = 3.4;
+        const w = 5.2;
         const h = EAVES_Y - DECK_Y[2];
         const geo = new THREE.PlaneGeometry(w, h);
         const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
@@ -225,9 +241,11 @@ export function buildNoahArk({ scene, camera, renderer, app, signal = null }) {
           color: 0xfff0cf,
         }));
         // leaning inward from the band toward the deck
-        m.position.set(x, DECK_Y[2] + h / 2, side * (st.halfWidth - HULL.skin - 1.5));
-        m.rotation.y = Math.PI / 2;
-        m.rotation.z = side * 0.16;
+        // Broadside to the corridor. Facing them ACROSS the ship put their
+        // normal along the one axis the player always looks down, so the whole
+        // effect was invisible edge-on — a light shaft nobody could ever see.
+        m.position.set(x, DECK_Y[2] + h / 2, side * (st.halfWidth - HULL.skin - 1.9));
+        m.rotation.z = side * 0.20;
         shafts.add(m);
       }
     }
@@ -291,7 +309,14 @@ export function buildNoahArk({ scene, camera, renderer, app, signal = null }) {
       shape: 'rect',
       minX: HOLD.minX - 6, maxX: HOLD.maxX + 6,
       minZ: -HOLD.halfWidth - 2, maxZ: HOLD.halfWidth + 2,
-      yaw: Math.PI, distance: 5.4, height: 2.05, lookHeight: 1.5,
+      // Trailing DEAD astern puts the camera at exactly the player's x, so any
+      // stanchion sharing that x stands squarely between the lens and the
+      // player — and in a colonnaded hold that happens every few strides. The
+      // posts cannot be faded (they are one instanced draw, so fading one ghosts
+      // them all — the D4 tent lesson), so the lens moves off the axis instead.
+      // It also composes better: you see down the hold rather than at the back
+      // of a head.
+      yaw: Math.PI * 0.90, distance: 5.6, height: 2.35, lookHeight: 1.45,
     },
     // On the boarding ramp, looking up at the door.
     {
@@ -412,6 +437,11 @@ export function buildNoahArk({ scene, camera, renderer, app, signal = null }) {
     // The scaffolding and stocks stand between an outside camera and an inside
     // player too, and a lattice across the lens is worse than a wall.
     site.group.visible = k < 0.85;
+    // The motes are an OUTDOOR dust field spanning the whole site, and the ark
+    // sits inside that span — so a mote drifting between the lens and the player
+    // painted a soft additive blob on his chest while he stood below decks. Dust
+    // in a sunbeam belongs outside; the interior has its own air.
+    motes.points.visible = k < 0.5;
   }
 
   // ── PER-FRAME ──────────────────────────────────────────────────────────────
@@ -436,6 +466,11 @@ export function buildNoahArk({ scene, camera, renderer, app, signal = null }) {
     insideK += (wantInside - insideK) * Math.min(dt * 0.006, 1);
     applyInsideness(insideK);
 
+    // How much daylight this height gets: the tsohar band is at the top of the
+    // ship, so the top deck is lit and the bottom one is not. The lanterns make
+    // up the difference, which is why they matter most where the light does not
+    // reach.
+    const daylight = clamp01((p.y - DECK_Y[0]) / Math.max(0.001, DECK_Y[2] - DECK_Y[0]));
     // The lantern pool follows the player along whichever deck they are on.
     if (insideK > 0.05) {
       const deck = controller.deck;
@@ -448,14 +483,20 @@ export function buildNoahArk({ scene, camera, renderer, app, signal = null }) {
         const a = sorted[n];
         if (!a) { lanternPool[n].intensity = 0; continue; }
         lanternPool[n].position.set(a.x, a.y, a.z);
-        lanternPool[n].intensity = insideK * (1.5 + Math.sin(t * 7 + a.x) * 0.12);
+        lanternPool[n].intensity = insideK * (2.25 - daylight * 1.5) * (1 + Math.sin(t * 7 + a.x) * 0.06);
       }
     } else {
       for (const l of lanternPool) l.intensity = 0;
     }
 
     // The shafts only exist on the top deck; keep them out of the way otherwise.
+    // The shafts are the top deck's whole character — the one cubit of opening
+    // Genesis gives the vessel, falling in down the length of both sides.
     shafts.visible = insideK > 0.4 && p.y > DECK_Y[2] - 2;
+    if (shafts.visible && shaftOpacity !== 0.34) {
+      shaftOpacity = 0.34;
+      for (const s of shafts.children) s.material.opacity = shaftOpacity;
+    }
 
     if (contactShadows?.mesh.visible) contactShadows.update();
     director.setTarget(p);
@@ -553,6 +594,7 @@ export function buildNoahArk({ scene, camera, renderer, app, signal = null }) {
 }
 
 const round2 = (v) => Math.round(v * 100) / 100;
+const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
 
 function glowSprite() {
   const c = document.createElement('canvas');

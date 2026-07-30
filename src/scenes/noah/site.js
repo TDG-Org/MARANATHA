@@ -31,7 +31,7 @@ function instanced(geo, material, placements, name, tint = 0xffffff) {
   return mesh;
 }
 
-export function buildSite(wood) {
+export function buildSite(wood, { heightAt = () => 0 } = {}) {
   const group = new THREE.Group();
   group.name = 'ark-site';
   const colliders = [];
@@ -351,11 +351,16 @@ export function buildSite(wood) {
       if (Math.abs(x) > 224 || z > 168 || z < -152) continue;
       const scale = 0.8 + rnd() * 0.9;
       const h = 5.4 * scale;
-      trunks.push({ x, y: h * 0.32, z, sy: h * 0.64, sx: scale, sz: scale, ry: rnd() * 3 });
-      canopy.push({ x, y: h * 0.82, z, sx: scale, sy: scale * (0.85 + rnd() * 0.4), sz: scale, ry: rnd() * 3 });
+      const gy = heightAt(x, z);
+      trunks.push({ x, y: gy + h * 0.32, z, sy: h * 0.64, sx: scale, sz: scale, ry: rnd() * 3 });
+      canopy.push({ x, y: gy + h * 0.82, z, sx: scale, sy: scale * (0.85 + rnd() * 0.4), sz: scale, ry: rnd() * 3 });
       // Only the near ring blocks: the far woodland is scenery, and 300
       // colliders would be paid for on every step the player takes.
-      if (rr < CLEAR + 34) colliders.push({ type: 'circle', x, z, r: 0.9 * scale, group: 'forest' });
+      // Only the near ring blocks — and only where the ground is genuinely
+      // flat, so a collider never sits on a slope the player can walk up.
+      if (rr < CLEAR + 34 && Math.abs(gy) < 0.05) {
+        colliders.push({ type: 'circle', x, z, r: 0.9 * scale, group: 'forest' });
+      }
     }
     // The felled ring: stumps where the gopher wood came from.
     for (let i = 0; i < 70; i++) {
@@ -364,7 +369,7 @@ export function buildSite(wood) {
       const x = Math.cos(a) * rr * 1.5;
       const z = 8 + Math.sin(a) * rr * 0.8;
       if (Math.abs(z) < ARK.halfWidth + 6 && Math.abs(x) < ARK.halfLength + 6) continue;
-      stumps.push({ x, y: 0.22, z, sx: 0.7 + rnd() * 0.6, sz: 0.7 + rnd() * 0.6, ry: rnd() * 3 });
+      stumps.push({ x, y: heightAt(x, z) + 0.22, z, sx: 0.7 + rnd() * 0.6, sz: 0.7 + rnd() * 0.6, ry: rnd() * 3 });
     }
 
     const trunkGeo = new THREE.CylinderGeometry(0.32, 0.46, 1, 6);
