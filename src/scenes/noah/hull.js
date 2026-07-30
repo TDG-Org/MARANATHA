@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { ARK, HULL, DOOR, WINDOW, EAVES_Y, RIDGE_RISE, COLORS } from './arkSpec.js';
+import { ARK, HULL, DOOR, WINDOW, EAVES_Y, KEEL_Y, RIDGE_RISE, COLORS } from './arkSpec.js';
 
 // THE HULL — one parametric surface, built twice.
 //
@@ -46,18 +46,32 @@ export function station(u) {
     x: u * ARK.halfLength,
     halfWidth: ARK.halfWidth * widthK,
     // Rocker: the bottom lifts toward the ends so they are clear of the water.
-    bottomY: (bow ? HULL.bowRocker : HULL.sternRocker) * t * t,
+    bottomY: KEEL_Y + (bow ? HULL.bowRocker : HULL.sternRocker) * t * t,
     // Sheer: the sides rise toward the ends. This single curve is most of what
     // makes a hull look like a hull.
     topY: EAVES_Y + (bow ? HULL.bowRise : HULL.sternRise) * smooth(t) * t,
   };
 }
 
-// Where the window band starts, as a fraction of the side's height. Applied at
-// every station, so the band follows the sheer up toward the bow — which is both
-// what a real opening cut parallel to the sheer does, and the prettiest line on
-// the whole vessel.
-const WINDOW_V = (WINDOW.sillY - 0) / EAVES_Y;
+// PROFILE maps the surface parameter v to a height fraction yK, and it does so
+// NON-LINEARLY (the turn of the bilge eats a third of the parameter in a tenth
+// of the height). So a feature specified by its real height — the door head, the
+// window sill — has to be converted before it can be cut. Inverting the profile
+// is the difference between the window band being one cubit high, as Scripture
+// says, and being wherever the nearest grid row happened to fall.
+function vForYK(targetYK) {
+  const last = PROFILE.length - 1;
+  for (let i = 0; i < last; i++) {
+    const a = PROFILE[i][1];
+    const b = PROFILE[i + 1][1];
+    if (targetYK <= b) return (i + (targetYK - a) / (b - a)) / last;
+  }
+  return 1;
+}
+
+// A world height, at a midbody station, as a surface parameter.
+const vForHeight = (y) => vForYK((y - KEEL_Y) / ARK.height);
+
 
 // A point on the hull surface: station parameter u, height parameter v (0 at the
 // chine, 1 at the eaves), side +1/-1, and an inward inset for the second skin.
@@ -80,10 +94,16 @@ export function hullPoint(u, v, side, inset = 0) {
 // (that is how the door and the window band become real openings rather than
 // painted-on ones). Returns raw arrays so callers can merge many surfaces into
 // one draw call.
+// `us` and `vs` are the grid LINES, not a count, because the lines have to be
+// able to land exactly on a feature edge. A uniform grid put the door head and
+// the window sill wherever the nearest row fell — up to a metre out on a band
+// that is supposed to be one cubit high.
 function gridSurface({
-  nu, nv, point, skip = null, flip = false, uvScale = [1 / 9, 1 / 3.6],
+  us, vs, point, skip = null, flip = false, uvScale = [1 / 9, 1 / 3.6],
   color = null, shade = null,
 }) {
+  const nu = us.length - 1;
+  const nv = vs.length - 1;
   const pos = [];
   const uv = [];
   const col = [];
@@ -94,8 +114,8 @@ function gridSurface({
   const c = new THREE.Color();
   for (let i = 0; i < nu; i++) {
     for (let j = 0; j < nv; j++) {
-      const u0 = i / nu; const u1 = (i + 1) / nu;
-      const v0 = j / nv; const v1 = (j + 1) / nv;
+      const u0 = us[i]; const u1 = us[i + 1];
+      const v0 = vs[j]; const v1 = vs[j + 1];
       if (skip && skip(u0, u1, v0, v1)) continue;
       const p00 = point(u0, v0);
       const p10 = point(u1, v0);
@@ -158,20 +178,28 @@ const doorSpan = {
   y1: DOOR.sillY + DOOR.height,
 };
 
-function cellWorldBox(u0, u1, v0, v1, side) {
-  const a = hullPoint(u0 * 2 - 1, v0, side);
-  const b = hullPoint(u1 * 2 - 1, v1, side);
-  return {
-    x0: Math.min(a.x, b.x), x1: Math.max(a.x, b.x),
-    y0: Math.min(a.y, b.y), y1: Math.max(a.y, b.y),
-  };
-}
-
 // --- the built hull ----------------------------------------------------------
 
+// Uniform lines from 0..1, then any exact boundaries a feature needs, sorted and
+// de-duplicated. Lines closer together than `weld` are collapsed so a feature
+// edge never leaves a sliver quad.
+function gridLines(count, extra = [], weld = 0.004) {
+  const set = [];
+  for (let i = 0; i <= count; i++) set.push(i / count);
+  for (const e of extra) if (e > 0 && e < 1) set.push(e);
+  set.sort((a, b) => a - b);
+  const out = [set[0]];
+  for (let i = 1; i < set.length; i++) {
+    if (set[i] - out[out.length - 1] > weld) out.push(set[i]);
+    else if (extra.includes(set[i])) out[out.length - 1] = set[i]; // a feature edge wins
+  }
+  if (out[out.length - 1] < 1) out.push(1);
+  return out;
+}
+
 export function buildHull(wood) {
-  const NU = 120;  // stations along the length
-  const NV = 22;   // rows up the side
+  const NU = 118;  // stations along the length
+  const NV = 20;   // rows up the side
 
   // Sun-and-sea shading baked into the vertices: the underhull is dark, the
   // topsides catch light. This is what stops a single-material hull reading flat
@@ -201,25 +229,38 @@ export function buildHull(wood) {
   const parts = [];
   const innerParts = [];
 
+  // The exact surface parameters of every opening, so the grid can land on them.
+  const vWindow = vForHeight(WINDOW.sillY);
+  const vDoorSill = vForHeight(doorSpan.y0);
+  const vDoorHead = vForHeight(doorSpan.y1);
+  const uOf = (x) => (x / ARK.halfLength + 1) / 2;
+  const uDoor0 = uOf(doorSpan.x0);
+  const uDoor1 = uOf(doorSpan.x1);
+
+  const vs = gridLines(NV, [vWindow, vDoorSill, vDoorHead]);
+  const usDoorSide = gridLines(NU, [uDoor0, uDoor1]);
+  const usPlain = gridLines(NU);
+
   for (const side of [1, -1]) {
-    // The window band is the topmost slice of the side, simply left out. Only
-    // the door is one-sided.
+    const isDoorSide = side === DOOR.side;
+    const us = isDoorSide ? usDoorSide : usPlain;
+    // The window band is the topmost slice of the side, simply left out — it is
+    // open the whole length of both sides. Only the door is one-sided.
     const skip = (u0, u1, v0, v1) => {
-      if (v0 >= WINDOW_V) return true; // the tsohar band, both sides
-      if (side !== DOOR.side) return false;
-      const b = cellWorldBox(u0, u1, v0, v1, side);
-      return b.x1 > doorSpan.x0 && b.x0 < doorSpan.x1
-        && b.y1 > doorSpan.y0 && b.y0 < doorSpan.y1;
+      if (v0 >= vWindow - 1e-6) return true; // the tsohar band, both sides
+      if (!isDoorSide) return false;
+      return u0 >= uDoor0 - 1e-6 && u1 <= uDoor1 + 1e-6
+        && v0 >= vDoorSill - 1e-6 && v1 <= vDoorHead + 1e-6;
     };
 
     parts.push(gridSurface({
-      nu: NU, nv: NV, skip, shade: outerShade,
+      us, vs, skip, shade: outerShade,
       point: (u, v) => hullPoint(u * 2 - 1, v, side),
       flip: side < 0,
     }));
 
     innerParts.push(gridSurface({
-      nu: NU, nv: NV, skip, shade: innerShade,
+      us, vs, skip, shade: innerShade,
       point: (u, v) => hullPoint(u * 2 - 1, v, side, HULL.skin),
       flip: side > 0, // normals point INWARD
       uvScale: [1 / 7, 1 / 3.2],
@@ -228,7 +269,7 @@ export function buildHull(wood) {
 
   // THE BOTTOM: a flat sole between the two chines, following the rocker.
   parts.push(gridSurface({
-    nu: NU, nv: 8, shade: (p) => tmp.copy(cLo).multiplyScalar(0.86 + 0.1 * Math.sin(p.x * 0.3)),
+    us: gridLines(NU), vs: gridLines(8), shade: (p) => tmp.copy(cLo).multiplyScalar(0.86 + 0.1 * Math.sin(p.x * 0.3)),
     point: (u, v) => {
       const a = hullPoint(u * 2 - 1, 0, -1);
       const b = hullPoint(u * 2 - 1, 0, 1);
@@ -239,7 +280,7 @@ export function buildHull(wood) {
   }));
   // ...and its inner face, which is the floor of the bilge below deck 1.
   innerParts.push(gridSurface({
-    nu: 40, nv: 4, color: COLORS.timberDark,
+    us: gridLines(40), vs: gridLines(4), color: COLORS.timberDark,
     point: (u, v) => {
       const a = hullPoint(u * 2 - 1, 0, -1, HULL.skin);
       const b = hullPoint(u * 2 - 1, 0, 1, HULL.skin);
@@ -263,7 +304,7 @@ export function buildHull(wood) {
   };
   for (const side of [1, -1]) {
     parts.push(gridSurface({
-      nu: 60, nv: 3,
+      us: gridLines(60), vs: gridLines(3),
       shade: (p, v) => tmp.copy(cMid).lerp(cHi, 0.15 + v * 0.35).multiplyScalar(side > 0 ? 1.06 : 0.9),
       point: (u, v) => {
         const r = ridgeAt(u);
@@ -279,7 +320,7 @@ export function buildHull(wood) {
     }));
     // the roof's underside, which is deck 3's ceiling
     innerParts.push(gridSurface({
-      nu: 40, nv: 2,
+      us: gridLines(40), vs: gridLines(2),
       color: COLORS.timberDark,
       point: (u, v) => {
         const r = ridgeAt(u);
@@ -300,20 +341,20 @@ export function buildHull(wood) {
   for (const end of [1, -1]) {
     const u = end; // +1 bow, -1 stern
     parts.push(gridSurface({
-      nu: 6, nv: NV,
+      us: gridLines(6), vs,
       shade: outerShade,
       point: (a, v) => {
         const p0 = hullPoint(u, v, -1);
         const p1 = hullPoint(u, v, 1);
         return { x: p0.x, y: p0.y, z: p0.z + (p1.z - p0.z) * a };
       },
-      skip: (u0, u1, v0) => v0 >= WINDOW_V,
+      skip: (u0, u1, v0) => v0 >= vWindow - 1e-6,
       flip: end < 0,
       uvScale: [1 / 5, 1 / 3.6],
     }));
     // gable end above the eaves, closing the roof
     parts.push(gridSurface({
-      nu: 6, nv: 2,
+      us: gridLines(6), vs: gridLines(2),
       shade: (p, v) => tmp.copy(cMid).lerp(cHi, v * 0.3),
       point: (a, v) => {
         const r = ridgeAt((u + 1) / 2);
@@ -336,11 +377,27 @@ export function buildHull(wood) {
   const interior = new THREE.Mesh(toGeometry(innerParts), wood.matInner());
   interior.name = 'ark-inner-skin';
 
+  // What was ACTUALLY cut, measured back off the surface at the grid lines the
+  // builder used — not what was asked for. If the profile inversion or the grid
+  // welding ever drifts, these numbers move and the test group says so.
+  const atMid = (v, side = DOOR.side) => hullPoint(0, v, side).y;
+  const openings = {
+    door: {
+      x0: hullPoint(uDoor0 * 2 - 1, vDoorSill, DOOR.side).x,
+      x1: hullPoint(uDoor1 * 2 - 1, vDoorSill, DOOR.side).x,
+      y0: atMid(vDoorSill),
+      y1: atMid(vDoorHead),
+    },
+    windowSillY: atMid(vWindow, 1),
+    eavesY: atMid(1, 1),
+  };
+
   return {
     exterior,
     interior,
     doorSpan,
-    windowV: WINDOW_V,
+    openings,
+    windowV: vWindow,
     triangles: (exterior.geometry.index.count + interior.geometry.index.count) / 3,
   };
 }

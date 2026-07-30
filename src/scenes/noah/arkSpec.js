@@ -50,23 +50,31 @@ ARK.halfWidth = ARK.width / 2;     // 11.43
 // actually walks in - about 3.9 m, generous and honest.
 export const DECK_STRUCTURE = 0.62;
 
+// THE BUILDING BLOCKS. A hull is not built lying in the dirt - you cannot plank
+// or pitch a bottom you cannot reach. Ships are built up on stocks, and this one
+// is under construction, so it stands on massive timber blocks. Two things fall
+// out of that, both of them right: the boarding ramp becomes a real climb rather
+// than a kerb, and the player standing at the foot of it has to look UP at the
+// thing, which is most of what makes it feel as big as it is.
+export const KEEL_Y = 1.55;
+
 // The thirty cubits are the WHOLE ark, keel to eaves - not thirty cubits of
 // deck stacked on top of a hull bottom. So the bilge comes out of the budget,
 // and the three decks divide what is left.
-export const HULL_BOTTOM = 0;
-export const EAVES_Y = ARK.height; // 13.716 — top of the sides
+export const HULL_BOTTOM = KEEL_Y;
+export const EAVES_Y = KEEL_Y + ARK.height; // top of the sides
 
 // The floor of deck 1 sits above the bilge — the hull's own bottom timbers.
 export const BILGE = 0.46;
 
-export const DECK_PITCH = (EAVES_Y - BILGE) / 3;       // 4.419
+export const DECK_PITCH = (ARK.height - BILGE) / 3;    // 4.419
 export const DECK_CLEAR = DECK_PITCH - DECK_STRUCTURE; // 3.799
 
-// Walking surfaces, in world y.
+// Walking surfaces, in WORLD y (the blocks are already in these numbers).
 export const DECK_Y = [
-  BILGE,                    // 0.460 — lower
-  BILGE + DECK_PITCH,       // 4.879 — second
-  BILGE + DECK_PITCH * 2,   // 9.297 — third
+  KEEL_Y + BILGE,                    // lower
+  KEEL_Y + BILGE + DECK_PITCH,       // second
+  KEEL_Y + BILGE + DECK_PITCH * 2,   // third
 ];
 
 // The underside of the roof over deck 3 == the eaves. The gable ridge rises
@@ -189,8 +197,9 @@ export const RAMPS = [
 // --- the boarding ramp from the ground --------------------------------------
 export const BOARDING = {
   width: 4.2,
-  // From the ground up to the door sill.
-  zOuter: ARK.halfWidth + 9.4,
+  // From the ground up to the door sill — a real climb now the hull stands on
+  // its blocks. About 1:6, which loaded animals walk without hesitating.
+  zOuter: ARK.halfWidth + 12.6,
   zInner: ARK.halfWidth - HULL.skin,
 };
 
