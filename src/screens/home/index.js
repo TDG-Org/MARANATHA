@@ -586,6 +586,10 @@ export function buildHome({ app, params = {} }) {
 
   const onKeyDown = (e) => {
     if (e.defaultPrevented || e.target?.closest?.('input, select, textarea')) return;
+    // An overlay (About/Support/Settings) inerts the home root — this
+    // window-level handler must stand down with it, or arrows kept stepping
+    // chapters (with an audible click) behind the open panel.
+    if (root.inert || root.classList.contains('mr-behind-panel')) return;
     if (e.key === 'ArrowRight') { e.preventDefault(); step(1); }
     else if (e.key === 'ArrowLeft') { e.preventDefault(); step(-1); }
   };

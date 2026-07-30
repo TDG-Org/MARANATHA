@@ -296,6 +296,10 @@ export function createDialogue({ signal = null, isPaused = null } = {}) {
         // this, Enter/Space in Settings-over-pause fell through to here and
         // consumed story lines behind the frozen game.
         if (isModalOpen() || isPaused?.()) return;
+        // Focus on the Back button: let its native activation run — Enter/
+        // Space here would fire the OPPOSITE action (the same bug the tap
+        // dead-zone fixed, surviving on the keyboard path).
+        if (footer.contains(document.activeElement)) return;
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); advance(); }
         else if (e.key === 'Backspace' || e.key === 'ArrowLeft') { e.preventDefault(); back(); }
       };

@@ -100,8 +100,13 @@ export function confirmModal({
     };
     // capture + stopImmediatePropagation: the modal OWNS these keys while open
     const onKey = (e) => {
-      if (e.key === 'Escape') { e.stopImmediatePropagation(); close(false); }
+      if (e.repeat) return;
+      if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); close(false); }
       if (e.key === 'Enter') {
+        // preventDefault too: stopping propagation alone still let the
+        // browser fire the focused element's native activation from the
+        // same keystroke — one Enter, two actions.
+        e.preventDefault();
         e.stopImmediatePropagation();
         // Enter acts on the FOCUSED button. A global "Enter = confirm" here
         // wiped saves: the dialog deliberately focuses Cancel, and Enter then

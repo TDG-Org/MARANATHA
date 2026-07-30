@@ -82,6 +82,7 @@ function popout({ onClose, heading, passage }) {
   // the small X, top right of the card
   const close = document.createElement('button');
   close.type = 'button';
+  close.className = 'mr-dismiss'; // coarse-pointer 44px floor (index.html)
   close.setAttribute('aria-label', `Close ${heading}`);
   close.textContent = '✕';
   close.style.cssText = [

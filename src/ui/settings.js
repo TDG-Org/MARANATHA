@@ -11,6 +11,7 @@ let settingsOpen = false; // singleton: a double-tap must not stack two panels
 export function openSettings({ onReset } = {}) {
   if (settingsOpen) return Promise.resolve();
   settingsOpen = true;
+  let requestClose = null; // set once the close machinery exists (bottom)
   Audio.unlock(); // ensure the graph exists so slider changes are audible
 
   const backdrop = document.createElement('div');
@@ -40,6 +41,7 @@ export function openSettings({ onReset } = {}) {
   // the bottom all still work; this is simply where a person looks.
   const dismiss = document.createElement('button');
   dismiss.type = 'button';
+  dismiss.className = 'mr-dismiss'; // coarse-pointer 44px floor (index.html)
   dismiss.setAttribute('aria-label', 'Close settings');
   dismiss.textContent = '✕';
   dismiss.style.cssText = [
@@ -226,9 +228,11 @@ export function openSettings({ onReset } = {}) {
     });
     if (ok) {
       resetProgress();
+      // Close BEFORE the onReset rebuild: a fresh home mounted under the
+      // open panel is a non-inert sibling — containment and focus-return
+      // both broke in the one flow Settings itself owns.
+      requestClose?.();
       onReset?.();
-      reset.textContent = 'Progress reset';
-      setTimeout(() => { reset.textContent = 'Reset progress'; }, 1600);
     }
   };
   panel.append(reset);
@@ -288,6 +292,7 @@ export function openSettings({ onReset } = {}) {
       if (isModalOpen()) return; // a confirm modal above us owns Esc/Enter
       if (e.key === 'Escape') { e.stopImmediatePropagation(); doClose(); }
     };
+    requestClose = doClose; // the Reset flow closes the panel before rebuilding
     close.onclick = doClose;
     dismiss.onclick = doClose;
     backdrop.onclick = (e) => { if (e.target === backdrop) doClose(); };

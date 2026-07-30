@@ -1259,12 +1259,23 @@ class AudioSystem {
   // contract themselves: a real decoded sample under the manifest key wins,
   // else the procedural voice plays. (Before this, dropping ui_click.mp3 or
   // footstep.mp3 changed nothing — the keys had no play-by-key site at all.)
+  // Keep play()'s authored-use retry alive on the procedural path too: a
+  // transient first-unlock load failure must not leave a declared real file
+  // unloadable for the whole session (this invocation still plays the
+  // procedural voice; the NEXT one gets the decoded sample).
+  _kickSampleRetry(key) {
+    const e = this._manifest?.get(key);
+    if (e?.available && !this.samples[key] && !this._loadPromise) void this.loadSamples();
+  }
+
   footstep() {
     if (this.samples['sfx.footstep']) return this.play('sfx.footstep');
+    this._kickSampleRetry('sfx.footstep');
     this.noiseHit({ dur: 0.08, type: 'lowpass', from: 170, gain: 0.06, attack: 0.012, send: 0.05 });
   }
   uiClick() {
     if (this.samples['ui.click']) return this.play('ui.click');
+    this._kickSampleRetry('ui.click');
     this.tone({ freq: 523.25, type: 'sine', dur: 0.035, attack: 0.005, release: 0.14, gain: 0.055, send: 0.2 });
   }
 }

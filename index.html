@@ -25,8 +25,11 @@
     @media (pointer: coarse) {
       .mr-dialogue .mr-dlg-footer button { min-height: 44px; min-width: 72px; }
       .mr-skipbtn { min-height: 44px; }
+      /* button only — flooring the slider's height too pushed the volume
+         box down over the home gear on stacked phone layouts */
       #volume button { min-width: 44px; min-height: 44px; }
-      #volume input[type="range"] { height: 44px; }
+      .mr-links button { min-height: 44px; }
+      .mr-dismiss { min-width: 44px; min-height: 44px; }
     }
     #app { position: fixed; inset: 0; }
     canvas { display: block; }

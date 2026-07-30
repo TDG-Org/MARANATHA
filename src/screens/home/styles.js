@@ -314,6 +314,8 @@ export const UI_CSS = `
 }
 .mr-home.is-stacked .mr-clock { display: none; }
 .mr-home.is-stacked .mr-gear {
-  top: calc(52px * var(--u) + env(safe-area-inset-top));
+  /* floored below the persistent #volume box: its 44px coarse-pointer button
+     reaches ~y52, and 52px*u at u=0.62 put the gear underneath it */
+  top: max(calc(52px * var(--u) + env(safe-area-inset-top)), calc(58px + env(safe-area-inset-top)));
 }
 `;
