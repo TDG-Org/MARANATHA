@@ -36,7 +36,7 @@ asset-pipeline rule: **no log line → the asset doesn't ship.**
 | File | Source | Author | License | Attribution required? |
 |---|---|---|---|---|
 | `men_laughing.mp3` | **TO CONFIRM** — added by Nate | ? | ? | ? |
-| `man_laugh.mp3` | **TO CONFIRM** — added by Nate | ? | ? | ? |
+| `man_laugh.mp3` | **RETIRED** — added by Nate; its solo herd-sneer cue was cut in D8 and no code references it, so the file left the deploy (recoverable from git history) | ? | ? | — |
 | `boy_crying.mp3` | **TO CONFIRM** — supplied by Nate as `sniffling_sounds.mp3`; runtime copy is trimmed/mono/compressed | ? | ? | ? |
 
 ## Everything else
