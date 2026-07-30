@@ -7,7 +7,10 @@ import { confirmModal, isModalOpen } from './modal.js';
 
 // The Settings panel: four audio channels (Master / Music / SFX / Narrator),
 // the perf-HUD toggle, and a Reset-progress button behind an "Are you sure?".
+let settingsOpen = false; // singleton: a double-tap must not stack two panels
 export function openSettings({ onReset } = {}) {
+  if (settingsOpen) return Promise.resolve();
+  settingsOpen = true;
   Audio.unlock(); // ensure the graph exists so slider changes are audible
 
   const backdrop = document.createElement('div');
@@ -241,8 +244,22 @@ export function openSettings({ onReset } = {}) {
   ].join(';');
   panel.append(close);
 
+  panel.setAttribute('role', 'dialog');
+  panel.setAttribute('aria-modal', 'true');
+  panel.setAttribute('aria-label', 'Settings');
   backdrop.append(panel);
   document.body.append(backdrop);
+  // Focus containment: whatever sits behind (home UI, the pause menu) leaves
+  // the tab order while the panel is up; focus starts on the dismiss and
+  // returns to the opener on close (accessibility law).
+  const opener = document.activeElement;
+  const inerted = [];
+  for (const el of document.body.children) {
+    if (el === backdrop || el.inert) continue;
+    el.inert = true;
+    inerted.push(el);
+  }
+  dismiss.focus();
   requestAnimationFrame(() => {
     backdrop.style.opacity = '1';
     panel.style.transform = 'translateY(0)';
@@ -255,11 +272,17 @@ export function openSettings({ onReset } = {}) {
     const doClose = () => {
       if (closed) return;
       closed = true;
+      settingsOpen = false;
       Audio.uiClick();
+      inerted.forEach((el) => { el.inert = false; });
       backdrop.style.opacity = '0';
       panel.style.transform = 'translateY(10px)';
       window.removeEventListener('keydown', onKey, true);
-      setTimeout(() => { backdrop.remove(); resolve(); }, 220);
+      setTimeout(() => {
+        backdrop.remove();
+        opener?.focus?.();
+        resolve();
+      }, 220);
     };
     const onKey = (e) => {
       if (isModalOpen()) return; // a confirm modal above us owns Esc/Enter

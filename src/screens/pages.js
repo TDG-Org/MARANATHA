@@ -102,8 +102,23 @@ function popout({ onClose, heading, passage }) {
   };
   card.append(close);
 
+  card.setAttribute('role', 'dialog');
+  card.setAttribute('aria-modal', 'true');
+  card.setAttribute('aria-label', heading);
   root.append(card);
   document.body.append(root);
+  // FOCUS CONTAINMENT (accessibility law): pointer-events on the dimmed home
+  // blocks clicks but NOT the keyboard — Start/chips/gear stayed Tab-reachable
+  // and Enter-activatable behind the glass. `inert` closes both doors; focus
+  // moves into the dialog and returns to the opener on close.
+  const opener = document.activeElement;
+  const inerted = [];
+  for (const el of document.body.children) {
+    if (el === root || el.inert) continue;
+    el.inert = true;
+    inerted.push(el);
+  }
+  close.focus();
   requestAnimationFrame(() => {
     root.style.opacity = '1';
     card.style.transform = 'translateY(0)';
@@ -124,7 +139,9 @@ function popout({ onClose, heading, passage }) {
 
   const cleanup = () => {
     window.removeEventListener('keydown', onKey);
+    inerted.forEach((el) => { el.inert = false; });
     root.remove();
+    opener?.focus?.();
   };
   return { body, cleanup };
 }
