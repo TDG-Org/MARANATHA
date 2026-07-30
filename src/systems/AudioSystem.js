@@ -785,11 +785,9 @@ class AudioSystem {
   ambientNightBed(gain = 1) { return this._ambientHandle({ wind: 0.12, birds: 0, night: 0.5 }, gain); }
   musicWarmBed(gain = 1) { return this._musicHandle(0.03, [130.81, 196.0, 261.63], gain); }
   musicWonderBed(gain = 1) { return this._musicHandle(0.028, [146.83, 220.0, 293.66], gain); }
-  // D7: the SAD bed — a low A-minor wash for the lonely walk to the tent
-  // (a real music/sad_night.mp3 replaces it the moment Nate drops one in).
-  // D9: louder — Nate couldn't hear it at all.
-  // D9 lifted this 0.036 -> 0.062; Nate still could not hear it under the scene.
-  musicSadBed(gain = 1) { return this._musicHandle(0.115, [110.0, 164.81, 220.0, 261.63], gain); }
+  // (musicSadBed + the music.sad_night manifest row were deleted in the perf
+  // pass: D8 removed the walk-to-tent music switch — tension holds through to
+  // the dream — so no beat has been able to play that key since.)
   // D9: the DREAD bed — a low, uneasy minor cluster under the cold open's
   // betrayal (the open used to play in total silence; Nate missed tension).
   // A real music/dark_amb.mp3 takes over the moment it lands.
@@ -966,22 +964,7 @@ class AudioSystem {
     return src;
   }
 
-  // A clearly-labeled PLACEHOLDER "voice" buffer (speech-cadence tone) so the
-  // live-slider / skip demo works before real VO exists. NEVER shipped as final.
-  voicePlaceholderBuffer(seconds = 4) {
-    const rate = this.ctx.sampleRate;
-    const buf = this.ctx.createBuffer(1, Math.floor(rate * seconds), rate);
-    const d = buf.getChannelData(0);
-    for (let i = 0; i < d.length; i++) {
-      const t = i / rate;
-      const syllable = Math.max(0, Math.sin(t * Math.PI * 3.2)); // ~1.6 syllables/s
-      const f = 140 + 30 * Math.sin(t * 2.3);
-      d[i] = Math.sin(2 * Math.PI * f * t) * syllable * 0.28;
-    }
-    return buf;
-  }
-
-  // --- Ambient beds: wind, water, night pad, birdsong ---------------------
+  // --- Ambient beds: wind, night pad, birdsong -----------------------------
   buildAmbience() {
     // D15 power: zero gain is not zero DSP. Beds are instantiated only when a
     // caller requests audible gain and are fully stopped after fading to zero.
@@ -1236,35 +1219,17 @@ class AudioSystem {
   }
 
   // --- One-shots, tuned to feel like the story ----------------------------
-  whooshUp() { this.noiseHit({ dur: 1.1, from: 220, to: 1200, gain: 0.1, attack: 0.3, q: 0.7 }); }
+  // (The Creation/Phaser-era one-shots — whooshUp, rumble, splash, grow,
+  // growSmall, godChord, breath, voicePlaceholderBuffer — were deleted in the
+  // perf pass: zero callers since the pivot. whooshDown lives — it is the
+  // authored fallback for sfx.fall_whoosh.)
   whooshDown() { this.noiseHit({ dur: 1.2, from: 1000, to: 160, gain: 0.1, attack: 0.25, q: 0.7 }); }
-  rumble(dur = 2.4) {
-    this.noiseHit({ dur, type: 'lowpass', from: 110, gain: 0.14, attack: 0.5 });
-    this.tone({ freq: 44, dur: dur * 0.7, attack: 0.4, release: 0.8, gain: 0.09, send: 0 });
-  }
-  splash() { this.noiseHit({ dur: 0.7, from: 600, to: 280, gain: 0.07, attack: 0.08, q: 0.6 }); }
-
-  // Growth: a warm two-note pentatonic bloom + the faintest leaf rustle.
-  grow() {
-    const root = PENTA[Math.floor(Math.random() * PENTA.length)];
-    this.tone({ freq: root, type: 'sine', dur: 0.1, attack: 0.02, release: 0.9, gain: 0.075, filter: 1800, send: 0.45 });
-    this.tone({ freq: root * 1.5, type: 'sine', dur: 0.08, attack: 0.02, release: 0.8, gain: 0.04, delay: 0.09, send: 0.45 });
-    this.noiseHit({ dur: 0.3, type: 'highpass', from: 2600, gain: 0.02, attack: 0.06, send: 0.2 });
-  }
-  growSmall() {
-    const root = PENTA[Math.floor(Math.random() * PENTA.length)] * 2;
-    this.tone({ freq: root, type: 'sine', dur: 0.06, attack: 0.015, release: 0.5, gain: 0.035, send: 0.4 });
-  }
 
   sparkle(n = 4) {
     for (let i = 0; i < n; i++) {
       const f = PENTA[Math.floor(Math.random() * PENTA.length)] * 4;
       this.tone({ freq: f, type: 'sine', dur: 0.05, attack: 0.008, release: 0.7, gain: 0.035, delay: i * 0.09, send: 0.5 });
     }
-  }
-  godChord() {
-    [110, 220, 277.18, 329.63, 440].forEach((f, i) =>
-      this.tone({ freq: f, type: 'sine', dur: 1.8, attack: 0.6, release: 1.8, gain: f < 200 ? 0.05 : 0.04, delay: i * 0.07, filter: 1200, send: 0.5 }));
   }
   swellBright() {
     [261.63, 329.63, 392, 523.25].forEach((f, i) =>
@@ -1285,14 +1250,23 @@ class AudioSystem {
     this.tone({ freq: 90, slideTo: 55, type: 'sine', dur: 0.16, attack: 0.012, release: 0.3, gain: 0.12, send: 0.1 });
     this.noiseHit({ dur: 0.12, type: 'lowpass', from: 220, gain: 0.075, attack: 0.01 });
   }
-  breath() { this.noiseHit({ dur: 3, type: 'bandpass', from: 350, to: 850, q: 0.6, gain: 0.06, attack: 1.4, send: 0.3 }); }
   // The quest cue: finishing an objective should be heard, not guessed at.
   bell() {
     [523.25, 1046.5].forEach((f, i) =>
       this.tone({ freq: f, type: 'sine', dur: 0.08, attack: 0.01, release: 2.2 - i * 0.5, gain: 0.092 / (i + 1), send: 0.55 }));
   }
-  footstep() { this.noiseHit({ dur: 0.08, type: 'lowpass', from: 170, gain: 0.06, attack: 0.012, send: 0.05 }); }
-  uiClick() { this.tone({ freq: 523.25, type: 'sine', dur: 0.035, attack: 0.005, release: 0.14, gain: 0.055, send: 0.2 }); }
+  // Every call site invokes these directly, so they honour the drop-a-file
+  // contract themselves: a real decoded sample under the manifest key wins,
+  // else the procedural voice plays. (Before this, dropping ui_click.mp3 or
+  // footstep.mp3 changed nothing — the keys had no play-by-key site at all.)
+  footstep() {
+    if (this.samples['sfx.footstep']) return this.play('sfx.footstep');
+    this.noiseHit({ dur: 0.08, type: 'lowpass', from: 170, gain: 0.06, attack: 0.012, send: 0.05 });
+  }
+  uiClick() {
+    if (this.samples['ui.click']) return this.play('ui.click');
+    this.tone({ freq: 523.25, type: 'sine', dur: 0.035, attack: 0.005, release: 0.14, gain: 0.055, send: 0.2 });
+  }
 }
 
 export { AudioSystem };

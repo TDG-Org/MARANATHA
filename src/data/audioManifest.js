@@ -49,7 +49,6 @@ export const AUDIO_MANIFEST = [
   { key: 'music.dusk_calm', bus: 'music', loop: true, seconds: 148.035918, channels: 2, file: 'music/dusk_calm', fallback: 'musicWonderBed', available: true, purpose: 'dusk quieting-down theme', scene: 'joseph3d-1' },
   { key: 'music.dream_wonder', bus: 'music', loop: true, seconds: 165.561236, channels: 2, file: 'music/dream_wonder', format: 'mp3', fallback: 'musicWonderBed', available: true, purpose: 'dream sequence — hushed awe', scene: 'joseph3d-1' },
   { key: 'music.ominous_turn', bus: 'music', loop: true, seconds: 91.128, channels: 2, file: 'music/ominous_turn', fallback: null, available: true, purpose: 'the brothers’ hatred — warm → ominous shift', scene: 'joseph3d-1' },
-  { key: 'music.sad_night', bus: 'music', loop: true, seconds: 60, file: 'music/sad_night', fallback: 'musicSadBed', available: false, purpose: 'SAD — the lonely walk to his tent after the jeer (procedural minor pad until a real file lands; D9 louder)', scene: 'joseph3d-1' },
   { key: 'music.dark_amb', bus: 'music', loop: true, seconds: 97.44, channels: 2, file: 'music/dark_amb', format: 'mp3', fallback: 'musicDreadBed', available: true, gain: 1.45, purpose: 'reusable dark ambience — one continuous score bed through the cold-open betrayal, throw, and pit hold', scene: 'joseph3d-1' },
 
   // --- Scene 1 (3D) — reactive SFX -----------------------------------------
