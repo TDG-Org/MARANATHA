@@ -27,6 +27,26 @@ Where everything lives. One line per module; folders ordered by how often you'll
 - `pit.js` — the cold-open pit stage (Gen 37:24)
 - `dreamField.js` — the dream: wheat field, sheaves, celestial bodies, summit
 
+## `scenes/noah/` — the ark, walkable (Genesis 6). NO story yet, by design
+
+A place, not a scene with beats: stand at the foot of a 137 m hull, walk up the
+ramp, in through the door, and climb all three decks.
+
+- `arkSpec.js` — EVERY number, derived from Genesis 6:15. One cubit constant
+  (18 in exactly, the WEB's own footnote) drives the whole model; change it and
+  the geometry, collision, decks and ramps all rebuild to scale
+- `hull.js` — the hull as a FUNCTION (station × height → point), built twice:
+  an outer skin facing out and an inner skin facing in. That single-sided pair
+  IS the cutaway system — from inside, a camera outside the hull sees straight
+  through the inner skin's back faces
+- `decks.js` — the three decks, ramps, hatchways and coamings. Geometry and the
+  walkable DeckField come out of THE SAME rectangles, so they cannot disagree
+- `site.js` — the building site: stocks, shores, scaffolding, timber stacks,
+  sawpit, pitch pots, and a forest with a felled clearing round the vessel
+- `wood.js` — procedural plank/sawn canvas textures (no image files) + `tinted()`
+- `index.js` — assembly, the inside/outside swap, the lantern pool, per-deck light
+- `hud.js` — a deliberately tiny HUD: controls and which deck you are on
+
 ## `engine/` — reusable, story-agnostic (never imports from scenes/)
 
 - `world.js` — sky/ridges/ground/sun/motes makers + toon materials + merge/dye helpers
@@ -39,7 +59,14 @@ Where everything lives. One line per module; folders ordered by how often you'll
 - `ContactShadowPool.js` — one instanced character-shadow draw with change-gated uploads
 - `Sequencer.js` — data-driven cutscene steps + pausableWait
 - `MoodGrading.js` — MOODS table; one grade moves sky/fog/lights/ridges/tint together
-- `collision.js` — circle/AABB slide collision (`ColliderWorld`) + dirty-driven idle gate
+- `collision.js` — circle/AABB slide collision (`ColliderWorld`) + dirty-driven idle gate.
+  Colliders MAY carry minY/maxY and are then only felt by a body whose own span
+  overlaps them — how deck-1 walls stop being felt on deck 3. Spanless = felt
+  always, exactly as before
+- `DeckField.js` — the engine's only notion of UPSTAIRS: floors and ramps as
+  axis-aligned data, one allocation-free query per body per frame. The floor you
+  are on is the HIGHEST surface you could have stepped up onto, which is what
+  stops deck 2 lifting a body off deck 1. `stepHeight` snaps up and falls down
 - `Interactables.js` — proximity prompts (talk pill) + trigger volumes
 - `Guidance.js` — the golden waypoint arrow + ground ring
 - `particles.js` — pooled smoke/embers/fireflies
