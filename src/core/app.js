@@ -1,5 +1,3 @@
-import * as THREE from 'three';
-import { createRenderer, startLoop } from './renderer.js';
 import { detectTier, AdaptiveQuality, DebugHud, RateGovernor } from './quality.js';
 import { disposeDeep } from './dispose.js';
 import { createVeil } from '../ui/veil.js';
@@ -17,14 +15,26 @@ import { resolveLazyScreen } from './lazyScreen.js';
 // whenReady?, activate? } per the game-scene contract. Readiness prepares;
 // activation starts story time only after reveal. Transitions fade through
 // black — never a hard cut.
+//
+// THE ENGINE IS NOT PART OF BOOT. The first paint is the home story map —
+// pure DOM — so Three.js, the renderer, the camera, and the frame loop all
+// live behind ONE dynamic edge (./engine3d.js), fetched behind the loader on
+// the first non-flat navigation and idle-prefetched while the menu is up.
+// Before that fetch, this shell has no canvas and runs no loop at all.
 export function createApp(container) {
-  const renderer = createRenderer(container);
   const { tier } = detectTier();
   // The DPR ceiling comes from the player's Graphics Quality preset (Low/Med/
   // High); AdaptiveQuality may still shed BELOW it on a struggling device.
   const dpr = () => window.devicePixelRatio || 1;
-  const quality = new AdaptiveQuality(renderer, { basePixelRatio: Math.min(dpr(), Graphics.dprCap) });
+  let THREE3D = null;   // the three namespace, once the engine edge loads
+  let renderer = null;
+  let camera = null;
+  let quality = null;
+  let hud = null;
+  let postFX = null;
+  let enginePromise = null;
   Graphics.subscribe((graphics, change) => {
+    if (!quality) return; // pre-engine: nothing rendering, nothing to cap
     const base = Math.min(dpr(), graphics.dprCap);
     // Automatic demotion may only lower the current DPR. A player explicitly
     // choosing a preset may restore that preset's complete DPR ceiling.
@@ -33,9 +43,6 @@ export function createApp(container) {
   // Guard the aspect: a tab booted in the background can report 0×0 —
   // 0/0 = NaN would poison the projection matrix until the next resize.
   const safeAspect = () => (window.innerHeight > 0 ? window.innerWidth / window.innerHeight : 16 / 9);
-  const camera = new THREE.PerspectiveCamera(46, safeAspect(), 0.1, 900);
-  const hud = new DebugHud(renderer);
-  Settings.bindHud(hud); // apply the player's saved HUD-visibility choice
   // Browser QA runs in an isolated world that cannot read the app's harmless
   // window debug handle. Expose a bounded, non-sensitive scene snapshot on
   // the existing #debug HUD instead. Normal routes do zero telemetry work.
@@ -44,13 +51,50 @@ export function createApp(container) {
 
   const veil = createVeil();
   const loader = createLoader();
-  // D6: ONE PostFX owns the canvas grade + named filters for every scene.
-  const postFX = new PostFX(renderer.domElement);
-  const screens = new Map(); // key -> { builder } or { load, promise, builder }
+  const screens = new Map(); // key -> { builder, flat } or { load, promise, builder, flat }
   let current = null;        // { key, scene, instance, lifetime }
   let busy = false;
   let updateErrors = 0;
   let loopController = null;
+
+  const initEngine = (mod) => {
+    if (renderer) return;
+    THREE3D = mod.THREE;
+    renderer = mod.createRenderer(container);
+    quality = new AdaptiveQuality(renderer, { basePixelRatio: Math.min(dpr(), Graphics.dprCap) });
+    camera = new THREE3D.PerspectiveCamera(46, safeAspect(), 0.1, 900);
+    hud = new DebugHud(renderer);
+    Settings.bindHud(hud); // apply the player's saved HUD-visibility choice
+    // D6: ONE PostFX owns the canvas grade + named filters for every scene.
+    postFX = new PostFX(renderer.domElement);
+    // The engine may arrive while a FLAT screen is up (idle prefetch): the
+    // fresh canvas must not appear behind the menu. Visibility, never
+    // display:none (D23 — display drops the GL drawing buffer).
+    showCanvas(!current?.instance?.flat);
+    onResize(); // size/DPR the fresh canvas against the live viewport
+    loopController = mod.startLoop(tick, targetFps);
+    // Respect the live ownership latches: mid-navigation the loop stays
+    // stopped until reveal; a prefetch mid-menu parks itself via the governor.
+    if (busy || paused) loopController.stop();
+  };
+  const ensureEngine = () => {
+    if (renderer) return Promise.resolve();
+    if (!enginePromise) {
+      enginePromise = import('./engine3d.js')
+        .then((mod) => initEngine(mod))
+        .catch((error) => {
+          enginePromise = null; // a failed fetch must not poison the retry
+          throw error;
+        });
+    }
+    return enginePromise;
+  };
+  const idlePrefetchEngine = () => {
+    if (renderer || enginePromise) return;
+    const kick = () => { ensureEngine().catch(() => { /* the Start click retries behind the loader */ }); };
+    if ('requestIdleCallback' in window) requestIdleCallback(kick, { timeout: 4000 });
+    else setTimeout(kick, 1200);
+  };
 
   // Responsive: keep the renderer + camera matched to the viewport across
   // resize, orientation change, iOS visualViewport shifts, and container resize
@@ -62,6 +106,7 @@ export function createApp(container) {
   // the drawing buffer up to twice per duplicate event. Gate on what changed.
   let sizedW = 0, sizedH = 0;
   const onResize = () => {
+    if (!renderer) return; // pre-engine there is no canvas to size
     const w = window.innerWidth, h = window.innerHeight;
     if (!w || !h) return; // a hidden/zero-sized pass must never poison aspect
     // A window moved to a lower-DPR display (or browser zoomed out) must shed
@@ -102,19 +147,21 @@ export function createApp(container) {
   // navigation from a non-flat screen loaded fine. Visibility keeps the buffer.
   const isFlat = () => !!current?.instance?.flat;
   const showCanvas = (on) => {
-    renderer.domElement.style.visibility = on ? '' : 'hidden';
+    if (renderer) renderer.domElement.style.visibility = on ? '' : 'hidden';
     // A flat screen has no cinema letterbox to clear, so the #debug stats
     // drop back into the corner instead of floating (see index.html).
     document.body.classList.toggle('mr-flat-screen', !on);
   };
   const paint = () => {
-    if (!current || isFlat()) return;
+    if (!renderer || !current || !current.scene || isFlat()) return;
     renderer.render(current.scene, camera);
   };
 
   async function build(key, params) {
     const entry = screens.get(key);
-    const scene = new THREE.Scene();
+    // FLAT screens are pure DOM and may build before the engine exists — they
+    // get no Scene at all. Non-flat navigation ensured the engine already.
+    const scene = entry.flat || !THREE3D ? null : new THREE3D.Scene();
     const lifetime = new AbortController();
     try {
       let builder = entry.builder;
@@ -126,7 +173,7 @@ export function createApp(container) {
       showCanvas(!instance.flat);
     } catch (e) {
       lifetime.abort(makeAbortError(`Screen "${key}" failed to build`));
-      disposeDeep(scene);
+      if (scene) disposeDeep(scene);
       throw e;
     }
   }
@@ -135,9 +182,9 @@ export function createApp(container) {
     if (!current) return;
     current.lifetime.abort(makeAbortError(reason));
     try { current.instance.dispose?.(); } catch (e) { console.error('[app] dispose error', e); }
-    disposeDeep(current.scene);
+    if (current.scene) disposeDeep(current.scene);
     showCanvas(true); // the next screen decides again once it is built
-    postFX.reset();
+    postFX?.reset();
     current = null;
     debugStateAcc = 0;
     if (hud.el) delete hud.el.dataset.sceneState;
@@ -168,11 +215,16 @@ export function createApp(container) {
       disposeCurrent(`Leaving screen "${current?.key || 'unknown'}"`);
       updateErrors = 0;
       const entry = screens.get(key);
-      if (!entry.builder) {
+      if (!entry.builder || (!entry.flat && !renderer)) {
         loader.show();
         loaderVisible = true;
       }
       try {
+        // The engine (Three.js + renderer + loop) is not in the boot chunk —
+        // the first non-flat navigation pays for it here, under the same
+        // loader that covers the scene chunk and its assets. A failed fetch
+        // falls into the recovery path below like any failed screen.
+        if (!entry.flat && !renderer) await ensureEngine();
         await build(key, params);
       } catch (error) {
         console.error(`[app] screen "${key}" failed to build; returning home`, error);
@@ -226,6 +278,9 @@ export function createApp(container) {
       paint(); // paint one frame before revealing (a flat screen has none to paint)
       await veil.reveal(first ? 900 : 620);
       current.instance.activate?.();
+      // The menu is up and idle: pull the engine down NOW so the player's
+      // Start click is a cut, not a download (startup-efficiency skill).
+      if (current?.instance?.flat) idlePrefetchEngine();
     } finally {
       // A decode/build exception must never leave navigation permanently busy.
       if (loaderVisible) await loader.hide();
@@ -305,12 +360,16 @@ export function createApp(container) {
   };
 
   const app = {
-    camera,
-    renderer,
+    // Live getters: the engine assigns these when its chunk arrives — a
+    // captured value would hand every consumer a permanent null.
+    get camera() { return camera; },
+    get renderer() { return renderer; },
     tier,
-    postFX,
-    register(key, builder) { screens.set(key, { builder }); },
-    registerLazy(key, load) { screens.set(key, { load, promise: null, builder: null }); },
+    get postFX() { return postFX; },
+    // `flat` marks a pure-DOM screen at REGISTRATION so navigation knows it
+    // needs no engine before the builder has ever run.
+    register(key, builder, { flat = false } = {}) { screens.set(key, { builder, flat }); },
+    registerLazy(key, load) { screens.set(key, { load, promise: null, builder: null, flat: false }); },
     hasScreen(key) { return screens.has(key); },
     navigate,
     get currentKey() { return current?.key; },
@@ -343,7 +402,9 @@ export function createApp(container) {
     get power() { return { fps: liveFps, eco: requestedFps <= POWER.ecoFps }; },
   };
 
-  loopController = startLoop((dt, now, fps, pacing) => {
+  // The frame tick. Runs only once the engine exists (initEngine starts the
+  // loop); before that the shell is DOM-only and burns nothing.
+  const tick = (dt, now, fps, pacing) => {
     liveFps = fps;
     const eco = requestedFps <= POWER.ecoFps;
     // Everything that judges "is this machine keeping up?" must judge against
@@ -414,7 +475,7 @@ export function createApp(container) {
       flatParked = true;
       loopController?.stop();
     }
-  }, targetFps);
+  };
 
   return app;
 }

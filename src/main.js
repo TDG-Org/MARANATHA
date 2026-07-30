@@ -14,7 +14,10 @@ import { mountSkipButton } from './ui/skipButton.js';
 const container = document.getElementById('app');
 const app = createApp(container);
 
-app.register('home', buildHome);
+// `flat` at REGISTRATION: the home is pure DOM, so booting into it downloads
+// zero bytes of Three.js — the engine chunk loads behind the loader on the
+// first story navigation (and idle-prefetches while the menu is up).
+app.register('home', buildHome, { flat: true });
 // Load only the route a player opens. Scene 1 no longer makes the home screen
 // parse the legacy game/playground, and those developer routes never occupy a
 // normal player's memory.

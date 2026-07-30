@@ -69,8 +69,13 @@ Where everything lives. One line per module; folders ordered by how often you'll
 
 ## `core/` — the app shell
 
-- `app.js` — renderer/camera/loop owner, lazy screen navigation, readiness recovery,
-  stopped loading/pause gates, zero-dt prepaint, and post-reveal screen activation
+- `app.js` — screen navigation, readiness recovery, loading/pause gates, zero-dt
+  prepaint, post-reveal activation — and the LAZY ENGINE: the shell itself is
+  three-free; renderer/camera/loop arrive via `engine3d.js` on the first
+  non-flat navigation (idle-prefetched while the menu is up), so booting into
+  the DOM home downloads zero bytes of Three.js
+- `engine3d.js` — the one dynamic edge that imports three (re-exports
+  createRenderer/startLoop + the THREE namespace)
 - `renderer.js` — one WebGLRenderer + the rAF loop: GPU power preference, eco sleeping,
   and it feeds the pacer the chained callbacks it measures the panel from
 - `framePacer.js` — measures the display's real refresh period and paces every frame to a
@@ -80,7 +85,8 @@ Where everything lives. One line per module; folders ordered by how often you'll
   full-rate ceiling, sticky-down) · the `#debug` HUD. Every threshold is a fraction of the
   PACED budget, never an absolute millisecond count
 - `deadline.js` (bounded async gate) · `lazyScreen.js` (retry-safe import identity/cache) ·
-  `dispose.js` (deep GPU free)
+  `dispose.js` (deep GPU free) · `reducedMotion.js` (the one shared
+  prefers-reduced-motion gate every DOM surface asks)
 
 ## `screens/` + `data/`
 

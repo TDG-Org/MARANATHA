@@ -194,9 +194,47 @@ assert.match(
 );
 assert.match(
   appSource,
-  /function disposeCurrent[\s\S]*lifetime\.abort[\s\S]*instance\.dispose[\s\S]*disposeDeep\(current\.scene\)[\s\S]*postFX\.reset\(\)[\s\S]*current = null/,
+  /function disposeCurrent[\s\S]*lifetime\.abort[\s\S]*instance\.dispose[\s\S]*disposeDeep\(current\.scene\)[\s\S]*postFX\?\.reset\(\)[\s\S]*current = null/,
   'failed scenes do not release every shell-owned resource',
 );
+
+// THE ENGINE IS NOT PART OF BOOT: the menu is pure DOM, so the app shell must
+// never statically import three or the renderer — one dynamic edge
+// (engine3d.js) owns them, ensured behind the loader for non-flat navigation
+// and idle-prefetched while the menu is up.
+assert.doesNotMatch(
+  appSource,
+  /^import .*from 'three'/m,
+  'the app shell statically imports three — the DOM menu pays for the whole engine again',
+);
+assert.doesNotMatch(
+  appSource,
+  /^import .*from '\.\/renderer\.js'/m,
+  'the app shell statically imports the renderer — three rides back into the boot chunk with it',
+);
+assert.match(
+  appSource,
+  /import\('\.\/engine3d\.js'\)/,
+  'the engine edge is no longer a dynamic import',
+);
+assert.match(
+  appSource,
+  /if \(!entry\.flat && !renderer\) await ensureEngine\(\);/,
+  'a non-flat navigation no longer ensures the engine behind the loader',
+);
+assert.match(
+  appSource,
+  /if \(current\?\.instance\?\.flat\) idlePrefetchEngine\(\);/,
+  'the menu no longer idle-prefetches the engine — the Start click becomes a download',
+);
+{
+  const mainSource = await readFile(new URL('../src/main.js', import.meta.url), 'utf8');
+  assert.match(
+    mainSource,
+    /app\.register\('home', buildHome, \{ flat: true \}\)/,
+    "home is not registered flat — navigation would fetch the engine just to show the menu",
+  );
+}
 assert.match(
   appSource,
   /busy = true;[\s\S]*loopController\?\.stop\(\)[\s\S]*await veil\.reveal[\s\S]*current\.instance\.activate\?\.\(\)[\s\S]*busy = false[\s\S]*loopController\?\.start\(\)/,
