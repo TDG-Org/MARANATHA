@@ -18,8 +18,11 @@ export function createCinema({ isPaused = null, onFade = null, signal = null } =
   const top = mk(barCss + 'top:0;transform:translateY(-100%);');
   const bottom = mk(barCss + 'bottom:0;transform:translateY(100%);');
 
-  // Mood tint — a whisper (≤0.14 alpha), driven by grading.
-  const tint = mk('position:fixed;inset:0;z-index:26;pointer-events:none;background:#000;opacity:0;transition:opacity 2200ms ease, background-color 2200ms ease;');
+  // Mood tint — a whisper (≤0.14 alpha), driven by grading. Only OPACITY may
+  // transition: an animated background-color repaints the full viewport per
+  // frame for 2.2s at every mood change, and under a ≤0.14 alpha ceiling an
+  // instant hue swap beneath the eased opacity is imperceptible.
+  const tint = mk('position:fixed;inset:0;z-index:26;pointer-events:none;background:#000;opacity:0;transition:opacity 2200ms ease;');
 
   // Dip-to-black — the clean-transition layer (cutscene-director). Sits ABOVE
   // the letterbox bars but BELOW the title card + dialogue, so title cards can
