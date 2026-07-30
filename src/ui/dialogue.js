@@ -1,6 +1,8 @@
 import { Audio } from '../systems/AudioSystem.js';
 import { abortReason, makeAbortError } from '../core/async.js';
 import { pausableWait } from '../engine/Sequencer.js';
+import { isModalOpen } from './modal.js';
+import { prefersReducedMotion } from '../core/reducedMotion.js';
 
 // Dialogue popups. Every line shows WHO is speaking (storyteller skill: the
 // player must always know who each person is). Text types on; the first
@@ -66,7 +68,7 @@ export function createDialogue({ signal = null, isPaused = null } = {}) {
   backBtn.textContent = '◀ Back';
   backBtn.setAttribute('aria-label', 'Re-read the previous line');
   backBtn.style.cssText = [
-    'font:600 12px "Segoe UI",system-ui,sans-serif', 'padding:5px 11px', 'border-radius:9px',
+    'font:600 12px "Segoe UI",system-ui,sans-serif', 'padding:8px 14px', 'border-radius:9px',
     'cursor:pointer', 'color:#f5e6c4', 'background:rgba(242,184,128,0.12)',
     'border:1px solid rgba(242,184,128,0.32)', 'visibility:hidden', 'pointer-events:auto',
     'transition:filter 140ms ease',
@@ -79,7 +81,13 @@ export function createDialogue({ signal = null, isPaused = null } = {}) {
   hint.style.cssText = 'font-size:13px; opacity:0.5;';
 
   footer.append(backBtn, hint);
-  box.append(nameEl, textEl, choicesEl, footer);
+  // Screen-reader path: each line lands ONCE as full text in a hidden polite
+  // log (the typewriter's per-character writes would spam a reader).
+  const srLog = document.createElement('div');
+  srLog.setAttribute('role', 'log');
+  srLog.setAttribute('aria-live', 'polite');
+  srLog.style.cssText = 'position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap;';
+  box.append(nameEl, textEl, choicesEl, footer, srLog);
   document.body.append(box);
 
   let open = false;
@@ -178,12 +186,15 @@ export function createDialogue({ signal = null, isPaused = null } = {}) {
     choicesEl.textContent = '';
     hint.style.display = 'block';
     history.push({ speaker, text, color });
+    srLog.textContent = speaker ? `${speaker}: ${text}` : text;
     const liveIdx = history.length - 1;
     let viewIdx = liveIdx;
     // D7: a NEW speaker RE-ENTERS the box — a quick dip-down-and-return so the
     // hand-off is unmissable (the same speaker keeps talking with no animation;
-    // color alone wasn't enough signal).
-    const speakerChanged = open && lastSpeaker !== null && speaker !== lastSpeaker;
+    // color alone wasn't enough signal). Reduced-motion players get the
+    // speaker colors without the dip.
+    const speakerChanged = !prefersReducedMotion()
+      && open && lastSpeaker !== null && speaker !== lastSpeaker;
     lastSpeaker = speaker;
     show();
     Audio.uiClick?.();
@@ -275,9 +286,16 @@ export function createDialogue({ signal = null, isPaused = null } = {}) {
         onKey = null;
         if (activeCancel === cancelThis) activeCancel = null;
       };
-      const onBoxClick = (e) => { if (e.target === backBtn) return; advance(); };
+      // The whole FOOTER is a dead zone for advance, not just the button's
+      // exact pixels — a missed tap on the small Back button fired the
+      // OPPOSITE action (advancing past the line the player wanted to re-read).
+      const onBoxClick = (e) => { if (footer.contains(e.target)) return; advance(); };
       const onBackClick = (e) => { e.stopPropagation(); Audio.uiClick?.(); back(); };
       onKey = (e) => {
+        // Ownership: an open modal or the pause stack owns the keys. Without
+        // this, Enter/Space in Settings-over-pause fell through to here and
+        // consumed story lines behind the frozen game.
+        if (isModalOpen() || isPaused?.()) return;
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); advance(); }
         else if (e.key === 'Backspace' || e.key === 'ArrowLeft') { e.preventDefault(); back(); }
       };
