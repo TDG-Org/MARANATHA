@@ -346,6 +346,42 @@ const { createApp } = await import('../src/core/app.js');
     'a dropped real file is ignored — the drop-a-file contract is still broken');
 }
 
+// ── 9. PANEL FOCUS CONTAINMENT is real, and nests safely ───────────────────
+// pointer-events on a dimmed background blocks clicks but NOT the keyboard.
+// Panels must inert what they cover, and a panel opened OVER another must not
+// un-inert what the first one owns when it closes.
+{
+  const { openAboutPanel } = await import('../src/screens/pages.js');
+  const behind = new FakeElement('div');
+  doc.body.append(behind);
+  const opener = new FakeElement('button');
+  doc.body.append(opener);
+  opener.focus();
+  assert.equal(doc.activeElement, opener);
+
+  const closeAbout = openAboutPanel({ onClose() {} });
+  assert.equal(behind.inert, true, 'an open panel left the screen behind it keyboard-reachable');
+  const panelRoot = doc.body.children.at(-1);
+  assert.equal(panelRoot.inert, false, 'the panel inerted itself');
+  assert.notEqual(doc.activeElement, opener, 'focus never moved into the panel');
+  const insidePanel = panelRoot.contains(doc.activeElement);
+  assert.equal(insidePanel, true, 'focus did not land inside the panel');
+
+  // a second overlay over the first must not steal ownership of `behind`
+  const alreadyInert = behind.inert;
+  const closeSecond = openAboutPanel({ onClose() {} });
+  assert.equal(behind.inert, true, 'the nested panel un-inerted a covered layer');
+  closeSecond();
+  assert.equal(behind.inert, alreadyInert,
+    'closing the nested panel released a layer the FIRST panel still owns');
+
+  closeAbout();
+  assert.equal(behind.inert, false, 'closing the last panel left the screen permanently inert');
+  assert.equal(doc.activeElement, opener, 'focus did not return to the opener');
+  behind.remove();
+  opener.remove();
+}
+
 console.log(
   'shell + UI behaviour passed: pre-engine flat navigation clean, engine-failure recovery to home,'
   + ' modal Enter follows focus, verse card releases its surface, pause blur survives reopen,'
