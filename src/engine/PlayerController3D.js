@@ -124,7 +124,6 @@ export class PlayerController3D {
     }
 
     if (!scriptSpeed && this.enabled) {
-      this._cameraBasis();
       const k = this.keys;
       if (k.has('w') || k.has('arrowup')) iz += 1;
       if (k.has('s') || k.has('arrowdown')) iz -= 1;
@@ -145,6 +144,10 @@ export class PlayerController3D {
     } else {
       this._moveDir.set(0, 0, 0);
       if (ix !== 0 || iz !== 0) {
+        // The basis costs a world-matrix update on the camera chain — compute
+        // it only on frames with actual input (idle standing is the most
+        // common state, and it never consumes _fwd/_right).
+        this._cameraBasis();
         this._moveDir.addScaledVector(this._fwd, iz).addScaledVector(this._right, ix);
         if (this._moveDir.lengthSq() > 1) this._moveDir.normalize();
         const spd = running ? this.runSpeed : this.walkSpeed;
