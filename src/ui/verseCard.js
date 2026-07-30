@@ -65,6 +65,9 @@ export function createVerseCard({ signal = null, isPaused = null } = {}) {
   function hide() {
     panel.style.opacity = '0';
     panel.style.transform = 'translateX(-50%) translateY(-8px)';
+    // an invisible card must never keep eating clicks or holding a tab stop
+    panel.style.pointerEvents = 'none';
+    panel.removeAttribute('tabindex');
   }
 
   return { show, hide, el: panel, destroy() { hide(); panel.remove(); } };

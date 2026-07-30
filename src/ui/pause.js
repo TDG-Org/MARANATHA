@@ -122,8 +122,12 @@ export function createPauseMenu({ app, isInputOn, setInput, onSettings, onHome }
     open = true;
     freeze(true);
     clearTimeout(hideT);
-    overlay.style.backdropFilter = ''; // the world is frozen again — blur is legal
+    // Restore the REAL value: assigning '' would delete the inline
+    // declaration cssText created — the blur would be gone forever after the
+    // first resume (caught by the branch's adversarial review).
+    overlay.style.backdropFilter = 'blur(6px)'; // the world is frozen — blur is legal
     overlay.style.pointerEvents = '';
+    overlay.inert = false;
     overlay.style.display = 'flex';
     // A transition never starts on an element leaving display:none in the
     // same style recalc — force one reflow, then raise opacity. A reflow is
@@ -140,6 +144,7 @@ export function createPauseMenu({ app, isInputOn, setInput, onSettings, onHome }
     // backdrop-filter over a live canvas is banned (D9).
     overlay.style.backdropFilter = 'none';
     overlay.style.pointerEvents = 'none'; // the fading ghost must not eat clicks
+    overlay.inert = true; // …and its buttons must leave the keyboard too
     overlay.style.opacity = '0';
     clearTimeout(hideT);
     hideT = setTimeout(() => { if (!open) overlay.style.display = 'none'; }, 220);
