@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <!-- Zoom stays AVAILABLE (accessibility law: scripture at 13px must be
+       zoomable; iOS ignores user-scalable=no anyway, so banning it only ever
+       took zoom away from Android readers). Accidental gestures on the GAME
+       are prevented by touch-action on the canvas + joystick, not globally. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="description" content="MARANATHA — a Bible game. Walk through the Bible in a beautiful, biblically accurate story world." />
   <title>MARANATHA</title>
   <style>
@@ -12,6 +16,17 @@
          callout, no tap flash. (Range sliders and buttons still work fine.) */
       user-select: none; -webkit-user-select: none; -ms-user-select: none;
       -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
+    }
+    /* The 3D canvas owns its gestures completely (no browser pan/zoom on the
+       world itself) — this is what lets the page keep pinch-zoom for reading. */
+    #app canvas { touch-action: none; }
+    /* Touch targets: on coarse pointers every small control gets a ≥44px hit
+       area (responsive-ui law). Visual style is unchanged — padding does it. */
+    @media (pointer: coarse) {
+      .mr-dialogue .mr-dlg-footer button { min-height: 44px; min-width: 72px; }
+      .mr-skipbtn { min-height: 44px; }
+      #volume button { min-width: 44px; min-height: 44px; }
+      #volume input[type="range"] { height: 44px; }
     }
     #app { position: fixed; inset: 0; }
     canvas { display: block; }

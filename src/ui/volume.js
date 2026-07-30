@@ -20,6 +20,9 @@ export function mountVolumeControl() {
 
   const sync = () => {
     button.textContent = Audio.enabled ? '🔊' : '🔇';
+    // the emoji is decoration to a screen reader — the label carries the state
+    button.setAttribute('aria-label', Audio.enabled ? 'Mute' : 'Unmute');
+    button.setAttribute('aria-pressed', Audio.enabled ? 'false' : 'true');
     slider.value = String(Math.round(Audio.volume * 100));
   };
 

@@ -6,6 +6,7 @@ import { Audio } from '../systems/AudioSystem.js';
 export function mountSkipButton() {
   const btn = document.createElement('button');
   btn.type = 'button';
+  btn.className = 'mr-skipbtn'; // coarse-pointer touch floor lives in index.html
   btn.setAttribute('aria-label', 'Skip narration');
   btn.textContent = 'Skip narration ⏭';
   btn.style.cssText = [
