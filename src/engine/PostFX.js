@@ -38,7 +38,7 @@ export class PostFX {
   constructor(canvasEl) {
     this.canvas = canvasEl;
     this.filter = 'none';
-    this._blurT = null;
+    this._filterT = 0; // disarms the eased filter switch once it lands
     this._lastCanvasFilter = null;
 
     // D9 (Nate): the old FUTURE vignette drew dark borders on all four sides
@@ -104,11 +104,20 @@ export class PostFX {
       ? `filter ${ms}ms ease`
       : 'none';
     this._compose();
+    // Disarm once the eased switch lands: a permanently armed filter
+    // transition would make any LATER grade write (a Graphics preset change
+    // mid-scene) animate a full-viewport re-filter for its whole duration.
+    clearTimeout(this._filterT);
+    if (changed && prior !== null) {
+      this._filterT = setTimeout(() => {
+        this._filterT = 0;
+        this.canvas.style.transition = 'none';
+      }, ms + 50);
+    }
   }
 
   // Compatibility hook for cinema fades; the opaque veil owns the dissolve.
   blurPulse() {
-    clearTimeout(this._blurT);
     // The cinema veil already supplies the dissolve. A canvas blur under black
     // is invisible work and can stall budget GPUs while a stage appears.
     this.focusWash.style.transition = 'none';
@@ -117,7 +126,6 @@ export class PostFX {
 
   // Waking into a place: a cheap cool wash eases clear like eyes opening.
   eyeOpen(ms = 2600) {
-    clearTimeout(this._blurT);
     this.focusWash.style.transition = 'none';
     this.focusWash.style.opacity = '0.34';
     void this.focusWash.offsetWidth;
@@ -127,7 +135,8 @@ export class PostFX {
 
   // Scene exit: back to the plain base grade, overlays off.
   reset() {
-    clearTimeout(this._blurT);
+    clearTimeout(this._filterT);
+    this._filterT = 0;
     this.filter = 'none';
     this.vignette.style.opacity = '0';
     this.dreamGlow.style.opacity = '0';
@@ -137,6 +146,7 @@ export class PostFX {
   }
 
   dispose() {
+    clearTimeout(this._filterT);
     this._unsub?.();
     this.vignette.remove();
     this.dreamGlow.remove();
