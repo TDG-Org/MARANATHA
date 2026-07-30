@@ -56,6 +56,11 @@ export function createApp(container) {
   // resize, orientation change, iOS visualViewport shifts, and container resize
   // (ResizeObserver is the robust catch-all — `resize` alone is unreliable on
   // mobile). DPR stays clamped ≤2 (detectTier + AdaptiveQuality).
+  // The four sources below overlap (a desktop drag fires `resize` AND the
+  // ResizeObserver; iOS viewport shifts add visualViewport) — and three's
+  // setPixelRatio re-runs setSize internally, so an ungated pass reallocates
+  // the drawing buffer up to twice per duplicate event. Gate on what changed.
+  let sizedW = 0, sizedH = 0;
   const onResize = () => {
     const w = window.innerWidth, h = window.innerHeight;
     if (!w || !h) return; // a hidden/zero-sized pass must never poison aspect
@@ -63,10 +68,17 @@ export function createApp(container) {
     // its old oversized buffer immediately. Native-DPR increases stay sticky
     // down until the player explicitly reselects a preset.
     quality.setBase(Math.min(dpr(), Graphics.dprCap), { raise: false });
-    camera.aspect = w / h;
-    camera.updateProjectionMatrix();
-    renderer.setPixelRatio(Math.min(2, quality.ratio));
-    renderer.setSize(w, h);
+    const ratio = Math.min(2, quality.ratio);
+    const sizeChanged = w !== sizedW || h !== sizedH;
+    const ratioChanged = renderer.getPixelRatio() !== ratio;
+    if (!sizeChanged && !ratioChanged) return; // duplicate event, nothing to apply
+    sizedW = w; sizedH = h;
+    if (sizeChanged) {
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+    }
+    if (ratioChanged) renderer.setPixelRatio(ratio); // reallocates at the current size itself
+    if (sizeChanged) renderer.setSize(w, h);
     pausedPainted = false;
     if (paused && current && !busy) {
       paint();
@@ -218,6 +230,7 @@ export function createApp(container) {
       // A decode/build exception must never leave navigation permanently busy.
       if (loaderVisible) await loader.hide();
       busy = false;
+      flatParked = false; // a fresh screen always gets its reveal frames
       if (!paused) loopController?.start();
     }
     // Whatever the player asked for while we were working, honour it now.
@@ -232,6 +245,7 @@ export function createApp(container) {
 
   let paused = false;      // true pause: update frozen
   let pausedPainted = false; // D6 energy rule: paint the frozen frame ONCE, then stop rendering
+  let flatParked = false;  // the loop stopped itself because a flat screen went idle
 
   // ── D12 POWER GOVERNOR ─────────────────────────────────────────────────────
   // Full 60fps whenever the moment can move fast: any input in the last ~1.6s,
@@ -246,7 +260,16 @@ export function createApp(container) {
   let navT = performance.now();
   let liveFps = 60; // what the loop actually ran this tick (for #debug honesty)
   let requestedFps = 60; // what the governor ASKED for (eco vs full rate)
-  const noteActivity = () => { lastInput = performance.now(); };
+  const noteActivity = () => {
+    lastInput = performance.now();
+    // The loop parks itself on an idle flat screen (see the tick below); any
+    // input is the signal to wake it. Pause and navigation own their own
+    // start/stop and must not be overridden from here.
+    if (flatParked && !paused && !busy) {
+      flatParked = false;
+      loopController?.start();
+    }
+  };
   window.addEventListener('pointerdown', noteActivity, { passive: true });
   window.addEventListener('keydown', noteActivity, { passive: true });
   window.addEventListener('wheel', noteActivity, { passive: true });
@@ -305,6 +328,7 @@ export function createApp(container) {
         }
         loopController?.stop();
       } else if (!busy) {
+        flatParked = false;
         loopController?.start();
       }
       window.dispatchEvent(new Event('maranatha-pausechange'));
@@ -350,7 +374,10 @@ export function createApp(container) {
     // frame is design, not a struggling device, and must never shed DPR.
     // Same rule for the Graphics auto-tuner: it judges the machine on
     // full-rate frames alone, and only while the preset is still auto.
-    if (!busy && !paused && !eco) {
+    // A FLAT screen renders nothing: update+submit are ~0 by construction and
+    // dt is DOM/compositor time, so menu frames must neither promote (free
+    // frames) nor demote (menu jank) quality, DPR, or the rate ceiling.
+    if (!busy && !paused && !eco && current && !isFlat()) {
       quality.frame(dt, budgetMs);
       Graphics.sampleFrame(dt, budgetMs);
       // Cadence (dt) can prove a machine is STRUGGLING but never that it has
@@ -377,6 +404,16 @@ export function createApp(container) {
     // D12: an eco-governed tick is LABELED so a 30fps reading is never
     // mistaken for lag.
     hud.frame(dt, updMs, subMs, eco, pacing);
+    // A parked FLAT screen (the DOM home map) needs no JS heartbeat at all:
+    // its motion is CSS, its update() is empty, and no GPU frame is submitted.
+    // Once the governor is down to eco with no input, stop the loop entirely —
+    // zero timer/rAF wake-up pairs instead of ~30/s — and let noteActivity or
+    // navigation start it again. Same ownership latch as pause/loading, so a
+    // visibility bounce cannot restart it either.
+    if (eco && isFlat() && !busy && !paused) {
+      flatParked = true;
+      loopController?.stop();
+    }
   }, targetFps);
 
   return app;

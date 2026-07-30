@@ -238,4 +238,44 @@ assert.doesNotMatch(
   );
 }
 
+// A FLAT screen (the DOM home) renders nothing: its frames must never feed the
+// quality/preset/rate samplers (menu jank would demote, free frames would
+// promote), and once idle it must park the loop entirely — zero wake-ups —
+// waking again only from input, navigation, or unpause.
+assert.match(
+  appSource,
+  /if \(!busy && !paused && !eco && current && !isFlat\(\)\)/,
+  'flat-screen (menu) frames can feed the quality/preset/rate samplers',
+);
+assert.match(
+  appSource,
+  /if \(eco && isFlat\(\) && !busy && !paused\) \{\s*flatParked = true;\s*loopController\?\.stop\(\);/,
+  'an idle flat screen no longer parks the frame loop',
+);
+assert.match(
+  appSource,
+  /const noteActivity = [\s\S]*?flatParked = false;\s*loopController\?\.start\(\);/,
+  'input cannot wake a loop parked on a flat screen',
+);
+assert.match(
+  appSource,
+  /flatParked = false; \/\/ a fresh screen always gets its reveal frames/,
+  'navigation does not clear the flat-park latch',
+);
+
+// onResize is fed by four overlapping sources (resize/orientationchange/
+// visualViewport/ResizeObserver) and three's setPixelRatio re-runs setSize
+// internally — the duplicate-event change gate keeps a drag from reallocating
+// the drawing buffer several times per frame.
+assert.match(
+  appSource,
+  /const sizeChanged = w !== sizedW \|\| h !== sizedH;\s*const ratioChanged = renderer\.getPixelRatio\(\) !== ratio;\s*if \(!sizeChanged && !ratioChanged\) return;/,
+  'onResize lost its duplicate-event change gate',
+);
+assert.match(
+  appSource,
+  /if \(ratioChanged\) renderer\.setPixelRatio\(ratio\);[\s\S]*?if \(sizeChanged\) renderer\.setSize\(w, h\);/,
+  'onResize reallocates the drawing buffer unconditionally again',
+);
+
 console.log('App deadline, failed-screen disposal, and visible recovery checks passed.');
