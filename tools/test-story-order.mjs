@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { STORIES } from '../src/data/stories.js';
+import { statusOf } from '../src/systems/SaveSystem.js';
 import { readFile } from 'node:fs/promises';
 import { AUDIO_MANIFEST } from '../src/data/audioManifest.js';
 import { SCENE1_CANONICAL_ORDER, SCENE1_ROUTING, WEB } from '../src/data/versesWEB.js';
@@ -616,3 +618,35 @@ assert.deepEqual(
 );
 
 console.log('Scene 1 canonical order, verse source, checkpoint, and objective handoff checks passed.');
+
+// ── PROGRESSION MUST SURVIVE A SECOND PLAYABLE CHAPTER ───────────────────────
+// The map asks statusOf() which chapter the player is up to, and it answers
+// "the first playable one you have not completed". The ark broke that: it is
+// walkable (so playable) but has NO story and therefore no completion path, and
+// it sits EARLIER in the book than Joseph — so it took 'current' and could never
+// hand it on, leaving the one finished story marked locked forever.
+//
+// Chapters that are places rather than stories carry `explore: true` and stay
+// out of the reckoning. Remove that flag when a chapter gets its beats.
+{
+  const explorable = STORIES.filter((s) => s.sceneKey && s.explore);
+  const realStories = STORIES.filter((s) => s.sceneKey && !s.explore);
+  assert.ok(realStories.length > 0, 'at least one playable chapter is a real story');
+
+  // Whatever else is playable, the first REAL story is the one you are up to.
+  const first = realStories[0];
+  assert.equal(
+    statusOf(first.id), 'current',
+    `the first unfinished real story (${first.id}) must be the current chapter`,
+  );
+  for (const s of explorable) {
+    assert.notEqual(
+      statusOf(s.id), 'current',
+      `${s.id} is explorable, not a chapter to be up to — it can never be completed`,
+    );
+    // ...but it must still be reachable: sceneKey is what lights it on the map.
+    assert.ok(s.sceneKey, `${s.id} still needs a sceneKey to be playable at all`);
+  }
+  console.log(`progression: ${realStories.length} real ${realStories.length === 1 ? 'story' : 'stories'}, `
+    + `${explorable.length} explorable; current = ${first.id}`);
+}

@@ -37,7 +37,12 @@ export function statusOf(storyId) {
   // no scene yet -- so no playable chapter was ever marked current and the map
   // had to fall back to guessing. Unbuilt chapters are scenery; they cannot be
   // the thing you are up to.
-  const playable = STORIES.filter((s) => s.sceneKey);
+  // ...and an EXPLORABLE chapter is not somewhere you are "up to" either. The
+  // ark is walkable with no story in it, so it can never be completed; left in
+  // this list it takes 'current' (it sits earlier in the book than Joseph) and
+  // never hands it on, which is the same shape as the D26 no-current bug from
+  // the other direction.
+  const playable = STORIES.filter((s) => s.sceneKey && !s.explore);
   const current = playable.find((s) => !completed.includes(s.id));
   return current?.id === storyId ? 'current' : 'locked';
 }

@@ -40,7 +40,17 @@ export const STORIES = [
     id: 'noah',
     title: "Noah's Ark",
     passage: 'Genesis 6–9',
-    sceneKey: null,
+    // The ark itself is built and walkable (Genesis 6). The STORY is not
+    // written yet, so this opens the vessel and its building site to explore,
+    // not a scene with beats.
+    sceneKey: 'noah',
+    // ...and therefore it has NO completion path. `explore` keeps it out of the
+    // "which chapter am I up to" reckoning: without it, Noah — sitting earlier
+    // in the book than Joseph — takes 'current' the moment it becomes playable
+    // and can never hand it on, because nothing in it can ever be finished.
+    // Joseph, the one story that IS written, would be marked locked forever.
+    // Delete this flag the day Noah gets its beats.
+    explore: true,
     era: 'genesis',
     tier: 'major',
     blurb: 'One faithful family, forty days of rain, and a bow hung in the clouds as a vow.',
