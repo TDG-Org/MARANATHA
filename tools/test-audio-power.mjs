@@ -684,6 +684,13 @@ oneShot.end();
 assert.equal(oneShot.disconnected, true, 'finished one-shots disconnect from the graph');
 assert.equal(audio._liveOneShots, 0);
 
+// The phone cap applies to PROCEDURAL one-shots too: a settings-slider drag
+// fires uiClick per input event, and uncapped tones once piled up unbounded.
+for (let i = 0; i < 30; i += 1) audio.uiClick();
+assert.equal(audio._liveOneShots, 14, 'procedural one-shots exceeded the 14-source cap');
+audio.stopOneShots();
+assert.equal(audio._liveOneShots, 0, 'stopOneShots must reset the procedural cap count');
+
 // Active real and procedural transients carry their bus. Channel mute releases
 // only matching ownership; the global cap and other bus remain live.
 audio.play('shot.real');
@@ -692,7 +699,7 @@ audio.play('shot.music');
 const musicOneShot = audio.ctx.bufferSources.at(-1);
 audio.uiClick();
 assert.deepEqual([...audio._activeOneShots].map((entry) => entry.bus).sort(), ['music', 'sfx', 'sfx']);
-assert.equal(audio._liveOneShots, 2, 'real one-shot cap count did not include both buses');
+assert.equal(audio._liveOneShots, 3, 'the one-shot cap must count procedural transients too');
 assert.ok(audio.space, 'procedural SFX did not own its echo graph');
 
 audio.setChannel('sfx', 0);
@@ -716,7 +723,7 @@ assert.equal(musicOneShot.disconnected, true, 'music mute left an active music g
 assert.equal(survivingSfxOneShot.stopped, false, 'music mute stopped an unrelated SFX one-shot');
 assert.equal(survivingSfxOneShot.disconnected, false, 'music mute disconnected an unrelated SFX graph');
 assert.ok([...audio._activeOneShots].every((entry) => entry.bus === 'sfx'));
-assert.equal(audio._liveOneShots, 1, 'filtered music teardown reset the surviving SFX cap count');
+assert.equal(audio._liveOneShots, 2, 'filtered music teardown reset the surviving SFX cap counts');
 assert.ok(audio.space, 'music mute disposed the unrelated SFX echo graph');
 
 audio.setChannel('music', 1);

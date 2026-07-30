@@ -26,6 +26,12 @@ class SettingsSystem {
     this.data = read();
     this.subs = new Set();
     this._hud = null;
+    // A slider drag calls set() per input event — persist trailing-edge
+    // instead of a synchronous stringify+setItem per pointer move, and flush
+    // before the page can go away.
+    this._writeT = 0;
+    window.addEventListener('pagehide', () => this._flush());
+    document.addEventListener('visibilitychange', () => { if (document.hidden) this._flush(); });
     // Seed Audio's channel values now so unlock() builds the buses at the
     // player's saved levels (setChannel stores even before the context exists).
     Audio.setChannel('music', this.data.music);
@@ -44,10 +50,22 @@ class SettingsSystem {
     hud.setEnabled(this.data.hud);
   }
 
+  _persist() {
+    clearTimeout(this._writeT);
+    this._writeT = setTimeout(() => { this._writeT = 0; write(this.data); }, 250);
+  }
+
+  _flush() {
+    if (!this._writeT) return;
+    clearTimeout(this._writeT);
+    this._writeT = 0;
+    write(this.data);
+  }
+
   set(key, value) {
     if (!(key in this.data)) return;
     this.data[key] = value;
-    write(this.data);
+    this._persist();
     if (key === 'music' || key === 'sfx' || key === 'voice') Audio.setChannel(key, value);
     if (key === 'hud' && this._hud) this._hud.setEnabled(value);
     this._notify();

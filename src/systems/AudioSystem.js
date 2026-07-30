@@ -101,6 +101,10 @@ class AudioSystem {
     const unlock = () => {
       // Already running? Then there is nothing to unlock, and a held
       // movement key must not re-walk every audio handle 30 times a second.
+      // Same for a MUTED player with a live context: unlock has nothing to
+      // wake (setVolume owns resume on unmute) — without this, every keydown
+      // while muted re-ran the whole _pauseMediaLoops teardown walk.
+      if (this.ctx && !this.enabled) return;
       if (this.ctx?.state === 'running' && !this.holdSuspend) return;
       this.unlock();
     };
@@ -109,6 +113,7 @@ class AudioSystem {
     // Battery care: stop the audio clock entirely when the tab is hidden
     // (looping ambience isn't throttled in background tabs otherwise).
     document.addEventListener('visibilitychange', () => {
+      if (document.hidden) this._flushVolume(); // a debounced write must survive a tab close
       if (!this.ctx) return;
       if (document.hidden) {
         this._pauseMediaLoops();
@@ -116,6 +121,7 @@ class AudioSystem {
       }
       else this._resumeIfAppropriate();
     });
+    window.addEventListener('pagehide', () => this._flushVolume());
     // D8 phone hardening: a call / Siri / screen-lock leaves iOS Safari's
     // context 'interrupted' (a state the old 'suspended'-only checks never
     // matched — music and sfx just died). Focus/pageshow + any later tap now
@@ -188,11 +194,28 @@ class AudioSystem {
     this._resumeIfAppropriate();
   }
 
+  // A slider drag calls setVolume per input event — persist trailing-edge
+  // instead of a synchronous localStorage write per pointer move.
+  _persistVolume() {
+    clearTimeout(this._volWriteT);
+    this._volWriteT = setTimeout(() => {
+      this._volWriteT = 0;
+      try { localStorage.setItem(VOL_KEY, String(this.volume)); } catch { /* ignore */ }
+    }, 250);
+  }
+
+  _flushVolume() {
+    if (!this._volWriteT) return;
+    clearTimeout(this._volWriteT);
+    this._volWriteT = 0;
+    try { localStorage.setItem(VOL_KEY, String(this.volume)); } catch { /* ignore */ }
+  }
+
   setVolume(v) {
     const wasEnabled = this.enabled;
     this.volume = Math.min(1, Math.max(0, v));
     if (this.volume > 0.004) this.lastVolume = this.volume;
-    try { localStorage.setItem(VOL_KEY, String(this.volume)); } catch { /* ignore */ }
+    this._persistVolume();
     if (this.ctx && this.master) {
       this.master.gain.setTargetAtTime(0.9 * this.volume, this.ctx.currentTime, 0.06);
     }
@@ -1142,6 +1165,10 @@ class AudioSystem {
 
   tone({ freq = 440, type = 'sine', dur = 0.5, attack = 0.02, release = 0.3, gain = 0.15, filter = 0, slideTo = 0, delay = 0, send = 0.3 }) {
     if (!this.on || this.channels.sfx <= 0.004) return;
+    // The same phone cap the sample branch has: procedural one-shots were
+    // uncapped, and a settings-slider drag fires uiClick per input event.
+    if (this._liveOneShots >= 14) return;
+    this._liveOneShots += 1;
     const t = this.ctx.currentTime + delay;
     const o = this.ctx.createOscillator();
     o.type = type;
@@ -1171,13 +1198,15 @@ class AudioSystem {
       sendGain = sg;
       this._touchSpace(delay + attack + dur + release + 1.2);
     }
-    this._ownOneShot(o, [filterNode, g, sendGain], { bus: 'sfx' });
+    this._ownOneShot(o, [filterNode, g, sendGain], { bus: 'sfx', counted: true });
     o.start(t);
     o.stop(t + attack + dur + release + 0.05);
   }
 
   noiseHit({ dur = 0.6, type = 'bandpass', from = 400, to = 0, q = 1, gain = 0.2, attack = 0.05, delay = 0, send = 0.15 }) {
     if (!this.on || this.channels.sfx <= 0.004) return;
+    if (this._liveOneShots >= 14) return; // same cap as tone()/sample one-shots
+    this._liveOneShots += 1;
     const t = this.ctx.currentTime + delay;
     const s = this.ctx.createBufferSource();
     s.buffer = this.noiseBuf;
@@ -1201,7 +1230,7 @@ class AudioSystem {
       sendGain = sg;
       this._touchSpace(delay + dur + 1.2);
     }
-    this._ownOneShot(s, [f, g, sendGain], { bus: 'sfx' });
+    this._ownOneShot(s, [f, g, sendGain], { bus: 'sfx', counted: true });
     s.start(t);
     s.stop(t + dur + 0.05);
   }
