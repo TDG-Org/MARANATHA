@@ -205,7 +205,9 @@ export const UI_CSS = `
   height: calc(56px * var(--u)); display: flex; align-items: center; gap: calc(10px * var(--u));
 }
 .mr-nav {
-  flex: 0 0 auto; width: calc(40px * var(--u)); height: calc(40px * var(--u));
+  /* touch floor: --u bottoms out at 0.62 on phones, which scaled these to
+     ~25px — interactive chrome floors at 44px, only the DECOR scales */
+  flex: 0 0 auto; width: max(44px, calc(40px * var(--u))); height: max(44px, calc(40px * var(--u)));
   border-radius: 50%; display: flex; align-items: center; justify-content: center;
   font-size: calc(19px * var(--u)); line-height: 1; cursor: pointer; color: #fff6e6;
   background: #0a1a22; border: 1px solid rgba(255,232,190,.24); padding: 0;
@@ -245,7 +247,8 @@ export const UI_CSS = `
 .mr-links button {
   background: none; border: none; cursor: pointer; color: #fdf6e3; opacity: .72;
   font: 500 calc(13px * var(--u)) 'Segoe UI', system-ui, sans-serif;
-  padding: 6px 2px; text-shadow: 0 1px 5px rgba(4,14,22,.8);
+  /* the type stays small; the HIT AREA meets the 44px touch floor */
+  padding: 12px 8px; margin: -6px -6px; text-shadow: 0 1px 5px rgba(4,14,22,.8);
   transition: opacity 150ms ease;
 }
 .mr-links button:hover { opacity: 1; }
@@ -253,7 +256,7 @@ export const UI_CSS = `
 .mr-gear {
   position: absolute; top: calc(60px * var(--u) + env(safe-area-inset-top));
   right: calc(26px * var(--u) + env(safe-area-inset-right));
-  width: calc(38px * var(--u)); height: calc(38px * var(--u));
+  width: max(44px, calc(38px * var(--u))); height: max(44px, calc(38px * var(--u)));
   border-radius: calc(11px * var(--u)); display: flex; align-items: center;
   justify-content: center; font-size: calc(18px * var(--u)); cursor: pointer;
   color: #fdf6e3; background: rgba(6,18,26,.6); border: 1px solid rgba(255,255,255,.14);
@@ -287,10 +290,15 @@ export const UI_CSS = `
 .mr-home.is-stacked .mr-titleblock { top: calc(14px + env(safe-area-inset-top)); gap: 8px; }
 .mr-home.is-stacked .mr-tagline span { font-size: clamp(8.5px, 2.3vw, 12px); letter-spacing: .18em; }
 .mr-home.is-stacked .mr-tagline i { width: clamp(18px, 6vw, 44px); }
-/* the sheet's top edge is measured by relayout so it always fits the screen */
+/* the sheet's top edge is measured by relayout so it always fits the screen.
+   Horizontal padding honours the notch (viewport-fit=cover) — the sibling
+   ribbon row below already did; the panel had been left out. */
 .mr-home.is-stacked .mr-panel {
   left: 0; right: 0; width: auto;
-  padding: calc(14px * var(--u)) calc(20px * var(--u)) 0;
+  padding: calc(14px * var(--u))
+    max(calc(20px * var(--u)), env(safe-area-inset-right))
+    0
+    max(calc(20px * var(--u)), env(safe-area-inset-left));
   box-sizing: border-box;
 }
 .mr-home.is-stacked .mr-story-title { font-size: calc(34px * var(--u)); margin-top: calc(8px * var(--u)); }
