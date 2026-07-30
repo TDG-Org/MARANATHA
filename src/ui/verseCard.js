@@ -46,6 +46,14 @@ export function createVerseCard({ signal = null, isPaused = null } = {}) {
     refEl.textContent = verse.ref || '';
     panel.style.opacity = '1';
     panel.style.transform = 'translateX(-50%) translateY(0)';
+    // overflow-y:auto is unreachable on a pointer-events:none element — when a
+    // long verse on a short viewport actually overflows, the card (only then)
+    // becomes scrollable and keyboard-focusable. Stray clicks still do nothing:
+    // scrolling is not the Skip button.
+    const overflows = panel.scrollHeight > panel.clientHeight + 1;
+    panel.style.pointerEvents = overflows ? 'auto' : 'none';
+    if (overflows) panel.setAttribute('tabindex', '0');
+    else panel.removeAttribute('tabindex');
 
     if (!narrate) return pausableWait(holdMs, isPaused, signal);
 
