@@ -5,7 +5,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "test": "npm run test:pacing && npm run test:camera && npm run test:backdrop && npm run test:lifetime && npm run test:ui-lifetime && npm run test:beats && npm run test:story && npm run test:layout && npm run test:models && npm run test:collision && npm run test:decks && npm run test:audio-power && npm run test:graphics-power && npm run test:render-power && npm run test:app && npm run test:shell-ui && npm run test:vo",
+    "test": "npm run test:pacing && npm run test:camera && npm run test:backdrop && npm run test:lifetime && npm run test:ui-lifetime && npm run test:beats && npm run test:story && npm run test:layout && npm run test:models && npm run test:collision && npm run test:decks && npm run test:ark && npm run test:audio-power && npm run test:graphics-power && npm run test:render-power && npm run test:app && npm run test:shell-ui && npm run test:vo",
     "start": "vite --port 1225 --strictPort --open",
     "vo": "node tools/make-vo.mjs",
     "dev": "vite",
@@ -27,7 +27,8 @@
     "test:app": "node tools/test-app-recovery.mjs",
     "test:vo": "node tools/test-vo-assets.mjs",
     "test:shell-ui": "node tools/test-shell-ui-behavior.mjs",
-    "test:decks": "node tools/test-deck-field.mjs"
+    "test:decks": "node tools/test-deck-field.mjs",
+    "test:ark": "node tools/test-ark-model.mjs"
   },
   "devDependencies": {
     "msedge-tts": "^2.0.7",
