@@ -1,0 +1,354 @@
+// EXECUTED behaviour for the app shell and the DOM UI surfaces the rest of the
+// suite could only read as source. Everything here drives the real modules
+// against a minimal DOM: navigation before the lazy engine exists, engine-load
+// failure recovery, and the interactive contracts of modal / pause / verse
+// card / dialogue. Written after the perf branch's adversarial review found a
+// crash on a path no test executed.
+import assert from 'node:assert/strict';
+
+// ── the minimal DOM ─────────────────────────────────────────────────────────
+class FakeTarget {
+  constructor() { this._l = new Map(); }
+  addEventListener(type, fn) {
+    if (!this._l.has(type)) this._l.set(type, new Set());
+    this._l.get(type).add(fn);
+  }
+  removeEventListener(type, fn) { this._l.get(type)?.delete(fn); }
+  dispatchEvent(event) {
+    event.target ??= this;
+    event.preventDefault ??= () => { event.defaultPrevented = true; };
+    event.stopPropagation ??= () => {};
+    event.stopImmediatePropagation ??= () => {};
+    for (const fn of [...(this._l.get(event.type) || [])]) fn(event);
+    return !event.defaultPrevented;
+  }
+  listenerCount(type) { return this._l.get(type)?.size || 0; }
+}
+
+class FakeClassList {
+  constructor() { this._s = new Set(); }
+  add(c) { this._s.add(c); }
+  remove(c) { this._s.delete(c); }
+  toggle(c, on) { if (on === undefined) { if (this._s.has(c)) this._s.delete(c); else this._s.add(c); } else if (on) this._s.add(c); else this._s.delete(c); }
+  contains(c) { return this._s.has(c); }
+}
+
+// A CSSStyleDeclaration behaves in one way this suite must reproduce exactly:
+// `cssText` POPULATES the individual properties, so writing '' to one of them
+// later DELETES that declaration rather than reverting to the cssText value.
+// That is the whole shape of the pause-blur defect below; a plain {} stub
+// would have let the bug pass.
+class FakeStyle {
+  set cssText(text) {
+    for (const decl of String(text).split(';')) {
+      const i = decl.indexOf(':');
+      if (i < 0) continue;
+      const prop = decl.slice(0, i).trim().replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+      if (prop) this[prop] = decl.slice(i + 1).trim();
+    }
+  }
+  get cssText() { return Object.keys(this).map((k) => `${k}:${this[k]}`).join(';'); }
+}
+
+class FakeElement extends FakeTarget {
+  constructor(tag = 'div') {
+    super();
+    this.tagName = tag.toUpperCase();
+    this.style = new FakeStyle();
+    this.children = [];
+    this.parentNode = null;
+    this.textContent = '';
+    this.className = '';
+    this.dataset = {};
+    this.attributes = new Map();
+    this.classList = new FakeClassList();
+    this.inert = false;
+    this.offsetWidth = 100;
+    this.scrollHeight = 40;
+    this.clientHeight = 40;
+    this.focusCount = 0;
+  }
+  append(...nodes) { for (const n of nodes) { n.parentNode = this; this.children.push(n); } }
+  appendChild(n) { this.append(n); return n; }
+  remove() {
+    if (!this.parentNode) return;
+    const i = this.parentNode.children.indexOf(this);
+    if (i >= 0) this.parentNode.children.splice(i, 1);
+    this.parentNode = null;
+  }
+  setAttribute(n, v) { this.attributes.set(n, String(v)); }
+  getAttribute(n) { return this.attributes.get(n) ?? null; }
+  removeAttribute(n) { this.attributes.delete(n); }
+  hasAttribute(n) { return this.attributes.has(n); }
+  contains(node) { return node === this || this.children.some((c) => c.contains?.(node)); }
+  getBoundingClientRect() { return { left: 0, top: 0, width: 800, height: 600 }; }
+  animate() { return { cancel() {} }; }
+  focus() { this.focusCount += 1; document.activeElement = this; }
+  blur() { if (document.activeElement === this) document.activeElement = document.body; }
+}
+
+const win = new FakeTarget();
+win.innerWidth = 800;
+win.innerHeight = 600;
+win.devicePixelRatio = 1;
+win.matchMedia = () => ({ matches: false });
+win.location = { hash: '' };
+win.requestIdleCallback = () => {}; // deterministic: no engine prefetch mid-test
+const doc = new FakeTarget();
+doc.hidden = false;
+doc.body = new FakeElement('body');
+doc.head = new FakeElement('head');
+doc.createElement = (tag) => new FakeElement(tag);
+doc.getElementById = () => null;
+doc.activeElement = doc.body;
+
+globalThis.window = win;
+globalThis.document = doc;
+// node 24 exposes a getter-only navigator — redefine rather than assign
+Object.defineProperty(globalThis, 'navigator', {
+  value: { userAgent: 'node', hardwareConcurrency: 8, deviceMemory: 8 },
+  configurable: true,
+});
+globalThis.screen = { width: 1920, height: 1080 };
+const store = new Map();
+globalThis.localStorage = {
+  getItem: (k) => (store.has(k) ? store.get(k) : null),
+  setItem: (k, v) => store.set(k, String(v)),
+  removeItem: (k) => store.delete(k),
+};
+globalThis.requestAnimationFrame = (fn) => setTimeout(() => fn(performance.now()), 0);
+globalThis.cancelAnimationFrame = (id) => clearTimeout(id);
+
+const tick = (ms) => new Promise((r) => setTimeout(r, ms));
+
+const { createApp } = await import('../src/core/app.js');
+
+// ── 1. THE SHELL RUNS BEFORE THE ENGINE EXISTS ──────────────────────────────
+// The lazy-engine split made renderer/camera/hud/postFX null until the engine
+// chunk lands. A flat→flat navigation in that window is a real player path
+// (Settings → Reset → rebuild home) and it must not throw: the reviewed bug
+// deref'd the null hud in disposeCurrent AFTER the veil covered and the old
+// screen was disposed, stranding the player on permanent black.
+{
+  const container = new FakeElement('div');
+  const app = createApp(container);
+  assert.equal(app.renderer, null, 'the shell created a renderer before any 3D navigation');
+  assert.equal(app.camera, null, 'the shell created a camera before any 3D navigation');
+
+  const built = [];
+  const mkFlat = (key) => ({ app: null, flat: true, update() {}, dispose() { built.push(`dispose:${key}`); } });
+  app.register('home', () => { built.push('build:home'); return mkFlat('home'); }, { flat: true });
+  app.register('other', () => { built.push('build:other'); return mkFlat('other'); }, { flat: true });
+
+  const errors = [];
+  const realError = console.error;
+  console.error = (...a) => errors.push(a.join(' '));
+  try {
+    await app.navigate('home');
+    assert.equal(app.currentKey, 'home', 'the first flat navigation did not mount');
+    // …and now the exact reviewed path: leave a mounted screen while the
+    // engine still does not exist.
+    await app.navigate('other');
+    assert.equal(app.currentKey, 'other', 'flat→flat navigation before the engine crashed or stalled');
+  } finally {
+    console.error = realError;
+  }
+  assert.deepEqual(built, ['build:home', 'dispose:home', 'build:other'],
+    'the pre-engine navigation did not build/dispose in order');
+  assert.deepEqual(errors, [], `pre-engine navigation logged errors: ${errors.join(' | ')}`);
+  assert.equal(app.renderer, null, 'a flat screen pulled the engine in anyway');
+}
+
+// ── 2. AN ENGINE THAT CANNOT LOAD RECOVERS TO THE HOME ──────────────────────
+// node has no WebGL, so a real non-flat navigation exercises the engine
+// FAILURE path end to end: ensureEngine rejects, the cached promise clears,
+// and navigation falls back to the eager home instead of hanging on black.
+{
+  const container = new FakeElement('div');
+  const app = createApp(container);
+  const seen = [];
+  app.register('home', ({ params }) => {
+    seen.push(params?.loadError ? `home:${params.loadError.phase}` : 'home');
+    return { flat: true, update() {}, dispose() {} };
+  }, { flat: true });
+  app.register('story', () => { seen.push('story'); return { update() {}, dispose() {} }; });
+
+  const errors = [];
+  const realError = console.error;
+  console.error = (...a) => errors.push(a.join(' '));
+  try {
+    await app.navigate('home');
+    await app.navigate('story');
+  } finally {
+    console.error = realError;
+  }
+  assert.equal(app.currentKey, 'home', 'a failed engine load did not recover to the home screen');
+  assert.ok(!seen.includes('story'), 'the story screen was built without an engine');
+  assert.ok(seen.includes('home:screen'), 'the recovery home did not receive its loadError');
+  assert.ok(errors.some((e) => /failed to build|Engine load/i.test(e)),
+    'the engine failure was swallowed silently');
+}
+
+// ── 3. CONFIRM MODAL: Enter acts on the FOCUSED button ──────────────────────
+// The reviewed save-wipe: a global "Enter = confirm" fired while focus sat on
+// the deliberately-focused Cancel.
+{
+  const { confirmModal } = await import('../src/ui/modal.js');
+  const press = (key) => win.dispatchEvent({ type: 'keydown', key });
+
+  const cancelled = confirmModal({ title: 'Reset all progress?' });
+  await tick(80); // the dialog focuses Cancel on a 60ms timer
+  press('Enter');
+  assert.equal(await cancelled, false, 'Enter on a focused Cancel still confirmed — saves can be wiped');
+
+  const confirmed = confirmModal({ title: 'Reset all progress?' });
+  await tick(80);
+  // Tab moves to the confirm button (the trap keeps focus inside the dialog)
+  press('Tab');
+  press('Enter');
+  assert.equal(await confirmed, true, 'Enter on a focused confirm button did not confirm');
+
+  const escaped = confirmModal({ title: 'Reset all progress?' });
+  await tick(80);
+  press('Escape');
+  assert.equal(await escaped, false, 'Escape did not cancel');
+
+  // key repeat must not drive a dialog at all
+  const held = confirmModal({ title: 'Reset all progress?' });
+  await tick(80);
+  win.dispatchEvent({ type: 'keydown', key: 'Enter', repeat: true });
+  let settled = false;
+  held.then(() => { settled = true; });
+  await tick(40);
+  assert.equal(settled, false, 'a repeated Enter drove the dialog');
+  press('Escape');
+  await held;
+}
+
+// ── 4. VERSE CARD: an invisible card holds no surface ───────────────────────
+{
+  const { createVerseCard } = await import('../src/ui/verseCard.js');
+  const card = createVerseCard();
+  const panel = card.el;
+  panel.scrollHeight = 400; // a long verse on a short viewport
+  panel.clientHeight = 100;
+  card.show({ ref: 'Genesis 37:1', text: 'x'.repeat(400) }, { narrate: false, holdMs: 0 });
+  assert.equal(panel.style.pointerEvents, 'auto', 'an overflowing verse card stayed unscrollable');
+  assert.equal(panel.getAttribute('tabindex'), '0', 'an overflowing verse card took no tab stop');
+  card.hide();
+  assert.equal(panel.style.pointerEvents, 'none', 'a hidden verse card still eats clicks');
+  assert.equal(panel.getAttribute('tabindex'), null, 'a hidden verse card still holds a tab stop');
+
+  panel.scrollHeight = 40;
+  panel.clientHeight = 100; // a short verse never becomes interactive
+  card.show({ ref: 'Genesis 37:1', text: 'short' }, { narrate: false, holdMs: 0 });
+  assert.equal(panel.style.pointerEvents, 'none', 'a fitting verse card became a click target');
+  card.destroy();
+}
+
+// ── 5. PAUSE: the blur survives a reopen, and the ghost is inert ────────────
+{
+  const { createPauseMenu } = await import('../src/ui/pause.js');
+  const app = { setPaused() {}, paused: false };
+  const pause = createPauseMenu({
+    app, setInput() {}, isInputOn: () => true, onHome() {}, onSettings() {},
+  });
+  const overlay = doc.body.children.find((el) => String(el.style?.zIndex) === '58');
+  assert.ok(overlay, 'the pause overlay was not mounted');
+  assert.equal(overlay.style.backdropFilter, 'blur(6px)',
+    'setup: the overlay should declare its blur in cssText');
+
+  pause.open();
+  assert.equal(overlay.style.backdropFilter, 'blur(6px)', 'the pause overlay lost its frozen-frame blur');
+  assert.equal(overlay.style.opacity, '1');
+  pause.close();
+  assert.equal(overlay.style.backdropFilter, 'none', 'the fading ghost kept blurring a LIVE canvas');
+  assert.equal(overlay.style.pointerEvents, 'none', 'the fading ghost still ate clicks');
+  assert.equal(overlay.inert, true, 'the fading ghost kept its buttons keyboard-activatable');
+  assert.equal(overlay.style.display, 'flex', 'the overlay was removed before its fade could run');
+  await tick(260);
+  assert.equal(overlay.style.display, 'none', 'the overlay never finished hiding');
+
+  pause.open(); // THE REGRESSION: '' would have deleted the inline declaration
+  assert.equal(overlay.style.backdropFilter, 'blur(6px)',
+    'the blur did not come back on reopen — style.x = "" deletes a cssText declaration');
+  assert.equal(overlay.inert, false, 'the reopened overlay stayed inert');
+  pause.close();
+  await tick(260);
+  pause.destroy?.();
+}
+
+// ── 6. MOOD GRADING: a superseded tween settles its awaited promise ─────────
+{
+  const THREE = await import('three');
+  const { MoodGrading } = await import('../src/engine/MoodGrading.js');
+  const refs = {
+    sky: { setColors() {} },
+    fog: { color: new THREE.Color(), near: 10 },
+    keyLight: { color: new THREE.Color(), intensity: 1, position: new THREE.Vector3() },
+    hemiLight: { color: new THREE.Color(), intensity: 1 },
+    ridges: null,
+    cinema: { setTint() {} },
+  };
+  const grading = new MoodGrading(refs);
+  let firstSettled = false;
+  const first = grading.grade('dusk', 4000).then(() => { firstSettled = true; });
+  grading.update(16); // in flight, nowhere near done
+  assert.equal(firstSettled, false, 'the tween resolved before it ran');
+  grading.grade('goldenHour', 100); // supersede it
+  await tick(0);
+  assert.equal(firstSettled, true,
+    'a superseded grade dropped its resolve — an awaited grade step can hang forever');
+  await first;
+}
+
+// ── 7. SETTINGS/VOLUME PERSISTENCE: debounced, but never lost ───────────────
+{
+  const { Settings } = await import('../src/systems/Settings.js');
+  store.delete('maranatha-settings-v1');
+  for (let i = 0; i < 20; i += 1) Settings.set('music', i / 20); // a slider drag
+  assert.equal(store.has('maranatha-settings-v1'), false,
+    'a slider drag still wrote localStorage synchronously per input event');
+  await tick(300);
+  const saved = JSON.parse(store.get('maranatha-settings-v1'));
+  assert.equal(saved.music, 19 / 20, 'the debounced settings write never landed');
+
+  Settings.set('music', 0.5);
+  doc.hidden = true;
+  doc.dispatchEvent({ type: 'visibilitychange' }); // the tab goes away mid-debounce
+  doc.hidden = false;
+  assert.equal(JSON.parse(store.get('maranatha-settings-v1')).music, 0.5,
+    'a pending settings write was lost when the page was hidden');
+}
+
+// ── 8. THE DROP-A-FILE CONTRACT for the two direct-call cues ───────────────
+// Every call site invokes Audio.uiClick()/footstep() directly, so dropping a
+// real ui_click/footstep file used to change nothing. They now prefer a
+// decoded sample — without losing the procedural voice or the retry.
+{
+  const { Audio } = await import('../src/systems/AudioSystem.js');
+  const played = [];
+  Audio.play = (key) => { played.push(key); };
+  Audio.tone = () => { played.push('procedural:tone'); };
+  Audio.noiseHit = () => { played.push('procedural:noise'); };
+
+  Audio.samples = {};
+  Audio.uiClick();
+  Audio.footstep();
+  assert.deepEqual(played, ['procedural:tone', 'procedural:noise'],
+    'with no sample present the procedural voice must still play');
+
+  played.length = 0;
+  Audio.samples = { 'ui.click': {}, 'sfx.footstep': {} };
+  Audio.uiClick();
+  Audio.footstep();
+  assert.deepEqual(played, ['ui.click', 'sfx.footstep'],
+    'a dropped real file is ignored — the drop-a-file contract is still broken');
+}
+
+console.log(
+  'shell + UI behaviour passed: pre-engine flat navigation clean, engine-failure recovery to home,'
+  + ' modal Enter follows focus, verse card releases its surface, pause blur survives reopen,'
+  + ' superseded grade settles, settings persist debounced + flushed,'
+  + ' click/footstep prefer a dropped real file.',
+);

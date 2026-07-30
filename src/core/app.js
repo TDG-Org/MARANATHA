@@ -92,7 +92,8 @@ export function createApp(container) {
   const idlePrefetchEngine = () => {
     if (renderer || enginePromise) return;
     const kick = () => { ensureEngine().catch(() => { /* the Start click retries behind the loader */ }); };
-    if ('requestIdleCallback' in window) requestIdleCallback(kick, { timeout: 4000 });
+    // ask the same object the capability was checked on
+    if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(kick, { timeout: 4000 });
     else setTimeout(kick, 1200);
   };
 
