@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { mulberry32, mergeGeometries, dyeGeometry, toonMat } from '../../engine/world.js';
+import { tinted } from './wood.js';
 import { ARK, KEEL_Y, EAVES_Y, HULL, DOOR, BOARDING, COLORS } from './arkSpec.js';
 import { station } from './hull.js';
 
@@ -15,8 +16,8 @@ import { station } from './hull.js';
 
 const rnd = mulberry32(20260730);
 
-function instanced(geo, material, placements, name) {
-  const mesh = new THREE.InstancedMesh(geo, material, placements.length);
+function instanced(geo, material, placements, name, tint = 0xffffff) {
+  const mesh = new THREE.InstancedMesh(tinted(geo, tint), material, placements.length);
   const d = new THREE.Object3D();
   placements.forEach((p, i) => {
     d.position.set(p.x, p.y, p.z);
@@ -54,7 +55,7 @@ export function buildSite(wood) {
     }
     const g = new THREE.BoxGeometry(1.6, 1, 1.2);
     geos.push(g);
-    group.add(instanced(g, timberMat, blocks, 'ark-stocks'));
+    group.add(instanced(g, timberMat, blocks, 'ark-stocks', 0xb9b0a4));
 
     // Shores: the raking props that steady a hull on the stocks, leaning in
     // against the bilge from both sides. Unmistakably a ship being built.
@@ -74,7 +75,7 @@ export function buildSite(wood) {
     }
     const sg = new THREE.CylinderGeometry(0.20, 0.26, 1, 6);
     geos.push(sg);
-    group.add(instanced(sg, timberMat, shores, 'ark-shores'));
+    group.add(instanced(sg, timberMat, shores, 'ark-shores', 0xe8e0d2));
   }
 
   // ── THE SCAFFOLDING ────────────────────────────────────────────────────────
@@ -134,10 +135,10 @@ export function buildSite(wood) {
     const bg = new THREE.BoxGeometry(0.12, 1, 0.12);
     const pg = new THREE.BoxGeometry(1, 0.08, 1);
     geos.push(ug, lg, bg, pg);
-    group.add(instanced(ug, timberMat, uprights, 'scaffold-standards'));
-    group.add(instanced(lg, timberMat, ledgers, 'scaffold-ledgers'));
-    group.add(instanced(bg, timberMat, braces, 'scaffold-braces'));
-    group.add(instanced(pg, wood.matDeck(), planks, 'scaffold-platforms'));
+    group.add(instanced(ug, timberMat, uprights, 'scaffold-standards', 0xfff4e2));
+    group.add(instanced(lg, timberMat, ledgers, 'scaffold-ledgers', 0xefe4d2));
+    group.add(instanced(bg, timberMat, braces, 'scaffold-braces', 0xd6c9b6));
+    group.add(instanced(pg, wood.matDeck(), planks, 'scaffold-platforms', 0xffffff));
   }
 
   // ── THE BOARDING RAMP'S TRESTLES ───────────────────────────────────────────
@@ -154,7 +155,7 @@ export function buildSite(wood) {
     }
     const g = new THREE.BoxGeometry(0.20, 1, 0.20);
     geos.push(g);
-    group.add(instanced(g, timberMat, legs, 'ramp-trestles'));
+    group.add(instanced(g, timberMat, legs, 'ramp-trestles', 0xe8e0d2));
   }
 
   // ── TIMBER STACKS ──────────────────────────────────────────────────────────
@@ -191,7 +192,7 @@ export function buildSite(wood) {
     const g = new THREE.CylinderGeometry(0.42, 0.40, 1, 7);
     geos.push(g);
     // Rotate the cylinder so scaling y runs along the log's length.
-    group.add(instanced(g, timberMat, logs, 'timber-stacks'));
+    group.add(instanced(g, timberMat, logs, 'timber-stacks', 0xfff2dd));
   }
 
   // ── THE SAWPIT ─────────────────────────────────────────────────────────────
@@ -202,21 +203,21 @@ export function buildSite(wood) {
     const g = [];
     const trench = new THREE.BoxGeometry(7.4, 1.3, 2.2);
     trench.translate(pit.x, -0.62, pit.z);
-    g.push(dyeGeometry(trench, 0x2b2118));
+    g.push(dyeGeometry(trench, 0x6e6257));
     // the log being ripped, up on its trestles
     const log = new THREE.CylinderGeometry(0.52, 0.5, 8.4, 8);
     log.rotateZ(Math.PI / 2);
     log.translate(pit.x, 1.05, pit.z);
-    g.push(dyeGeometry(log, COLORS.timber));
+    g.push(dyeGeometry(log, 0xfff1da));
     for (const dx of [-3.1, 3.1]) {
       const t = new THREE.BoxGeometry(0.4, 1.0, 2.0);
       t.translate(pit.x + dx, 0.5, pit.z);
-      g.push(dyeGeometry(t, COLORS.timberDark));
+      g.push(dyeGeometry(t, 0xd3c0a4));
     }
     // the saw itself, standing in the cut
     const blade = new THREE.BoxGeometry(0.06, 2.5, 0.34);
     blade.translate(pit.x + 0.6, 1.4, pit.z);
-    g.push(dyeGeometry(blade, COLORS.ironDark));
+    g.push(dyeGeometry(blade, 0x9fa6ad));
     const m = new THREE.Mesh(mergeGeometries(g), timberMat);
     m.geometry.computeVertexNormals();
     m.name = 'sawpit';
@@ -236,7 +237,7 @@ export function buildSite(wood) {
     }
     const pg = new THREE.BoxGeometry(1, 0.12, 1);
     geos.push(pg);
-    group.add(instanced(pg, wood.matDeck(), planks, 'sawn-planks'));
+    group.add(instanced(pg, wood.matDeck(), planks, 'sawn-planks', 0xffffff));
   }
 
   // ── THE PITCH ──────────────────────────────────────────────────────────────
@@ -248,18 +249,18 @@ export function buildSite(wood) {
     pots.forEach((p) => {
       const bowl = new THREE.CylinderGeometry(1.15, 0.85, 1.0, 12, 1, true);
       bowl.translate(p.x, 0.85, p.z);
-      g.push(dyeGeometry(bowl, COLORS.ironDark));
+      g.push(dyeGeometry(bowl, 0x7d7a76));
       // the pitch itself, a black disc just below the rim
       const surface = new THREE.CircleGeometry(1.05, 12);
       surface.rotateX(-Math.PI / 2);
       surface.translate(p.x, 1.24, p.z);
-      g.push(dyeGeometry(surface, 0x15100c));
+      g.push(dyeGeometry(surface, 0x2b2521));
       // stones of the fire ring
       for (let i = 0; i < 8; i++) {
         const a = (i / 8) * Math.PI * 2;
         const s = new THREE.DodecahedronGeometry(0.26, 0);
         s.translate(p.x + Math.cos(a) * 1.5, 0.2, p.z + Math.sin(a) * 1.5);
-        g.push(dyeGeometry(s, 0x6b625a));
+        g.push(dyeGeometry(s, 0xc3bab0));
       }
       colliders.push({ type: 'circle', x: p.x, z: p.z, r: 1.5, group: 'pitch' });
       fireEmitters.push({ x: p.x, y: 0.55, z: p.z });
@@ -271,7 +272,7 @@ export function buildSite(wood) {
       const bz = 29 + Math.floor(i / 4) * 1.6;
       const b = new THREE.CylinderGeometry(0.48, 0.44, 1.15, 9);
       b.translate(bx, 0.58, bz);
-      g.push(dyeGeometry(b, COLORS.timberDark));
+      g.push(dyeGeometry(b, 0xd8c3a6));
       colliders.push({ type: 'circle', x: bx, z: bz, r: 0.55, group: 'barrel' });
     }
     const m = new THREE.Mesh(mergeGeometries(g), timberMat);
@@ -295,28 +296,28 @@ export function buildSite(wood) {
       if (i % 3 === 0) {
         const basket = new THREE.CylinderGeometry(0.46, 0.34, 0.62, 8, 1, true);
         basket.translate(x, 0.31, z);
-        g.push(dyeGeometry(basket, COLORS.strawGold));
+        g.push(dyeGeometry(basket, 0xffeab4));
       } else if (i % 3 === 1) {
         // a coil of rope
         for (let r = 0; r < 3; r++) {
           const t = new THREE.TorusGeometry(0.42 - r * 0.09, 0.075, 5, 12);
           t.rotateX(Math.PI / 2);
           t.translate(x, 0.09 + r * 0.13, z);
-          g.push(dyeGeometry(t, COLORS.rope));
+          g.push(dyeGeometry(t, 0xf6e4bc));
         }
       } else {
         // a trestle bench with a mallet on it
         const top = new THREE.BoxGeometry(2.0, 0.14, 0.6);
         top.translate(x, 0.78, z);
-        g.push(dyeGeometry(top, COLORS.timber));
+        g.push(dyeGeometry(top, 0xffeed6));
         for (const dx of [-0.8, 0.8]) {
           const leg = new THREE.BoxGeometry(0.14, 0.78, 0.5);
           leg.translate(x + dx, 0.39, z);
-          g.push(dyeGeometry(leg, COLORS.timberDark));
+          g.push(dyeGeometry(leg, 0xd6c2a4));
         }
         const head = new THREE.BoxGeometry(0.34, 0.2, 0.2);
         head.translate(x + 0.4, 0.95, z);
-        g.push(dyeGeometry(head, COLORS.timberDark));
+        g.push(dyeGeometry(head, 0xcbb79a));
       }
       colliders.push({ type: 'circle', x, z, r: 0.55, group: 'clutter' });
     });
@@ -325,6 +326,75 @@ export function buildSite(wood) {
     m.name = 'site-clutter';
     geos.push(m.geometry);
     group.add(m);
+  }
+
+  // ── THE FOREST ─────────────────────────────────────────────────────────────
+  // The world of Genesis 6 is green and wooded, and — more practically — a
+  // building site with nothing around it reads as a model on a table. The trees
+  // give the eye something to measure the hull against and close the horizon so
+  // the ground stops looking like a sheet.
+  //
+  // They also carry the story of the place. A CLEARING has been felled around
+  // the ark: stumps near the hull, thickening woodland further out. Somebody cut
+  // all of this down, and it went into the ship.
+  {
+    const canopy = [];
+    const trunks = [];
+    const stumps = [];
+    const CLEAR = 78;   // felled radius around the vessel
+    for (let i = 0; i < 340; i++) {
+      const a = rnd() * Math.PI * 2;
+      // Denser as you go out from the clearing.
+      const rr = CLEAR + Math.pow(rnd(), 0.62) * 128;
+      const x = Math.cos(a) * rr * 1.25;
+      const z = 6 + Math.sin(a) * rr * 0.86;
+      if (Math.abs(x) > 224 || z > 168 || z < -152) continue;
+      const scale = 0.8 + rnd() * 0.9;
+      const h = 5.4 * scale;
+      trunks.push({ x, y: h * 0.32, z, sy: h * 0.64, sx: scale, sz: scale, ry: rnd() * 3 });
+      canopy.push({ x, y: h * 0.82, z, sx: scale, sy: scale * (0.85 + rnd() * 0.4), sz: scale, ry: rnd() * 3 });
+      // Only the near ring blocks: the far woodland is scenery, and 300
+      // colliders would be paid for on every step the player takes.
+      if (rr < CLEAR + 34) colliders.push({ type: 'circle', x, z, r: 0.9 * scale, group: 'forest' });
+    }
+    // The felled ring: stumps where the gopher wood came from.
+    for (let i = 0; i < 70; i++) {
+      const a = rnd() * Math.PI * 2;
+      const rr = 34 + rnd() * 46;
+      const x = Math.cos(a) * rr * 1.5;
+      const z = 8 + Math.sin(a) * rr * 0.8;
+      if (Math.abs(z) < ARK.halfWidth + 6 && Math.abs(x) < ARK.halfLength + 6) continue;
+      stumps.push({ x, y: 0.22, z, sx: 0.7 + rnd() * 0.6, sz: 0.7 + rnd() * 0.6, ry: rnd() * 3 });
+    }
+
+    const trunkGeo = new THREE.CylinderGeometry(0.32, 0.46, 1, 6);
+    // A round broadleaf canopy — three offset lumps, merged, so it never reads
+    // as a cone. Gopher wood is unidentified, so nothing here claims a species.
+    const lumps = [];
+    for (const [lx, ly, lz, lr] of [[0, 0, 0, 2.5], [1.1, -0.5, 0.5, 1.7], [-1.0, -0.35, -0.7, 1.9]]) {
+      const b = new THREE.IcosahedronGeometry(lr, 0);
+      b.translate(lx, ly, lz);
+      lumps.push(b);
+    }
+    const canopyGeo = mergeGeometries(lumps);
+    // mergeGeometries copies position, uv and colour — NOT normals. A lit
+    // material with no normals is BLACK, which is exactly how the D5 flock lost
+    // its wool. Every merged geometry that is going to be lit must do this.
+    canopyGeo.computeVertexNormals();
+    const stumpGeo = new THREE.CylinderGeometry(0.5, 0.58, 0.44, 7);
+
+    const foliage = instanced(canopyGeo, toonMat(0xffffff, { vertexColors: true }), canopy, 'forest-canopy', 0xffffff);
+    // Per-tree tint: a wood is never one green.
+    const tints = [0x5f8a44, 0x6e9a4e, 0x54793c, 0x7aa457, 0x4c6f38];
+    const c = new THREE.Color();
+    canopy.forEach((_, n) => { c.set(tints[(rnd() * tints.length) | 0]); foliage.setColorAt(n, c); });
+    if (foliage.instanceColor) foliage.instanceColor.needsUpdate = true;
+    foliage.frustumCulled = false;
+    group.add(foliage);
+    group.add(instanced(trunkGeo, timberMat, trunks, 'forest-trunks', 0xbdaa8e));
+    group.add(instanced(stumpGeo, timberMat, stumps, 'forest-stumps', 0xe8d8bc));
+    geos.push(trunkGeo, canopyGeo, stumpGeo);
+    decorations.push({ x: 0, z: 8, r: CLEAR, label: 'clearing' });
   }
 
   // ── WOOD CHIPS ─────────────────────────────────────────────────────────────

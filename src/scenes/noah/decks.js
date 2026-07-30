@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { mergeGeometries, dyeGeometry, toonMat } from '../../engine/world.js';
+import { mergeGeometries, dyeGeometry } from '../../engine/world.js';
+import { tinted } from './wood.js';
 import { DeckField } from '../../engine/DeckField.js';
 import {
   DECK_Y, DECK_PITCH, DECK_CLEAR, DECK_STRUCTURE, HOLD, CORRIDOR,
@@ -77,8 +78,10 @@ function rampGeometry(r, yLow, yHigh, color) {
 }
 
 // Instanced repeats: beams, posts, frames. One draw each, hundreds of pieces.
-function instanced(geo, material, placements) {
-  const mesh = new THREE.InstancedMesh(geo, material, placements.length);
+function instanced(geo, material, placements, tint = 0xffffff) {
+  // See tinted(): a shared vertex-coloured material over a bare geometry is
+  // silently black, which is how the entire interior structure disappeared.
+  const mesh = new THREE.InstancedMesh(tinted(geo, tint), material, placements.length);
   const d = new THREE.Object3D();
   placements.forEach((p, i) => {
     d.position.set(p.x, p.y, p.z);
@@ -129,7 +132,7 @@ export function buildDecks(wood) {
     const rects = subtractAll(holdRect, cut);
     deckRects.push(rects);
     rects.forEach((r) => {
-      slabGeos.push(slabGeometry(r, y, COLORS.deckPlank));
+      slabGeos.push(slabGeometry(r, y, 0xffffff));
       floors.addFloor({ ...r, y, id: `deck${deck + 1}` });
     });
   });
@@ -138,7 +141,7 @@ export function buildDecks(wood) {
   RAMPS.forEach((r) => {
     const yLow = DECK_Y[r.fromDeck];
     const yHigh = DECK_Y[r.toDeck];
-    slabGeos.push(rampGeometry(r, yLow, yHigh, COLORS.beam));
+    slabGeos.push(rampGeometry(r, yLow, yHigh, 0xdac9b2));
     // The DeckField wants min-edge-low, so a ramp running -x is expressed with
     // its heights swapped rather than by flipping the rectangle.
     const lo = Math.min(r.x0, r.x1);
@@ -174,7 +177,7 @@ export function buildDecks(wood) {
     for (let i = 0; i < uv.count; i++) uv.setXY(i, pos.getX(i) / 3.2, pos.getZ(i) / 3.2);
     g.rotateX(-Math.atan2(rise, len));
     g.translate((board.x0 + board.x1) / 2, rise / 2 - 0.13, (board.zInner + board.zOuter) / 2);
-    slabGeos.push(dyeGeometry(g, COLORS.timber));
+    slabGeos.push(dyeGeometry(g, 0xf0e3cf));
     floors.addRamp({
       minX: board.x0, maxX: board.x1,
       minZ: board.zInner, maxZ: board.zOuter,
@@ -192,7 +195,7 @@ export function buildDecks(wood) {
     });
     const sill = new THREE.BoxGeometry(board.x1 - board.x0 + 1.2, 0.3, HOLD.halfWidth - board.zInner + 1.2);
     sill.translate((board.x0 + board.x1) / 2, DECK_Y[0] - 0.15, (HOLD.halfWidth + board.zInner) / 2);
-    slabGeos.push(dyeGeometry(sill, COLORS.deckPlank));
+    slabGeos.push(dyeGeometry(sill, 0xffffff));
   }
 
   const deckMesh = new THREE.Mesh(mergeGeometries(slabGeos), wood.matDeck());
@@ -229,7 +232,7 @@ export function buildDecks(wood) {
       beams.push({ x, y, z: (keep.a + keep.b) / 2, sz: span / FULL_Z });
     }
   }
-  const beamMesh = instanced(beamGeo, wood.matTimber(), beams);
+  const beamMesh = instanced(beamGeo, wood.matTimber(), beams, 0xdccdb8);
   beamMesh.name = 'ark-beams';
   group.add(beamMesh);
   disposables.push(beamGeo);
@@ -253,7 +256,7 @@ export function buildDecks(wood) {
       }
     }
   }
-  const postMesh = instanced(postGeo, wood.matTimber(), posts);
+  const postMesh = instanced(postGeo, wood.matTimber(), posts, 0xefe2cd);
   postMesh.name = 'ark-posts';
   group.add(postMesh);
   disposables.push(postGeo);
@@ -272,7 +275,7 @@ export function buildDecks(wood) {
       });
     }
   }
-  const frameMesh = instanced(frameGeo, wood.matTimber(), frames);
+  const frameMesh = instanced(frameGeo, wood.matTimber(), frames, 0xcbbba4);
   frameMesh.name = 'ark-frames';
   group.add(frameMesh);
   disposables.push(frameGeo);
@@ -340,7 +343,7 @@ export function buildDecks(wood) {
     sides.forEach((s) => {
       const g = new THREE.BoxGeometry(s.maxX - s.minX, 0.95, s.maxZ - s.minZ);
       g.translate((s.minX + s.maxX) / 2, y + 0.475, (s.minZ + s.maxZ) / 2);
-      coamGeos.push(dyeGeometry(g, COLORS.beam));
+      coamGeos.push(dyeGeometry(g, 0xd8c6ae));
       colliders.push({ type: 'aabb', group: 'ark-coaming', ...s, minY: y, maxY: y + 0.95 });
     });
   });

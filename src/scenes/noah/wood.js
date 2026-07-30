@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { canvasTexture, mulberry32, toonMat } from '../../engine/world.js';
+import { canvasTexture, mulberry32, toonMat, dyeGeometry } from '../../engine/world.js';
 import { COLORS } from './arkSpec.js';
 
 // THE ARK IS MADE OF WOOD, AND IT HAS TO LOOK IT.
@@ -181,6 +181,21 @@ function sawnTexture({ size = 256, base, light, dark, seed = 21 }) {
   });
 }
 
+// A material with `vertexColors: true` and a geometry with NO colour attribute
+// is not a warning — it is BLACK. The shader multiplies by an attribute that is
+// not there and gets zero, so every piece of scaffolding, every building block,
+// every stacked log and every trestle rendered as a silhouette while the merged,
+// dyed meshes beside them looked correct. That is exactly the shape of bug that
+// survives a code review and dies the moment somebody looks at a screenshot.
+//
+// Rather than keeping two materials and remembering which is which, any
+// geometry handed to a shared timber material gets a colour attribute here.
+// White is the identity for a multiply, so a tint is optional.
+export function tinted(geo, color = 0xffffff) {
+  if (geo.attributes.color) return geo;
+  return dyeGeometry(geo, color);
+}
+
 // One owner for every texture the ark uses, so the scene disposes them together.
 export function createWood() {
   const textures = [];
@@ -196,7 +211,7 @@ export function createWood() {
   // a real stretch of planking rather than smearing.
   const pitched = keep(plankTexture({
     size: 512, planks: 8, base: COLORS.pitch, light: COLORS.pitchLight,
-    dark: COLORS.pitchDark, seed: 11, tar: 1, knots: 4, grain: 0.35,
+    dark: COLORS.pitchDark, seed: 11, tar: 0.55, knots: 4, grain: 0.55,
   }), 1, 1);
 
   // The interior skin: the same planking, but lamplit and dusty rather than

@@ -41,10 +41,16 @@ export function buildNoahArk({ scene, camera, renderer, app, signal = null }) {
   // Genesis 6 happens in a world that has never seen rain (Gen 2:5-6 is the
   // usual reading). So: green, deep, unhurried, and completely dry. The weather
   // in this scene is the last good weather there was.
-  const SKY_TOP = 0x6f9fc4;
-  const SKY_BOTTOM = 0xdfe8dc;
-  scene.fog = new THREE.Fog(0xc8d6c9, 90, Graphics.fogFar);
-  const sky = makeSky({ top: SKY_TOP, bottom: SKY_BOTTOM, offset: 0.18, exponent: 0.7 });
+  const SKY_TOP = 0x4d86b8;
+  const SKY_BOTTOM = 0xcfe0dd;
+  // FOG IS SCALED TO THE SUBJECT. Every other scene in this game is a camp
+  // about forty units across, and the presets' 200-300 fog was tuned for that.
+  // The ark alone is 137 units long, so a wide shot puts its far end at 150+ and
+  // the preset fog erased the entire stern into white haze. The preset still
+  // decides the RELATIVE draw distance; this scene just needs a lot more of it.
+  const fogFar = () => Graphics.fogFar * 2.8;
+  scene.fog = new THREE.Fog(0xa8bcc0, 170, fogFar());
+  const sky = makeSky({ top: SKY_TOP, bottom: SKY_BOTTOM, offset: 0.06, exponent: 0.62 });
   scene.add(sky.mesh);
 
   const textureReadiness = [];
@@ -61,7 +67,7 @@ export function buildNoahArk({ scene, camera, renderer, app, signal = null }) {
     textureReadiness.push(whenReady);
     return texture;
   };
-  const grassTex = loadTiled('textures/grass.jpg', 120, 80, THREE.MirroredRepeatWrapping);
+  const grassTex = loadTiled('textures/grass.jpg', 62, 44, THREE.MirroredRepeatWrapping);
   const dirtTex = loadTiled('textures/dirt.jpg', 8, 8);
   const worldTextures = { grass: grassTex, dirt: dirtTex };
 
@@ -69,8 +75,12 @@ export function buildNoahArk({ scene, camera, renderer, app, signal = null }) {
   // cannot sit on rolling ground without the terrain coming up through it
   // somewhere along its length.
   const ground = makeGround({
+    // WHITE base, near-white mottle. The supplied grass photo already carries
+    // all the green there is (it averages about 0.13 linear), so any green tint
+    // here MULTIPLIES it into near-black — the same trap D6 documented for the
+    // camp. The mottle only breaks up the tiling.
     color: 0xffffff,
-    mottle: [0xdfefb8, 0xc7b98a],
+    mottle: [0xfbffe8, 0xf2e6c4],
     map: grassTex,
     width: 460, depth: 320, z: 0,
     segX: 110, segZ: 76,
@@ -79,18 +89,27 @@ export function buildNoahArk({ scene, camera, renderer, app, signal = null }) {
   ground.position.y = 0.02; // so the walked surface is exactly y = 0
   scene.add(ground);
 
-  const ridges = makeRidges({ veryFar: 0x8fa3ad, far: 0x7d94a0, mid: 0x5f7a72 });
+  // Distinctly DARKER than the sky. At near-sky values these flats read as sheets
+  // of glass standing in mid-air rather than as land, because they are unlit and
+  // barely fogged at this draw distance.
+  const ridges = makeRidges({ veryFar: 0x6f8fa2, far: 0x5d7d84, mid: 0x47664f });
+  // Dropped so only the crests clear the treeline. At full height the far flat
+  // is a pale sheet standing in an otherwise saturated sky and reads as glass;
+  // the forest closes the horizon far better than a mountain range does.
+  ridges.position.y = -34;
   scene.add(ridges);
-  const sunSprite = makeSun({ x: -120, y: 74, z: -240, core: 54, halo: 150, color: 0xfff6e0 });
+  const sunSprite = makeSun({ x: 150, y: 96, z: 150, core: 44, halo: 128, color: 0xfff6e0 });
   scene.add(sunSprite);
   const motes = makeMotes({ count: particleCapacity(60), spanX: 200, spanZ: 140 });
   scene.add(motes.points);
 
   // One sun, one sky fill. No shadows anywhere in this engine, so the interior
   // gets its depth from baked vertex shading and from the lantern pool below.
-  const keyLight = new THREE.DirectionalLight(0xfff4dd, 1.22);
-  keyLight.position.set(-52, 46, 34);
-  const hemiLight = new THREE.HemisphereLight(0xdfe8dc, 0x54603f, 0.62);
+  // The player spawns south of the hull and the follow camera looks north, so
+  // the +Z side IS the hero side - the one with the door in it. Light that.
+  const keyLight = new THREE.DirectionalLight(0xfff4dd, 1.62);
+  keyLight.position.set(74, 54, 86);
+  const hemiLight = new THREE.HemisphereLight(0xe4efe6, 0x6b7a52, 1.05);
   scene.add(keyLight, hemiLight);
 
   // ── THE ARK ────────────────────────────────────────────────────────────────
@@ -124,14 +143,14 @@ export function buildNoahArk({ scene, camera, renderer, app, signal = null }) {
     for (const sx of [-1, 1]) {
       const jamb = new THREE.BoxGeometry(0.34, y1 - y0 + 0.5, HULL.skin + 0.12);
       jamb.translate(DOOR.x + sx * (DOOR.width / 2 + 0.14), (y0 + y1) / 2, (zIn + zOut) / 2);
-      g.push(dyeGeometry(jamb, COLORS.timberDark));
+      g.push(dyeGeometry(jamb, 0xc7b295));
     }
     const head = new THREE.BoxGeometry(DOOR.width + 0.9, 0.42, HULL.skin + 0.12);
     head.translate(DOOR.x, y1 + 0.2, (zIn + zOut) / 2);
-    g.push(dyeGeometry(head, COLORS.timberDark));
+    g.push(dyeGeometry(head, 0xc7b295));
     const sill = new THREE.BoxGeometry(DOOR.width + 0.9, 0.22, HULL.skin + 0.3);
     sill.translate(DOOR.x, y0 - 0.09, (zIn + zOut) / 2);
-    g.push(dyeGeometry(sill, COLORS.beam));
+    g.push(dyeGeometry(sill, 0xd9c7ab));
     const frame = new THREE.Mesh(mergeGeometries(g), wood.matTimber());
     frame.geometry.computeVertexNormals();
     frame.name = 'door-frame';
@@ -454,7 +473,7 @@ export function buildNoahArk({ scene, camera, renderer, app, signal = null }) {
   }
 
   const applyLiveGraphics = (graphics = Graphics) => {
-    scene.fog.far = graphics.fogFar;
+    scene.fog.far = fogFar();
     for (const tex of Object.values(worldTextures)) {
       if (tex.anisotropy === graphics.anisotropy) continue;
       tex.anisotropy = graphics.anisotropy;

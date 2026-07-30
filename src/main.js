@@ -34,12 +34,17 @@ mountSkipButton();
 const openPanel = /about/.test(location.hash) ? 'about'
   : /support/.test(location.hash) ? 'support'
     : null;
-app.navigate(
-  /playground/.test(location.hash) ? 'playground'
-    : /legacy-joseph/.test(location.hash) ? 'legacy-joseph'
-      : 'home',
-  openPanel ? { openPanel } : undefined,
-);
+// legacy-joseph must be tested BEFORE joseph, or the shared substring routes it
+// to the 3D scene and the 2D original becomes unreachable.
+const routeFromHash = () => {
+  const h = location.hash;
+  if (/playground/.test(h)) return 'playground';
+  if (/legacy-joseph/.test(h)) return 'legacy-joseph';
+  if (/noah/.test(h)) return 'noah';
+  if (/joseph/.test(h)) return 'joseph';
+  return 'home';
+};
+app.navigate(routeFromHash(), openPanel ? { openPanel } : undefined);
 
 // Debug/testing handle (harmless in production; used by automated playtests).
 window.__MARANATHA = { app, Audio, Settings, Narrator };

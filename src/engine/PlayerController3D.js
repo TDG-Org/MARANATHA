@@ -78,6 +78,28 @@ export class PlayerController3D {
 
   setEnabled(on) { this.enabled = on; if (!on) this._clearInput(); }
 
+  // Put the body somewhere, properly. Writing character.position directly leaves
+  // the controller's own vertical state behind, and the next frame quietly drags
+  // the body back down to whatever floor the STALE height could reach — so a
+  // teleport onto deck 3 silently lands on the ground under the hull. Any
+  // checkpoint, cutscene or debug jump must come through here.
+  teleport(x, y, z) {
+    const pos = this.character.position;
+    pos.set(x, y, z);
+    this.vel.set(0, 0);
+    this._fall.y = y;
+    this._fall.vy = 0;
+    this._fall.falling = false;
+    this._collisionGate.revision = -1; // force one real resolve at the new place
+    if (this.floors) {
+      const surface = this.floors.surfaceAt(x, z, y);
+      this._fall.y = surface.y;
+      pos.y = surface.y;
+      this.deck = surface.id;
+    }
+    return this;
+  }
+
   // D8: cutscene walking WITHOUT the chop. Beats used to move the hero in
   // 50ms-quantized jumps (pausableWait's polling floor) — visible stutter on
   // slow walks. This drives him through the controller's own per-frame eased

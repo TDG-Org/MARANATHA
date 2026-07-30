@@ -201,29 +201,28 @@ export function buildHull(wood) {
   const NU = 118;  // stations along the length
   const NV = 20;   // rows up the side
 
-  // Sun-and-sea shading baked into the vertices: the underhull is dark, the
-  // topsides catch light. This is what stops a single-material hull reading flat
-  // across 137 m of one texture.
-  const cLo = new THREE.Color(COLORS.pitchDark);
-  const cMid = new THREE.Color(COLORS.pitch);
-  const cHi = new THREE.Color(COLORS.pitchLight);
+  // VERTEX COLOUR IS SHADING, NOT HUE. The plank texture already carries the
+  // colour of the wood. Multiplying it by a brown vertex colour as well was
+  // brown x brown, and 137 m of hull came out as a muddy silhouette with no
+  // plank visible in it at all. These return a MULTIPLIER around 1.0, so the
+  // texture keeps its own colour and the vertices only decide how much light
+  // reaches it — which is the only lighting the interior gets, since nothing in
+  // this engine casts a shadow.
   const tmp = new THREE.Color();
+  const shade = (k) => tmp.setScalar(k);
   const outerShade = (p, v) => {
-    if (v < 0.45) tmp.copy(cLo).lerp(cMid, v / 0.45);
-    else tmp.copy(cMid).lerp(cHi, (v - 0.45) / 0.55);
-    // A slow lengthwise variation so the run of the hull is never one tone.
-    const n = 0.94 + 0.06 * Math.sin(p.x * 0.21) * Math.sin(p.x * 0.055 + 1.7);
-    return tmp.multiplyScalar(n);
+    // dark at the waterline, brightening up the topsides to the sheer
+    const k = v < 0.45
+      ? 0.58 + (v / 0.45) * 0.36
+      : 0.94 + ((v - 0.45) / 0.55) * 0.28;
+    // a slow lengthwise variation so the run of the hull is never one tone
+    return shade(k * (0.95 + 0.05 * Math.sin(p.x * 0.21) * Math.sin(p.x * 0.055 + 1.7)));
   };
 
-  const cIn = new THREE.Color(COLORS.innerWall);
-  const cInDark = new THREE.Color(COLORS.timberDark);
   const innerShade = (p, v) => {
-    // Inside, light falls from the window band at the top: the further down the
-    // side, the darker. This is the interior's whole sense of depth, since the
-    // renderer casts no shadows.
-    tmp.copy(cInDark).lerp(cIn, clamp01(0.18 + v * 1.05));
-    return tmp;
+    // Inside, the light falls from the window band at the top: the further down
+    // the side, the darker. This gradient IS the interior's sense of depth.
+    return shade(clamp01(0.30 + v * 0.95));
   };
 
   const parts = [];
@@ -269,7 +268,7 @@ export function buildHull(wood) {
 
   // THE BOTTOM: a flat sole between the two chines, following the rocker.
   parts.push(gridSurface({
-    us: gridLines(NU), vs: gridLines(8), shade: (p) => tmp.copy(cLo).multiplyScalar(0.86 + 0.1 * Math.sin(p.x * 0.3)),
+    us: gridLines(NU), vs: gridLines(8), shade: (p) => shade(0.50 + 0.06 * Math.sin(p.x * 0.3)),
     point: (u, v) => {
       const a = hullPoint(u * 2 - 1, 0, -1);
       const b = hullPoint(u * 2 - 1, 0, 1);
@@ -280,7 +279,7 @@ export function buildHull(wood) {
   }));
   // ...and its inner face, which is the floor of the bilge below deck 1.
   innerParts.push(gridSurface({
-    us: gridLines(40), vs: gridLines(4), color: COLORS.timberDark,
+    us: gridLines(40), vs: gridLines(4), color: 0x6a6a6a,
     point: (u, v) => {
       const a = hullPoint(u * 2 - 1, 0, -1, HULL.skin);
       const b = hullPoint(u * 2 - 1, 0, 1, HULL.skin);
@@ -305,7 +304,7 @@ export function buildHull(wood) {
   for (const side of [1, -1]) {
     parts.push(gridSurface({
       us: gridLines(60), vs: gridLines(3),
-      shade: (p, v) => tmp.copy(cMid).lerp(cHi, 0.15 + v * 0.35).multiplyScalar(side > 0 ? 1.06 : 0.9),
+      shade: (p, v) => shade((1.02 + v * 0.16) * (side > 0 ? 1.06 : 0.88)),
       point: (u, v) => {
         const r = ridgeAt(u);
         const eave = hullPoint(u * 2 - 1, 1, side);
@@ -321,7 +320,7 @@ export function buildHull(wood) {
     // the roof's underside, which is deck 3's ceiling
     innerParts.push(gridSurface({
       us: gridLines(40), vs: gridLines(2),
-      color: COLORS.timberDark,
+      color: 0x8a8a8a,
       point: (u, v) => {
         const r = ridgeAt(u);
         const eave = hullPoint(u * 2 - 1, 1, side, HULL.skin);
@@ -355,7 +354,7 @@ export function buildHull(wood) {
     // gable end above the eaves, closing the roof
     parts.push(gridSurface({
       us: gridLines(6), vs: gridLines(2),
-      shade: (p, v) => tmp.copy(cMid).lerp(cHi, v * 0.3),
+      shade: (p, v) => shade(1.0 + v * 0.12),
       point: (a, v) => {
         const r = ridgeAt((u + 1) / 2);
         const eaveZ = (a * 2 - 1) * r.hw;

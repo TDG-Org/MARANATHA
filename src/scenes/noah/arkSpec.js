@@ -227,10 +227,16 @@ export const BOARDING = {
 // black over the plank forms, still showing every seam. The INSIDE is sealed
 // too, but a lamplit interior wants to read as warm worked timber, so the inner
 // skin is lighter: pitch dulled by dust and handling.
+// A NOTE ON HOW DARK PITCH ACTUALLY IS. The first pass took "sealed with
+// pitch" literally and made the hull near-black. Rendered, 137 m of that is a
+// shipping container at dusk: no plank, no seam, no shape - the sheer line and
+// the taper that took all the work simply vanish. Real pitched timber in
+// daylight is a warm dark BROWN, and it has to stay light enough for the baked
+// vertex shading to have somewhere to go. These are lifted accordingly.
 export const COLORS = {
-  pitch: 0x3a2b21,        // the sealed exterior
-  pitchLight: 0x4a382b,   // sun-caught planks
-  pitchDark: 0x271d16,    // shadowed strakes, the underhull
+  pitch: 0x6b5039,        // the sealed exterior
+  pitchLight: 0x8d6c4c,   // sun-caught planks
+  pitchDark: 0x46331f,    // shadowed strakes, the underhull
   timber: 0x7d5a37,       // fresh-cut gopher wood (the unfinished parts)
   timberLight: 0x9a744b,
   timberDark: 0x5c422a,
