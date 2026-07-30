@@ -138,7 +138,6 @@ export class CameraDirector {
   // The occluder list (big props). Named setColliders for call-site continuity,
   // but these no longer collide — they fade (Task D4-2).
   setColliders(arr) { this.occluders = arr || []; }
-  setOccluders(arr) { this.occluders = arr || []; }
 
   _zoneAt(x, z) {
     for (const zn of this.zones) {

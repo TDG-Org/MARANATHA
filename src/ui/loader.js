@@ -6,7 +6,6 @@ export function createLoader() {
   style.textContent = `
     @keyframes mr-load-pulse { 0%,100% { transform: scale(1); opacity: 0.75; } 50% { transform: scale(1.22); opacity: 1; } }
     @keyframes mr-load-orbit { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-    @keyframes mr-load-dots { 0%,20% { content: ''; } 40% { content: ' ·'; } 60% { content: ' · ·'; } 80%,100% { content: ' · · ·'; } }
   `;
   document.head.append(style);
 

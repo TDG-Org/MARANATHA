@@ -42,6 +42,11 @@ export function statusOf(storyId) {
   return current?.id === storyId ? 'current' : 'locked';
 }
 
+// DELIBERATELY UNCALLED until scenes 2+ exist (audited, kept): with Joseph as
+// the only playable chapter, marking it 'done' would leave NO 'current'
+// chapter — the exact shape of the D26 reset bug. The first scene-2 finish
+// flow wires this, when 'done' can hand 'current' to the next chapter.
+// getSceneProgress below is the same parked contract's reader half.
 export function completeStory(storyId) {
   const data = read();
   const completed = Array.isArray(data.completed) ? data.completed : [];

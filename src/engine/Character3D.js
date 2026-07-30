@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { blobShadow, canvasTexture, toonGradient } from './world.js';
+import { canvasTexture, toonGradient } from './world.js';
 
 // Shared mouth flipbook (D4): 4 dark mouth shapes that cycle fast on whoever is
 // speaking (state === 'talk'), giving cheap, charming lip-flap over the painted
@@ -406,17 +406,6 @@ export class Character3D {
   setPosition(x, z) { this.root.position.set(x, 0, z); return this; }
   get position() { return this.root.position; }
 
-  // A soft fake contact shadow under the feet (Graphics High only). It's a
-  // child of root, so it follows the character for free.
-  addContactShadow(width = 1.15) {
-    if (this.shadowMesh) return this;
-    const blob = blobShadow(width);
-    blob.position.y = 0.03;
-    this.root.add(blob);
-    this.shadowMesh = blob;
-    return this;
-  }
-
   play(state) {
     // Order matters: play() is called every frame for every character, almost
     // always with the state it already has. Testing identity first skips a
@@ -551,11 +540,6 @@ export class Character3D {
     this._ownedGeo.forEach((g) => g.dispose());
     this._coatTex?.dispose();
     this._mats.forEach((m) => m.dispose());
-    if (this.shadowMesh) {
-      this.shadowMesh.geometry.dispose();
-      this.shadowMesh.material.map?.dispose();
-      this.shadowMesh.material.dispose();
-    }
     this.root.parent?.remove(this.root);
   }
 }

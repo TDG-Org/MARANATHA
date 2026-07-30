@@ -19,7 +19,6 @@ import { abortReason, throwIfAborted, withAbort } from '../core/async.js';
 //   { t:'coat', char, on }                    — equip/remove the coat
 //   { t:'grade', mood, ms }                   — mood shift (awaited)
 //   { t:'objective', text }                   — top-left objective + arrow via ctx
-//   { t:'guide', x, z }  /  { t:'guideOff' }
 //   { t:'sound', key }                        — manifest one-shot
 //   { t:'wait', ms }
 //   { t:'fn', fn }                            — escape hatch (async ok)
@@ -188,12 +187,6 @@ export class Sequencer {
           break;
         case 'objective':
           c.hud?.setObjective(s.text ?? '');
-          break;
-        case 'guide':
-          c.guide?.setTargetXZ?.(s.x, s.z);
-          break;
-        case 'guideOff':
-          c.guide?.setTarget(null);
           break;
         case 'sound':
           c.sound?.(s.key, s.gain);

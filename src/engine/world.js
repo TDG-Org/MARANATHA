@@ -58,12 +58,6 @@ export function toonMat(color, opts = {}) {
   return new THREE.MeshToonMaterial({ color, fog: true, gradientMap: toonGradient(), ...opts });
 }
 
-// litMat — smooth Lambert shading for big surfaces (ground) where banding would
-// look harsh; still shaped by the sun.
-export function litMat(color, opts = {}) {
-  return new THREE.MeshLambertMaterial({ color, fog: true, ...opts });
-}
-
 export function glowTexture(px = 256) {
   return canvasTexture(px, px, (ctx, w, h) => {
     const g = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
@@ -364,12 +358,6 @@ export function makeMotes({ count = 110, color = 0xfff3d6, spanX = 120, spanZ = 
     geo.setDrawRange(0, activeCount);
   }
   return { points, update, setActiveCount, get activeCount() { return activeCount; } };
-}
-
-// --- Billboarding: yaw-only so sprites stay upright as the camera moves -----
-
-export function yawToCamera(obj, camera) {
-  obj.rotation.y = Math.atan2(camera.position.x - obj.position.x, camera.position.z - obj.position.z);
 }
 
 // --- Minimal geometry merge (positions + uvs + colors) — skips the addons ---

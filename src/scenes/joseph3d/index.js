@@ -154,7 +154,7 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
     scene.add(L);
     return { light: L, phase: e.x * 1.7 };
   });
-  const DARK_FIRE_MOODS = new Set(['dusk', 'night', 'dream', 'ominous', 'tentWarm', 'pit']);
+  const DARK_FIRE_MOODS = new Set(['dusk', 'night', 'dream', 'tentWarm', 'pit']);
   const FOOTSTEP_PATHS = [[0, -2.5, 3.6], [-5, -5, 3.3], [5.5, 3, 3.2], [10, 8, 3.1]];
   let fireLevel = 0.35; // 0..1 base intensity scale (grading raises it at night)
   let lastFireGain = -1; // change-gate for the crackle bed's proximity gain

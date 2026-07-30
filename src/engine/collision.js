@@ -118,10 +118,10 @@ export class ColliderWorld {
   }
 
   // Resolve a moving circle at pos {x,z} with radius r against all statics
-  // (+ optional dynamic circles like NPCs). Mutates pos. ≤3 iterations; total
-  // correction clamped so bad data can never teleport anyone.
+  // (+ optional dynamic circles like NPCs). Mutates pos. ≤3 iterations, and
+  // each individual push is clamped (0.5, in _push) so bad data can never
+  // teleport anyone.
   resolve(pos, r, dynamics = null) {
-    let totalCorr = 0;
     let settled = false;
     for (let iter = 0; iter < 3; iter++) {
       let pushed = false;
@@ -150,8 +150,6 @@ export class ColliderWorld {
         settled = true;
         break;
       }
-      totalCorr += 1;
-      if (totalCorr >= 3) break;
     }
     // False is conservative: the third correction may have fully separated
     // the body, but one cheap follow-up resolve proves it before an idle gate

@@ -335,6 +335,3 @@ export const ERAS = [
   { id: 'prophets', name: 'Prophets', sub: 'Exile & Return' },
 ];
 
-export function storyById(id) {
-  return STORIES.find((s) => s.id === id) ?? null;
-}
