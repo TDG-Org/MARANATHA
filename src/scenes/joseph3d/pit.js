@@ -206,6 +206,7 @@ export function buildPitStage(tex = {}) {
   })();
   const skyLight = new THREE.Sprite(new THREE.SpriteMaterial({ map: ringTex, color: 0xfff2cf, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
   skyLight.position.set(PIT.x, 3.6, PIT.z); skyLight.scale.setScalar(8);
+  skyLight.visible = false; // raised (with opacity) by setSkyLight at the throw
   group.add(skyLight);
 
   // the torn coat a brother carries off (argyle-red cloth). A cloth PROP —
@@ -230,14 +231,17 @@ export function buildPitStage(tex = {}) {
   const mealGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0xff8f4a, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
   mealGlow.position.set(MEAL.x, 1.6, MEAL.z);
   mealGlow.scale.set(7.2, 4.2, 1);
+  mealGlow.visible = false; // raised (with opacity) by setMealGlow
   group.add(mealGlow);
 
   return {
     group, PIT, MEAL, coatProp, skyLight, shaftLight, campTents,
     // The stage owner drives this instead of hiding the light (see above).
     setShaft(k) { shaftLight.intensity = 1.05 * k; },
-    setSkyLight(k) { skyLight.material.opacity = 0.9 * k; },
-    setMealGlow(k) { mealGlow.material.opacity = 0.6 * k; },
+    // Visibility rides along: an opacity-0 additive sprite still costs a draw
+    // + full blend pass every frame it sits in a traversed group.
+    setSkyLight(k) { skyLight.visible = k > 0; skyLight.material.opacity = 0.9 * k; },
+    setMealGlow(k) { mealGlow.visible = k > 0; mealGlow.material.opacity = 0.6 * k; },
     shrinkSkyLight(k) { skyLight.scale.setScalar(8 - 6.5 * k); }, // k 0→1 closes over him
     update() { /* static set — the beat animates the cast */ },
     dispose() {
