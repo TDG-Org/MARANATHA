@@ -325,15 +325,15 @@ export function makeCampBeats(ctx, h) {
           let tourT = 0;
           const TOUR = 18000;
           const LOOK = { x: 0.5, y: 1.4, z: -3.0 };
+          const tourScratch = { x: 0, y: 0, z: 0 }; // pose drivers run per frame — no alloc
           const tourPose = (k) => {
             const e = k * k * (3 - 2 * k); // ease both ends — no start/stop jolt
             const a = (-90 - 60 * e) * Math.PI / 180;
             const r = 15 - 3.5 * e;
-            return {
-              x: LOOK.x + Math.sin(a) * r,
-              y: 6.2 - 1.2 * e,
-              z: LOOK.z + Math.cos(a) * r,
-            };
+            tourScratch.x = LOOK.x + Math.sin(a) * r;
+            tourScratch.y = 6.2 - 1.2 * e;
+            tourScratch.z = LOOK.z + Math.cos(a) * r;
+            return tourScratch;
           };
           try {
             await seq([
@@ -568,11 +568,9 @@ export function makeCampBeats(ctx, h) {
       // until the dream; the warm theme does not come back in between.
       { t: 'fade', on: true, ms: 420 },
       { t: 'fn', fn: () => {
-        T.group.visible = false;
-        ctx.setStage?.('camp');
-        jac.pos.x = jacHome.x; jac.pos.z = jacHome.z;
-        jac.char.setPosition(jacHome.x, jacHome.z);
-        ctx.controller.bounds = ctx.bounds; // back to the camp
+        // The tent/stage/Jacob/bounds restore already ran under the envy cut
+        // above, and Jacob is frozen for the whole beat — only the two lines
+        // that do NEW work remain here.
         ctx.joseph.setPosition(-8.2, -4.2); // just outside father's tent
         ctx.grading.set('goldenHour');
       } },

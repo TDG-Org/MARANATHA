@@ -732,10 +732,8 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
   }
 
   // --- per-frame ---
-  const clock = { t: 0 };
   function update(dt, tMs) {
     const t = tMs / 1000;
-    clock.t = t;
     sky.update(dt);
     grading.update(dt);
     const campActive = activeStage === 'camp';

@@ -332,7 +332,10 @@ export function buildDreamField() {
   floatHalos.frustumCulled = false;
   const frd = new THREE.Object3D();
   const writeFloatRocks = (t) => {
-    floatSpots.forEach((s, i) => {
+    // Indexed like writeBorderRocks — this runs every visible dream frame,
+    // and a per-call forEach closure is per-frame allocation.
+    for (let i = 0; i < floatSpots.length; i++) {
+      const s = floatSpots[i];
       // A dream, not a lawn ornament: the stones swell up and settle back
       // through a real arc, each on its own height and its own slow phase.
       const bob = Math.sin(t * s[5] + s[4]) * s[6];
@@ -343,7 +346,7 @@ export function buildDreamField() {
       frd.updateMatrix();
       floatRocks.setMatrixAt(i, frd.matrix);
       floatGlowPos.setXYZ(i, s[0], s[1] + bob, s[2]);
-    });
+    }
     floatRocks.instanceMatrix.needsUpdate = true;
     floatGlowPos.needsUpdate = true;
   };
@@ -607,13 +610,17 @@ export function buildDreamField() {
       if (!this.group.visible) return;
       // at the summit: drift the cloud sea + a touch of body motion only
       if (summitGroup.visible) {
-        summitGroup.userData.clouds.forEach((c) => {
+        // indexed loops — per-frame forEach closures are allocation
+        const clouds = summitGroup.userData.clouds;
+        for (let i = 0; i < clouds.length; i++) {
+          const c = clouds[i];
           c.position.x = c.userData.baseX + Math.sin(t * 0.12 + c.userData.phase) * 1.6;
           c.material.opacity = 0.42 + Math.sin(t * 0.3 + c.userData.phase) * 0.1;
-        });
-        bodies.forEach((b) => {
+        }
+        for (let i = 0; i < bodies.length; i++) {
           // D7: SLOW, ceremonial descent — and the bodies swell gently as they
           // near the summit (presence), on top of the twinkle.
+          const b = bodies[i];
           const u = b.userData;
           const span = Math.max(0.001, u.high.y - u.low.y);
           const nearness = Math.min(1, Math.max(0, (u.high.y - b.position.y) / span));
@@ -622,7 +629,7 @@ export function buildDreamField() {
           b.scale.setScalar(tw);
           if (skyState === 1) b.position.lerp(u.mid, dampStep(dt, 0.00026));
           else if (skyState === 2) b.position.lerp(u.low, dampStep(dt, 0.00048));
-        });
+        }
         return;
       }
       // field-wide wheat sway — CALM: a whisper of lean around the field's own
@@ -635,7 +642,10 @@ export function buildDreamField() {
       writeBorderRocks(t);
       floatHalos.material.opacity = 0.18 + Math.sin(t * 0.7) * 0.035;
       // low ground mist breathes
-      groundMist.forEach((m) => { m.material.opacity = 0.24 + Math.sin(t * 0.25 + m.userData.phase) * 0.08; });
+      for (let i = 0; i < groundMist.length; i++) {
+        const m = groundMist[i];
+        m.material.opacity = 0.24 + Math.sin(t * 0.25 + m.userData.phase) * 0.08;
+      }
       // dream fireflies: slow drift + soft per-point blink
       const fp = fireflyGeo.attributes.position;
       for (let i = 0; i < activeFireflyCount; i++) {
@@ -645,10 +655,11 @@ export function buildDreamField() {
       fp.needsUpdate = true;
       fireflyPts.material.opacity = 0.55 + Math.sin(t * 1.6) * 0.25;
       // fog banks drift + breathe
-      fogBanks.forEach((m) => {
+      for (let i = 0; i < fogBanks.length; i++) {
+        const m = fogBanks[i];
         m.position.x = m.userData.baseX + Math.sin(t * 0.15 + m.userData.phase) * 1.2;
         m.material.opacity = 0.32 + Math.sin(t * 0.4 + m.userData.phase) * 0.1;
-      });
+      }
       // dream motes drift upward, wrap
       const pos = moteGeo.attributes.position;
       for (let i = 0; i < activeMoteCount; i++) {
@@ -673,13 +684,14 @@ export function buildDreamField() {
       // celestial bodies: twinkle + descend/bow toward their target — but an
       // invisible idle sky (all of dream 1) animates nothing.
       if (bodies[0].visible || skyState !== 0) {
-        bodies.forEach((b) => {
+        for (let i = 0; i < bodies.length; i++) {
+          const b = bodies[i];
           const tw = 1 + Math.sin(t * 2 + b.userData.twinkle) * 0.08;
           if (b.userData.core) b.userData.core.material.rotation = t * 0.3 + b.userData.twinkle;
           b.scale.setScalar(tw);
           if (skyState === 1) b.position.lerp(b.userData.mid, dampStep(dt, 0.0006));
           else if (skyState === 2) b.position.lerp(b.userData.low, dampStep(dt, 0.0012));
-        });
+        }
       }
     },
     setParticleScale(scale) {
