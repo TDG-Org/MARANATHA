@@ -68,9 +68,13 @@ export function confirmModal({
     const cancelBtn = mkBtn(cancelText, false);
     const confirmBtn = mkBtn(confirmText, true);
     row.append(cancelBtn, confirmBtn);
+    panel.setAttribute('role', 'dialog');
+    panel.setAttribute('aria-modal', 'true');
+    panel.setAttribute('aria-label', title);
     panel.append(h, p, row);
     backdrop.append(panel);
     document.body.append(backdrop);
+    const opener = document.activeElement; // focus returns where it came from
 
     // Ease in.
     requestAnimationFrame(() => {
@@ -88,12 +92,29 @@ export function confirmModal({
       backdrop.style.opacity = '0';
       panel.style.transform = 'translateY(8px)';
       window.removeEventListener('keydown', onKey, true);
-      setTimeout(() => { backdrop.remove(); resolve(result); }, 220);
+      setTimeout(() => {
+        backdrop.remove();
+        opener?.focus?.();
+        resolve(result);
+      }, 220);
     };
     // capture + stopImmediatePropagation: the modal OWNS these keys while open
     const onKey = (e) => {
       if (e.key === 'Escape') { e.stopImmediatePropagation(); close(false); }
-      if (e.key === 'Enter') { e.stopImmediatePropagation(); close(true); }
+      if (e.key === 'Enter') {
+        e.stopImmediatePropagation();
+        // Enter acts on the FOCUSED button. A global "Enter = confirm" here
+        // wiped saves: the dialog deliberately focuses Cancel, and Enter then
+        // confirmed "Reset all progress?" anyway. Off the buttons, the safe
+        // answer is the default.
+        close(document.activeElement === confirmBtn);
+      }
+      if (e.key === 'Tab') {
+        // two focusables — keep Tab inside the dialog, both directions
+        e.stopImmediatePropagation();
+        e.preventDefault();
+        (document.activeElement === cancelBtn ? confirmBtn : cancelBtn).focus();
+      }
     };
     cancelBtn.onclick = () => close(false);
     confirmBtn.onclick = () => close(true);
