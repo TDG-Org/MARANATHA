@@ -577,11 +577,23 @@ export function planGroupCamera({
   // preferable to reversing everybody's screen direction just to stay close;
   // oversized responsive moves are already protected by a covered reframe.
   for (const offset of angleOffsets) {
+    // EXACT pruning: compositionScore = candidate + |offset|·10 + occlusion·2
+    // with occlusion ≥ 0 and strict-< replacement, so any candidate whose
+    // lower bound (candidate + |offset|·10) cannot strictly beat the best
+    // safe plan can never change the result. |offset| is non-decreasing along
+    // angleOffsets, so once an offset's FIRST candidate is out, every later
+    // offset is too. `last` only matters when no safe plan exists — and then
+    // nothing is ever pruned. Return value is bit-identical to the full scan
+    // (differential-proven in tools/test-dialogue-camera-safety.mjs); the old
+    // exhaustive scan burned ~2,200 allocating projection poses per call on
+    // visible frames even after the winner was already found.
+    if (bestSafe && Math.max(3.2, distance) + Math.abs(offset) * 10 >= bestSafe.compositionScore) break;
     for (
       let candidate = Math.max(3.2, distance);
       candidate <= Math.max(distance, maxDistance) + 0.001;
       candidate += 0.4
     ) {
+      if (bestSafe && candidate + Math.abs(offset) * 10 >= bestSafe.compositionScore) break;
       const candidateAngle = angle + offset;
       const cameraLook = { x: target.x, y: look, z: target.z };
       let bounds = null;

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
-import { CameraDirector } from '../src/engine/CameraDirector.js';
+import { CameraDirector, CINEMATIC_DRIFT_ANGLE } from '../src/engine/CameraDirector.js';
 import {
   BETRAYAL_STRIP_CAMERA,
   BETRAYAL_MARCH_CAMERA,
@@ -22,6 +22,7 @@ import {
   projectedAnchorNdc,
   projectedHeadBounds,
   projectedHeadOcclusion,
+  maxProjectedHeadOcclusion,
   writeBetrayalFallCameraPose,
   planGroupCamera,
 } from '../src/scenes/joseph3d/beats/helpers.js';
@@ -1843,3 +1844,124 @@ console.log(
   + ` walk-off margin ${walkHeadMargin.toFixed(3)} NDC,`
   + ` bedtime tent margin ${restTentMargin.toFixed(3)}u.`,
 );
+
+// ── planGroupCamera pruning is EXACT ─────────────────────────────────────────
+// The scan now stops once no remaining candidate can strictly beat the best
+// safe plan. Differential proof (power-efficiency law): the replaced
+// exhaustive scan lives HERE as the reference, both must pick the identical
+// plan across randomized casts, and the probe field must contain BOTH
+// safe-found and no-safe outcomes (an all-one-outcome probe proves nothing).
+function referencePlanGroupCamera({
+  actors, angle, distance, height, look, fov, aspect, maxDistance = 30,
+}) {
+  const visible = (actors || []).filter(Boolean);
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+  for (const actor of visible) {
+    minX = Math.min(minX, actor.x);
+    maxX = Math.max(maxX, actor.x);
+    minZ = Math.min(minZ, actor.z);
+    maxZ = Math.max(maxZ, actor.z);
+  }
+  const target = { x: (minX + maxX) / 2, y: 0, z: (minZ + maxZ) / 2 };
+  const angleOffsets = [0];
+  for (let offset = 0.06; offset <= 1.08 + 0.001; offset += 0.06) angleOffsets.push(offset, -offset);
+  let last = null;
+  let bestSafe = null;
+  for (const offset of angleOffsets) {
+    for (
+      let candidate = Math.max(3.2, distance);
+      candidate <= Math.max(distance, maxDistance) + 0.001;
+      candidate += 0.4
+    ) {
+      const candidateAngle = angle + offset;
+      const cameraLook = { x: target.x, y: look, z: target.z };
+      let bounds = null;
+      let faceSafe = true;
+      let headOcclusion = 0;
+      for (const driftScale of [-1, -0.5, 0, 0.5, 1]) {
+        const driftAngle = candidateAngle + driftScale * CINEMATIC_DRIFT_ANGLE;
+        const cameraPos = {
+          x: target.x - Math.sin(driftAngle) * candidate,
+          y: height,
+          z: target.z - Math.cos(driftAngle) * candidate,
+        };
+        const driftBounds = visible.map((actor) => projectedHeadBounds({
+          cameraPos, cameraLook, actor, headHeight: actor.headHeight ?? 1.65, fov, aspect,
+        }));
+        if (driftScale === 0) bounds = driftBounds;
+        faceSafe &&= driftBounds.every((box) => (
+          box.left >= GROUP_FACE_SAFE.minX && box.right <= GROUP_FACE_SAFE.maxX
+          && box.bottom >= GROUP_FACE_SAFE.minY && box.top <= GROUP_FACE_SAFE.maxY
+        ));
+        headOcclusion = Math.max(headOcclusion, maxProjectedHeadOcclusion(driftBounds));
+      }
+      const plan = {
+        angle: candidateAngle, angleOffset: offset, distance: candidate, bounds,
+        faceSafe, headOcclusion,
+        compositionSafe: faceSafe && headOcclusion <= MAX_GROUP_HEAD_OCCLUSION,
+      };
+      if (plan.compositionSafe) {
+        plan.compositionScore = candidate + Math.abs(offset) * 10 + headOcclusion * 2;
+        if (!bestSafe || plan.compositionScore < bestSafe.compositionScore) bestSafe = plan;
+      }
+      if (
+        !last
+        || (plan.faceSafe && !last.faceSafe)
+        || (plan.faceSafe === last.faceSafe && plan.headOcclusion < last.headOcclusion - 0.001)
+        || (plan.faceSafe === last.faceSafe
+          && Math.abs(plan.headOcclusion - last.headOcclusion) <= 0.001
+          && Math.abs(plan.angleOffset) < Math.abs(last.angleOffset))
+      ) last = plan;
+    }
+  }
+  return bestSafe || last;
+}
+
+{
+  let seed = 0x9e3779b9 >>> 0;
+  const rng = () => {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
+  let safeCount = 0;
+  let unsafeCount = 0;
+  const aspects = [PORTRAIT, LANDSCAPE, DESKTOP];
+  for (let trial = 0; trial < 160; trial += 1) {
+    const n = 1 + Math.floor(rng() * 6);
+    // every 8th trial is pathological: a wide cast with a starved distance
+    // range, so the probe field genuinely contains no-safe outcomes.
+    const pathological = trial % 8 === 7;
+    const spread = 0.6 + rng() * (pathological ? 14 : 4.5);
+    const actors = Array.from({ length: n }, () => ({
+      x: (rng() - 0.5) * spread, y: 0, z: (rng() - 0.5) * spread,
+      headHeight: 1.45 + rng() * 0.45,
+    }));
+    const args = {
+      actors,
+      angle: (rng() - 0.5) * Math.PI * 2,
+      distance: 3.2 + rng() * 5,
+      height: 1.8 + rng() * 1.2,
+      look: 0.8 + rng() * 0.6,
+      fov: 46,
+      aspect: aspects[trial % aspects.length],
+      maxDistance: pathological ? 4.4 : 30,
+    };
+    const live = planGroupCamera(args);
+    const ref = referencePlanGroupCamera(args);
+    if (ref.compositionSafe) safeCount += 1; else unsafeCount += 1;
+    assert.equal(live.compositionSafe, ref.compositionSafe, `trial ${trial}: safe flag diverged`);
+    assert.equal(live.angle, ref.angle, `trial ${trial}: angle diverged`);
+    assert.equal(live.distance, ref.distance, `trial ${trial}: distance diverged`);
+    assert.equal(live.angleOffset, ref.angleOffset, `trial ${trial}: offset diverged`);
+    assert.equal(live.headOcclusion, ref.headOcclusion, `trial ${trial}: occlusion diverged`);
+    if (ref.compositionSafe) {
+      assert.equal(live.compositionScore, ref.compositionScore, `trial ${trial}: score diverged`);
+    }
+  }
+  assert.ok(safeCount > 0 && unsafeCount > 0,
+    `pruning probe field must contain both outcomes (safe ${safeCount}, no-safe ${unsafeCount})`);
+  console.log(
+    `planGroupCamera pruning differential: ${safeCount} safe + ${unsafeCount} no-safe trials`
+    + ' bit-identical to the exhaustive reference.',
+  );
+}
