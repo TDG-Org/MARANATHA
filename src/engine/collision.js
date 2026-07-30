@@ -20,6 +20,19 @@ const RESOLVE_QUERY_PAD = 1.5; // per-push clamp (0.5) x the 3 pushes an iterati
 export class ColliderWorld {
   constructor() {
     this.statics = []; // {type:'circle',x,z,r} | {type:'aabb',minX,minZ,maxX,maxZ}
+    // VERTICAL SPANS (the ark). Until now every collider was infinitely tall,
+    // which is exactly right for a camp: a tent blocks you at any height you
+    // could ever be, and you can never be at another height anyway. A three-deck
+    // interior breaks that — deck 1's stalls must not block a body walking deck
+    // 3. A collider MAY therefore carry `minY`/`maxY`, and is then only felt by
+    // a body whose own span overlaps it.
+    //
+    // A collider WITHOUT them keeps the old meaning exactly (felt always), so
+    // every existing scene resolves bit-identically. bodyHeight is how tall the
+    // querying bodies are; it is a world-level constant because every body in
+    // this game is a person or a sheep and the difference does not matter to a
+    // deck test.
+    this.bodyHeight = 1.7;
     // Monotonic topology version for idle-body collision gates. Static
     // colliders are immutable after add in Scene 1; add/clear are the only
     // operations that can invalidate an already-resolved stationary body.
@@ -157,7 +170,21 @@ export class ColliderWorld {
     return settled;
   }
 
+  // Does a body standing at `posY` feel this collider at all? Colliders without
+  // a span always answer yes, which is the pre-ark behaviour to the bit.
+  _spans(c, posY) {
+    if (c.minY === undefined && c.maxY === undefined) return true;
+    const feet = Number.isFinite(posY) ? posY : 0;
+    const head = feet + this.bodyHeight;
+    // Half-open on purpose: a deck floor at exactly the body's feet belongs to
+    // the deck below, not to the body standing on top of it.
+    if (c.maxY !== undefined && c.maxY <= feet) return false;
+    if (c.minY !== undefined && c.minY >= head) return false;
+    return true;
+  }
+
   _push(pos, r, c) {
+    if (!this._spans(c, pos.y)) return false;
     if (c.type === 'circle') {
       const dx = pos.x - c.x;
       const dz = pos.z - c.z;
@@ -204,6 +231,7 @@ export class ColliderWorld {
     for (let i = 0; i < dynamics.length; i++) {
       const c = dynamics[i];
       if (c.skip) continue;
+      if (!this._spans(c, pos.y)) continue;
       if (c.type === 'circle') {
         const dx = pos.x - c.x;
         const dz = pos.z - c.z;
@@ -224,11 +252,14 @@ export class ColliderWorld {
   // True if a circle at (x,z,r) would overlap anything (spawn checks). Pass
   // skipGroup to ignore a family of colliders (e.g. 'border' so clustering
   // rocks/trees don't count as overlapping each other).
-  overlaps(x, z, r, skipGroup = null) {
+  overlaps(x, z, r, skipGroup = null, y = undefined) {
     const near = this._near(x - r, z - r, x + r, z + r);
     for (let i = 0; i < near.length; i++) {
       const c = this.statics[near[i]];
       if (skipGroup && c.group === skipGroup) continue;
+      // An undefined y means "any height" — the caller is asking the flat
+      // question every pre-ark caller asks, so spanned colliders still count.
+      if (y !== undefined && !this._spans(c, y)) continue;
       if (c.type === 'circle') {
         const dx = x - c.x, dz = z - c.z, min = r + c.r;
         if (dx * dx + dz * dz < min * min) return true;

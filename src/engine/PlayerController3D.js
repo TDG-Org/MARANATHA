@@ -4,6 +4,7 @@ import { Joystick } from '../ui/joystick.js';
 import { Audio } from '../systems/AudioSystem.js';
 import { abortReason } from '../core/async.js';
 import { CollisionGate } from './collision.js';
+import { stepHeight } from './DeckField.js';
 
 // Held keys auto-repeat around 30 times a second, and the old form rebuilt a
 // nine-item array for each of those events just to ask whether the key matters.
@@ -13,7 +14,17 @@ const MOVE_KEYS = new Set(['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowlef
 // eased. The character turns toward its move direction and picks idle/walk/run.
 // Exposes moveVec so the 3rd-person camera can trail the movement.
 export class PlayerController3D {
-  constructor({ camera, character, bounds, walkSpeed = 3.05, runSpeed = 5.4, colliders = null, radius = 0.42, signal = null }) {
+  constructor({
+    camera, character, bounds, walkSpeed = 3.05, runSpeed = 5.4,
+    colliders = null, radius = 0.42, signal = null, floors = null,
+  }) {
+    // FLOORS (the ark): a DeckField makes the body's height a real quantity —
+    // three decks over the same footprint, ramps between them. Without one the
+    // controller behaves exactly as it always has and never writes y at all, so
+    // every flat scene is untouched.
+    this.floors = floors;
+    this._fall = { y: character.position.y || 0, vy: 0, falling: false };
+    this.deck = null;
     // Some places are not to be hurried through. A scene may forbid running
     // (the dream does); the held key is then simply ignored, so nothing gets
     // stuck 'running' when the ban is lifted.
@@ -174,6 +185,18 @@ export class PlayerController3D {
     // static on this frame. Keep the gate dirty for one more legacy resolve.
     if (this.colliders && collisionSettled && pos.x === resolvedX && pos.z === resolvedZ) {
       this._collisionGate.commit(this.colliders, pos);
+    }
+
+    // VERTICAL: the floor under the body, resolved AFTER the horizontal move so
+    // it answers for where the body actually ended up. Deliberately last —
+    // collision resolves against the walls of the deck the body is still on, so
+    // walking a corridor can never be diverted by a wall one storey down.
+    if (this.floors) {
+      const surface = this.floors.surfaceAt(pos.x, pos.z, this._fall.y);
+      stepHeight(this._fall, surface.y, dt);
+      pos.y = this._fall.y;
+      this.deck = surface.id;
+      this.falling = this._fall.falling;
     }
 
     const speed = this.vel.length();
