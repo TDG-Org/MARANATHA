@@ -54,6 +54,25 @@ export function makeCampBeats(ctx, h) {
     stageCoatEnvySpectators, releaseCoatEnvySpectators,
   } = h;
 
+  // Interactables swallows onInteract throws by design (one broken prompt must
+  // not kill the interact loop) — but this act's beat gates AWAIT their
+  // handlers, so a swallowed throw would strand the story behind black with
+  // input off, forever. Every gated async handler runs through this guard: a
+  // real failure is logged, the screen is recovered to what the lines after
+  // the gate expect, and the gate ALWAYS resolves so the story advances.
+  const advanceOnError = (fn, resolve, recover) => async (...args) => {
+    try {
+      await fn(...args);
+    } catch (e) {
+      if (!isAbortError(e)) {
+        console.error('[camp] gated cutscene failed; advancing the beat', e);
+        try { recover?.(); } catch { /* recovery is best-effort */ }
+      }
+    } finally {
+      resolve();
+    }
+  };
+
   // ---------- beat 1 · 🐑 herd the strays ----------
   async function herd() {
     ctx.setInput(true);
@@ -272,7 +291,7 @@ export function makeCampBeats(ctx, h) {
         getPos: () => jac.pos, r: 3.0, lift: 2.0,
         object: () => jac.char.root,
         when: () => !spoken,
-        onInteract: async () => {
+        onInteract: advanceOnError(async () => {
           spoken = true;
           ctx.setInput(false);
           ctx.hud.clearObjective?.();
@@ -347,8 +366,7 @@ export function makeCampBeats(ctx, h) {
           } finally {
             ctx.camera.setPoseDriver(null);
           }
-          resolve();
-        },
+        }, resolve, () => ctx.cinema.fade(false, 400)),
       });
     }));
   }
@@ -615,7 +633,7 @@ export function makeCampBeats(ctx, h) {
         id: 'sit-fire', label: 'Sit by the fire',
         x: 0.6, z: -4.4, r: 2.6, lift: 0.7,
         when: () => !sat,
-        onInteract: async () => {
+        onInteract: advanceOnError(async () => {
           if (sat) return;
           sat = true;
           ctx.setInput(false);
@@ -682,7 +700,11 @@ export function makeCampBeats(ctx, h) {
                 aspect: lens?.aspect ?? 16 / 9,
               });
               if (!plan.compositionSafe) {
-                throw new Error('Dusk circle has no audience-safe group composition');
+                // planGroupCamera always returns its best candidate. Inside a
+                // gated handler an imperfect frame beats a dead game — the old
+                // throw here was swallowed by Interactables and stranded the
+                // beat behind black with input off, permanently.
+                console.warn('[camp] dusk circle composition not fully safe; using best plan');
               }
               // Covered cut: the black veil owns this replacement, so its
               // responsive endpoint may land in one frame without a flyover.
@@ -691,8 +713,7 @@ export function makeCampBeats(ctx, h) {
             { t: 'fade', on: false, ms: 620 },
             { t: 'wait', ms: 1200 },
           ]);
-          resolve();
-        },
+        }, resolve, () => ctx.cinema.fade(false, 400)),
       });
     }));
 
@@ -777,7 +798,7 @@ export function makeCampBeats(ctx, h) {
         id: 'rest-night', label: 'Rest for the night',
         getPos: () => rest, r: 2.3, lift: 1.4,
         when: () => !rested,
-        onInteract: async () => {
+        onInteract: advanceOnError(async () => {
           if (rested) return;
           rested = true;
           ctx.setInput(false);
@@ -797,8 +818,8 @@ export function makeCampBeats(ctx, h) {
             { t: 'wait', ms: 1200 },
             { t: 'fade', on: true, ms: 1600 }, // sleep — down to black; the dream follows
           ]);
-          resolve();
-        },
+          // the dream rises out of BLACK — a failed handler must stay covered
+        }, resolve, () => ctx.cinema.fade(true, 300)),
       });
     }));
     // (faded to black, letterbox up — the dream rises straight out of sleep)
