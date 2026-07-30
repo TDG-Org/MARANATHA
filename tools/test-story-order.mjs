@@ -124,16 +124,40 @@ assert.deepEqual(SCENE1_ROUTING, [
 ], 'Scene 1 routing table drifted from the current canonical verse placements');
 
 let skippedHoldElapsed = 0;
-let skippedHoldWaits = 0;
 await finishNarratedHold({
   verseResult: { status: 'skipped' },
   duration: 12500,
   getElapsed: () => skippedHoldElapsed,
   setElapsed: (value) => { skippedHoldElapsed = value; },
-  wait: async () => { skippedHoldWaits += 1; },
+  settled: new Promise(() => {}), // skip must never wait on the driver (a hang here IS the failure)
 });
 assert.equal(skippedHoldElapsed, 12500, 'Skip narration did not release the full orbit hold');
-assert.equal(skippedHoldWaits, 0, 'Skip narration still waited behind the hidden orbit');
+
+// The un-skipped hold is ONE driver-settled promise — zero polling wake-ups.
+{
+  let elapsed = 400;
+  let release;
+  const settled = new Promise((resolve) => { release = resolve; });
+  let landed = false;
+  const pending = finishNarratedHold({
+    verseResult: { status: 'done' },
+    duration: 1000,
+    getElapsed: () => elapsed,
+    setElapsed: (value) => { elapsed = value; },
+    settled,
+  }).then(() => { landed = true; });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(landed, false, 'the narrated hold released before its driver finished');
+  elapsed = 1000;
+  release();
+  await pending;
+  assert.equal(landed, true);
+}
+assert.doesNotMatch(
+  tellingSource,
+  /while \(getElapsed\(\) < duration\)/,
+  'the narrated hold regressed to a polling loop',
+);
 const narratedHoldCall = tellingSource.indexOf('await finishNarratedHold({');
 const narratedHoldRelease = tellingSource.indexOf('ctx.camera.setPoseDriver(null)', narratedHoldCall);
 assert.ok(

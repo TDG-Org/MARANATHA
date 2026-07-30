@@ -32,10 +32,19 @@ export async function finishNarratedHold({
   duration,
   getElapsed,
   setElapsed,
-  wait,
+  settled,
 }) {
-  if (verseResult?.status === 'skipped') setElapsed(duration);
-  while (getElapsed() < duration) await wait(120);
+  if (verseResult?.status === 'skipped') {
+    setElapsed(duration);
+    return;
+  }
+  if (getElapsed() >= duration) return;
+  // ONE promise, resolved by the pose driver's own per-frame advance — never
+  // a 120ms polling wait (each slice armed a timer + three listeners and tore
+  // them down again; a hold is one sleep, not a poll — the D24 law). Pause is
+  // free: the driver only advances on unpaused frames. The caller wires scene
+  // abort to the same resolve so the hold can never outlive its scene.
+  if (settled) await settled;
 }
 
 // SCENE 1 — Joseph, Genesis 37:1–11. The first telling now lives inside beat 5
@@ -188,8 +197,14 @@ export function makeTellingBeats(ctx, h) {
         const lookHeight = live.look.y;
         const T = 12500;
         let elapsed = 0;
+        // The driver settles the hold itself — one promise, zero poll timers.
+        let holdDone;
+        const holdSettled = new Promise((resolve) => { holdDone = resolve; });
+        const onHoldAbort = () => holdDone();
+        ctx.signal?.addEventListener('abort', onHoldAbort, { once: true });
         ctx.camera.setPoseDriver((pose, dt) => {
           elapsed = Math.min(T, elapsed + dt);
+          if (elapsed >= T) holdDone();
           const k = elapsed / T;
           const eased = k * k * (3 - 2 * k);
           const a = a0 + eased * 0.72;
@@ -209,8 +224,9 @@ export function makeTellingBeats(ctx, h) {
           duration: T,
           getElapsed: () => elapsed,
           setElapsed: (value) => { elapsed = value; },
-          wait,
+          settled: holdSettled,
         });
+        ctx.signal?.removeEventListener('abort', onHoldAbort);
         ctx.camera.setPoseDriver(null);
         ctx.joseph.play('idle');
       } },
