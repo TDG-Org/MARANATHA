@@ -172,8 +172,8 @@ function slowFrames(graphics, count) {
     'the sky dome no longer draws last — its fill is being shaded and then overdrawn');
 
   const loaderSource = readFileSync(new URL('../src/ui/loader.js', import.meta.url), 'utf8');
-  assert.match(loaderSource, /visible && !document\.hidden \? 'running' : 'paused'/,
-    'loader animation state does not follow visibility');
+  assert.match(loaderSource, /visible && !document\.hidden && !prefersReducedMotion\(\) \? 'running' : 'paused'/,
+    'loader animation state does not follow visibility + reduced-motion');
   assert.match(loaderSource, /addEventListener\('visibilitychange', syncAnimation\)/,
     'a hidden loader can keep waking the compositor');
   const sceneSource = readFileSync(new URL('../src/scenes/joseph3d/index.js', import.meta.url), 'utf8');

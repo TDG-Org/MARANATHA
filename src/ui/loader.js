@@ -1,3 +1,5 @@
+import { prefersReducedMotion } from '../core/reducedMotion.js';
+
 // The LOADING screen (D6): a small animated mark over the black veil while a
 // scene streams its assets (rigs, textures) — the player never watches a
 // half-built world assemble. Pure DOM/CSS; no per-frame JS.
@@ -54,7 +56,9 @@ export function createLoader() {
 
   let visible = false;
   const syncAnimation = () => {
-    const state = visible && !document.hidden ? 'running' : 'paused';
+    // hidden tab OR reduced-motion preference: the marks rest (the label and
+    // the veil still tell the player loading is happening)
+    const state = visible && !document.hidden && !prefersReducedMotion() ? 'running' : 'paused';
     core.style.animationPlayState = state;
     ring.style.animationPlayState = state;
   };

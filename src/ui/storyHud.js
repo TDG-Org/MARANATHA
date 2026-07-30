@@ -1,6 +1,7 @@
 import { Audio } from '../systems/AudioSystem.js';
 import { abortReason, makeAbortError } from '../core/async.js';
 import { isObjectivePrepaintActive } from './objectivePrepaint.js';
+import { prefersReducedMotion } from '../core/reducedMotion.js';
 
 // The in-story HUD: a HOME button (top-left) and the live objective line that
 // tells the player what to do right now. Scenes call setObjective() as goals
@@ -69,6 +70,8 @@ export function createStoryHud({ onHome, signal = null, isPaused = null } = {}) 
 
   // Center-screen counter for number quests (🐑 2 / 3) — pops, then fades.
   const counter = document.createElement('div');
+  counter.setAttribute('role', 'status');
+  counter.setAttribute('aria-live', 'polite');
   counter.style.cssText = [
     'position:fixed', 'left:50%', 'top:34%', 'transform:translate(-50%,-50%)', 'z-index:41',
     'font-family:"Segoe UI",system-ui,sans-serif', 'font-size:clamp(30px,6vw,52px)', 'font-weight:700',
@@ -81,6 +84,8 @@ export function createStoryHud({ onHome, signal = null, isPaused = null } = {}) 
   // dreaming" — slides in, holds a moment, fades. Visible during cutscenes
   // (that's where the feelings live); never blocks anything.
   const emoteEl = document.createElement('div');
+  emoteEl.setAttribute('role', 'status');
+  emoteEl.setAttribute('aria-live', 'polite');
   emoteEl.style.cssText = [
     // top 55%: clear of the verse card above and the dialogue box below at
     // every tested size (390×844 → 2560×1080)
@@ -320,6 +325,7 @@ export function createStoryHud({ onHome, signal = null, isPaused = null } = {}) 
   signal?.addEventListener('abort', onAbort, { once: true });
 
   function pulse() {
+    if (prefersReducedMotion()) return; // the banner still updates; only the flourish rests
     try {
       // keep translateX(-50%) in every keyframe or the centered banner jumps.
       // Compositor-only: transform on the banner + opacity on the pre-painted
