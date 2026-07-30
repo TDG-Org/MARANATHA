@@ -196,7 +196,16 @@ export class CameraDirector {
     // authored distance no matter what — a prop between the hero and the
     // camera fades to ~30% and restores when it clears, so navigation never
     // fights the camera and there is no pull-in jitter.
-    if (this.occluders.length) {
+    // Only the FOLLOW camera makes fade decisions: while an authored pose
+    // fully owns the lens the rendered camera is somewhere else entirely, so a
+    // cast from the non-rendered follow ghost faded props that never crossed
+    // the real shot (authored shots are planned clear already). While posed,
+    // anything mid-fade is released to recover.
+    const poseOwnsLens = !!this.pose && this.poseK >= 0.999;
+    if (poseOwnsLens && this._occ.size) {
+      for (const o of this._occ.keys()) this._occ.set(o, 1);
+    }
+    if (this.occluders.length && !poseOwnsLens) {
       // Cast FROM the camera TOWARD the character's body (target.y + 0.6), not
       // the head — a tent between camera and hero blocks the body even when the
       // raised camera looks clean over its roof. Stop just short of the body.
