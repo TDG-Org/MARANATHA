@@ -332,7 +332,11 @@ export function makeMotes({ count = 110, color = 0xfff3d6, spanX = 120, spanZ = 
     seed[i] = rnd() * Math.PI * 2;
   }
   const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const posAttr = new THREE.BufferAttribute(pos, 3);
+  // Rewritten every frame — tell the driver so (same law as particles.js),
+  // or it treats the buffer as immutable and re-validates every upload.
+  posAttr.setUsage(THREE.DynamicDrawUsage);
+  geo.setAttribute('position', posAttr);
   geo.setDrawRange(0, count);
   const points = new THREE.Points(geo, new THREE.PointsMaterial({
     map: glowTexture(64), color, size: 0.55, sizeAttenuation: true,
@@ -342,6 +346,7 @@ export function makeMotes({ count = 110, color = 0xfff3d6, spanX = 120, spanZ = 
   const half = spanX / 2 + 2;
   let activeCount = count;
   function update(dt, t) {
+    if (activeCount === 0) return; // a fully shed pool uploads nothing
     const mp = geo.attributes.position;
     for (let i = 0; i < activeCount; i++) {
       let x = mp.getX(i) - dt * 0.0006 * (6 + Math.sin(seed[i]) * 3);
@@ -349,6 +354,9 @@ export function makeMotes({ count = 110, color = 0xfff3d6, spanX = 120, spanZ = 
       mp.setX(i, x);
       mp.setY(i, mp.getY(i) + Math.sin(t * 0.6 + seed[i]) * dt * 0.0004);
     }
+    // Upload only the simulated prefix, never the full capacity buffer.
+    mp.clearUpdateRanges();
+    mp.addUpdateRange(0, activeCount * 3);
     mp.needsUpdate = true;
   }
   function setActiveCount(next) {
