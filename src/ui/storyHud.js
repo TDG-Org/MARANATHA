@@ -45,6 +45,15 @@ export function createStoryHud({ onHome, signal = null, isPaused = null } = {}) 
     'box-shadow:0 3px 18px rgba(0,0,0,0.35), 0 0 22px rgba(242,184,128,0.14)',
     'opacity:0', 'transition:opacity 350ms ease',
   ].join(';');
+  // The pulse's bright glow is PRE-PAINTED on this child and only its opacity
+  // animates — animating boxShadow itself de-composits the banner (a
+  // main-thread repaint for the full 640ms of every objective event; the same
+  // pattern D24 killed on the home chapter stops).
+  const objGlow = document.createElement('div');
+  objGlow.style.cssText = [
+    'position:absolute', 'inset:0', 'border-radius:inherit', 'pointer-events:none',
+    'box-shadow:0 0 34px rgba(242,184,128,0.42)', 'opacity:0',
+  ].join(';');
   const objRow = document.createElement('div');
   objRow.style.cssText = 'display:flex; align-items:center; justify-content:center; gap:9px;';
   const objIcon = document.createElement('span');
@@ -54,7 +63,9 @@ export function createStoryHud({ onHome, signal = null, isPaused = null } = {}) 
   objRow.append(objIcon, objText);
   const objHint = document.createElement('div');
   objHint.style.cssText = 'font-size:0.68em; font-weight:400; opacity:0.8; margin-top:4px; display:none; text-shadow:0 1px 2px rgba(0,0,0,0.7);';
-  obj.append(objRow, objHint);
+  // objGlow appends LAST: an absolutely positioned shadow child renders the
+  // same in any slot, and row/hint keep their child indices (tests walk them).
+  obj.append(objRow, objHint, objGlow);
 
   // Center-screen counter for number quests (🐑 2 / 3) — pops, then fades.
   const counter = document.createElement('div');
@@ -310,13 +321,19 @@ export function createStoryHud({ onHome, signal = null, isPaused = null } = {}) 
 
   function pulse() {
     try {
-      // keep translateX(-50%) in every keyframe or the centered banner jumps
+      // keep translateX(-50%) in every keyframe or the centered banner jumps.
+      // Compositor-only: transform on the banner + opacity on the pre-painted
+      // glow child (never animate boxShadow — it repaints per frame).
       obj.animate(
         [
-          { transform: 'translateX(-50%) scale(1)', boxShadow: '0 3px 18px rgba(0,0,0,0.35), 0 0 22px rgba(242,184,128,0.14)' },
-          { transform: 'translateX(-50%) scale(1.06)', boxShadow: '0 3px 18px rgba(0,0,0,0.35), 0 0 34px rgba(242,184,128,0.42)' },
-          { transform: 'translateX(-50%) scale(1)', boxShadow: '0 3px 18px rgba(0,0,0,0.35), 0 0 22px rgba(242,184,128,0.14)' },
+          { transform: 'translateX(-50%) scale(1)' },
+          { transform: 'translateX(-50%) scale(1.06)' },
+          { transform: 'translateX(-50%) scale(1)' },
         ],
+        { duration: 640, easing: 'ease-in-out' },
+      );
+      objGlow.animate(
+        [{ opacity: 0 }, { opacity: 1 }, { opacity: 0 }],
         { duration: 640, easing: 'ease-in-out' },
       );
     } catch { /* animate() unsupported — no-op */ }
