@@ -11,6 +11,13 @@ export function createNameTags() {
   const tags = [];
   let visible = true;
   let scratch = null; // reused Vector3 for projection (no per-frame alloc)
+  // Viewport size is read ONCE and on resize — window.innerWidth/Height are
+  // layout-forcing reads, and update() runs inside the frame loop where other
+  // DOM text (dialogue typewriter, objectives) may have dirtied layout.
+  let W = window.innerWidth, H = window.innerHeight;
+  const onViewport = () => { W = window.innerWidth; H = window.innerHeight; };
+  window.addEventListener('resize', onViewport);
+  window.addEventListener('orientationchange', onViewport);
   function add(character, text, { maxDist = 42 } = {}) {
     const el = document.createElement('div');
     el.textContent = text;
@@ -37,7 +44,6 @@ export function createNameTags() {
 
   function update(camera, dt = 16.7) {
     if (!visible) return;
-    const W = window.innerWidth, H = window.innerHeight;
     if (!scratch) scratch = new (camera.position.constructor)();
     const p = scratch;
     // D11 (Nate: "the names are jittering"): the old 0.5px change-gate made
@@ -111,6 +117,11 @@ export function createNameTags() {
     }
   }
 
-  function destroy() { layer.remove(); tags.length = 0; }
+  function destroy() {
+    window.removeEventListener('resize', onViewport);
+    window.removeEventListener('orientationchange', onViewport);
+    layer.remove();
+    tags.length = 0;
+  }
   return { add, update, setVisible, setSuppressed, destroy, layer };
 }
