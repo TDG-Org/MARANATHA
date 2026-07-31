@@ -5,6 +5,7 @@
 // card / dialogue. Written after the perf branch's adversarial review found a
 // crash on a path no test executed.
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 
 // ── the minimal DOM ─────────────────────────────────────────────────────────
 class FakeTarget {
@@ -388,3 +389,64 @@ console.log(
   + ' superseded grade settles, settings persist debounced + flushed,'
   + ' click/footstep prefer a dropped real file.',
 );
+
+// ── THE STORY MAP MUST LET YOU PICK A STORY ─────────────────────────────────
+// Nate: "it wont let me select different stories". Two causes, both real.
+{
+  const { buildAtlas, nodeHtml } = await import('../src/screens/home/atlas.js');
+  const { STORIES } = await import('../src/data/stories.js');
+
+  // (1) EVERY DRAWN STOP IS A CHOICE. Two chapters used to be painted on the
+  // road and then be inert — plain divs, aria-hidden, no handler — so clicking
+  // a chapter you could plainly see did nothing at all, silently.
+  const atlas = buildAtlas((s) => !!s.sceneKey);
+  assert.ok(atlas.nodes.length > 0, 'the map draws chapters');
+  for (const n of atlas.nodes) {
+    const html = nodeHtml(n);
+    assert.ok(
+      html.includes(`data-node="${n.id}"`),
+      `${n.id} is drawn on the road but is not selectable`,
+    );
+    assert.ok(
+      !html.includes('aria-hidden="true"'),
+      `${n.id} is drawn on the road but hidden from assistive tech`,
+    );
+    assert.ok(n.reachable, `${n.id} is drawn but flagged unreachable`);
+  }
+
+  // (2) The label must say WHICH of the three states a stop is in, so a locked
+  // chapter and a walkable one are never told apart only by trying them.
+  const built = atlas.nodes.filter((n) => n.built);
+  const unbuilt = atlas.nodes.filter((n) => !n.built);
+  assert.ok(built.length && unbuilt.length, 'the map has both built and unbuilt stops to distinguish');
+  for (const n of unbuilt) {
+    assert.match(nodeHtml(n), /coming soon/i, `${n.id} must read as not-yet-built`);
+  }
+  for (const n of built) {
+    assert.doesNotMatch(nodeHtml(n), /coming soon/i, `${n.id} is playable and must not say coming soon`);
+    const expect = n.explore ? /walk around/i : /ready to play/i;
+    assert.match(nodeHtml(n), expect, `${n.id} must name its playable state`);
+  }
+
+  // (3) POINTER CAPTURE RETARGETS THE CLICK. The road captures the pointer so a
+  // drag survives leaving it, and a captured pointer fires its click AT the
+  // capturing element — so `e.target.closest('[data-node]')` was null on every
+  // real press and the selection was dropped. A scripted el.click() never goes
+  // through capture, which is exactly why this shipped.
+  const homeSrc = await readFile(new URL('../src/screens/home/index.js', import.meta.url), 'utf8');
+  assert.match(
+    homeSrc, /pressNode\s*=\s*e\.target\.closest\?\.\('\[data-node\]'\)/,
+    'the chapter under the press must be recorded on pointerdown',
+  );
+  assert.match(
+    homeSrc, /closest\?\.\('\[data-node\]'\)\s*\|\|\s*started/,
+    'the click handler must fall back to the chapter the press began on',
+  );
+  assert.ok(
+    homeSrc.includes('setPointerCapture'),
+    'guard assumes the road still takes pointer capture; re-check if that changed',
+  );
+
+  console.log(`story map: ${atlas.nodes.length} stops drawn, all selectable `
+    + `(${built.length} playable, ${unbuilt.length} coming soon)`);
+}

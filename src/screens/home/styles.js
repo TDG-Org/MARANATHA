@@ -166,6 +166,17 @@ export const UI_CSS = `
   min-height: calc(66px * var(--u)); margin: 0;
 }
 
+/* The one line that tells you what this chapter IS: ready, walkable, or not
+   written yet. Quiet by default, warm once it is something you can open. */
+.mr-state {
+  font: 600 calc(12.5px * var(--u))/1.5 'Segoe UI', system-ui, sans-serif;
+  letter-spacing: .06em; text-transform: uppercase;
+  color: rgba(253,246,227,.52);
+  margin: calc(9px * var(--u)) 0 calc(2px * var(--u));
+  min-height: calc(19px * var(--u));
+}
+.mr-state.is-ready { color: #ffd28a; }
+
 .mr-start {
   align-self: flex-start; margin-top: calc(26px * var(--u));
   position: relative; overflow: hidden;
@@ -304,6 +315,7 @@ export const UI_CSS = `
 .mr-home.is-stacked .mr-story-title { font-size: calc(34px * var(--u)); margin-top: calc(8px * var(--u)); }
 .mr-home.is-stacked .mr-rule { margin: calc(12px * var(--u)) 0 calc(10px * var(--u)); }
 .mr-home.is-stacked .mr-blurb { font-size: calc(14px * var(--u)); min-height: calc(56px * var(--u)); }
+.mr-home.is-stacked .mr-state { font-size: calc(11.5px * var(--u)); text-align: center; }
 .mr-home.is-stacked .mr-start {
   align-self: stretch; text-align: center; margin-top: calc(14px * var(--u));
   padding: calc(15px * var(--u)) calc(20px * var(--u));

@@ -188,6 +188,7 @@ export function buildHome({ app, params = {} }) {
       <div class="mr-passage" data-field="passage">Genesis 37–50</div>
       <div class="mr-rule"></div>
       <p class="mr-blurb" data-field="blurb"></p>
+      <div class="mr-state" data-field="state" aria-live="polite"></div>
       <button type="button" class="mr-start" data-field="start">▶&nbsp; Start Story</button>
     </div>
 
@@ -360,7 +361,7 @@ export function buildHome({ app, params = {} }) {
   // ---- selection -----------------------------------------------------------
   function selectStory(id, animate = true) {
     const node = atlas.byId.get(id);
-    if (!node || !node.reachable) return;
+    if (!node) return;
     selectedId = id;
 
     const era = ERAS.find((e) => e.id === node.era);
@@ -369,7 +370,22 @@ export function buildHome({ app, params = {} }) {
     field('passage').textContent = node.passage;
     field('blurb').textContent = node.blurb;
 
-    startBtn.textContent = node.built ? '▶  Start Story' : '🔒  Coming soon';
+    // SAY WHICH OF THE THREE THINGS THIS IS. "Start Story" on a chapter with no
+    // story, and an identical-looking lock on one that is simply not written
+    // yet, left the player to guess which stops were real. Each state now names
+    // itself in the panel as well as on the button.
+    const state = field('state');
+    if (!node.built) {
+      state.textContent = 'Not built yet — this chapter is still to come.';
+      startBtn.textContent = '🔒  Coming soon';
+    } else if (node.explore) {
+      state.textContent = 'Walk around it — the story is still to be written.';
+      startBtn.textContent = '▶  Explore';
+    } else {
+      state.textContent = 'Ready to play.';
+      startBtn.textContent = '▶  Start Story';
+    }
+    state.classList.toggle('is-ready', node.built);
     startBtn.disabled = !node.built;
     startBtn.classList.toggle('is-locked', !node.built);
 
@@ -511,12 +527,26 @@ export function buildHome({ app, params = {} }) {
   let dragBase = 0;
   let dragDist = 0;
 
+  // WHICH CHAPTER THE PRESS STARTED ON.
+  //
+  // The road takes pointer capture so a drag keeps working when the cursor
+  // leaves it — and a captured pointer RETARGETS its click to the capturing
+  // element. So every real press on a chapter arrived at the click handler with
+  // `e.target` set to the road, `closest('[data-node]')` came back null, and the
+  // selection was dropped on the floor. The map looked completely dead: nothing
+  // you clicked ever became the selected story.
+  //
+  // It survived testing because a scripted `el.click()` dispatches straight at
+  // the element and never goes through capture at all. Only a real finger or
+  // mouse hits it, which is why Nate found it and the tests did not.
+  let pressNode = null;
   const onPointerDown = (e) => {
     if (e.button != null && e.button !== 0) return;
     dragging = true;
     dragFrom = e.clientX;
     dragBase = offset;
     dragDist = 0;
+    pressNode = e.target.closest?.('[data-node]') || null;
     roadWrap.classList.add('is-grabbing');
     roadWrap.setPointerCapture?.(e.pointerId);
   };
@@ -547,8 +577,13 @@ export function buildHome({ app, params = {} }) {
 
   // A drag that ends on a chapter must not also select it.
   stage.addEventListener('click', (e) => {
+    const started = pressNode;
+    pressNode = null;
     if (dragDist > 8) { dragDist = 0; return; }
-    const node = e.target.closest?.('[data-node]');
+    // `e.target` first for keyboard/synthetic activation, then the chapter the
+    // press actually began on — which is the only one available once pointer
+    // capture has retargeted the click to the road itself.
+    const node = e.target.closest?.('[data-node]') || started;
     if (!node) return;
     Audio.uiClick();
     selectStory(node.dataset.node);

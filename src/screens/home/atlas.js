@@ -83,6 +83,8 @@ export function buildAtlas(isBuilt) {
       era: story.era,
       tier,
       built: isBuilt(story),
+      // A place you can walk rather than a story you can finish (the ark).
+      explore: !!story.explore,
       index: i,
       x,
       y,
@@ -93,10 +95,16 @@ export function buildAtlas(isBuilt) {
   });
 
   const lastBuilt = all.reduce((acc, n, i) => (n.built ? i : acc), 0);
-  const reachIndex = Math.min(all.length - 1, lastBuilt + REACH_AHEAD);
-  const drawIndex = Math.min(all.length - 1, reachIndex + DRAW_AHEAD);
+  const drawIndex = Math.min(all.length - 1, lastBuilt + REACH_AHEAD + DRAW_AHEAD);
   const nodes = all.slice(0, drawIndex + 1);
-  nodes.forEach((n) => { n.reachable = n.index <= reachIndex; });
+  // EVERY STOP THAT IS DRAWN CAN BE READ. Two of them used to be painted on the
+  // road and then be inert — not buttons, not focusable, aria-hidden — so a
+  // player clicking a chapter he could plainly see got nothing at all, with no
+  // sound and no message. Being able to look at what is coming is not the same
+  // as being able to play it, and only the button needs to say which is which.
+  // The road's end is now the only wall, and it is a visible one.
+  const reachIndex = nodes.length - 1;
+  nodes.forEach((n) => { n.reachable = true; });
 
   const worldW = nodes[nodes.length - 1].x + 420;
   const byId = new Map(nodes.map((n) => [n.id, n]));
@@ -183,17 +191,8 @@ export function nodeHtml(n) {
     ? '#fff6e6'
     : n.tier === 'minor' ? 'rgba(253,246,227,.6)' : 'rgba(253,246,227,.82)';
 
-  // Past the gate the stop is scenery: not a button, not focusable, not read
-  // out as a choice.
-  if (!n.reachable) {
-    return `<div class="mr-node mr-node-beyond" data-beyond="1" aria-hidden="true"
-      style="position:absolute; left:${n.x}px; top:${n.y}px; width:0; height:0">
-      <span data-circle="1" style="position:absolute; left:0; top:0; width:${n.size}px; height:${n.size}px; transform:translate(-50%,-50%); border-radius:50%; display:flex; align-items:center; justify-content:center; background:${bg}; border:2px solid ${border}; box-shadow:${shadow}">${glyph}</span>
-      <span style="position:absolute; left:0; top:${half + 13}px; transform:translateX(-50%); font:600 ${labelSize}px 'Segoe UI',system-ui,sans-serif; color:${labelColor}; letter-spacing:.04em; white-space:nowrap; text-shadow:0 2px 9px rgba(4,14,20,.85)">${n.title}</span>
-    </div>`;
-  }
-
-  const label = `Chapter ${n.ord} — ${n.title}, ${n.passage}${lit ? '' : ' (coming soon)'}`;
+  const label = `Chapter ${n.ord} — ${n.title}, ${n.passage}`
+    + (lit ? (n.explore ? ' (walk around — no story yet)' : ' (ready to play)') : ' (coming soon)');
   return `<button type="button" class="mr-node" data-node="${n.id}" aria-label="${label}"
     style="position:absolute; left:${n.x}px; top:${n.y}px; width:0; height:0; padding:0; border:0; background:none; color:inherit; font:inherit; cursor:pointer">
     ${halo}${hoverGlow}
