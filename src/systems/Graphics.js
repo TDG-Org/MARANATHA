@@ -4,6 +4,7 @@ import { detectTier } from '../core/quality.js';
 // dial. Presets cap pixel ratio, scale particles, and toggle scene extras.
 const KEY = 'maranatha-graphics-v1'; // the player's explicit choice
 const AUTO_KEY = 'maranatha-graphics-auto'; // the last automatic demotion
+const GRADE_KEY = 'maranatha-colour-grade'; // the full-screen grade, on/off
 const PRESET_ORDER = ['low', 'medium', 'high'];
 const AUTO_START_CEILING = 'medium';
 const AUTO_SAMPLE_FRAMES = 600;
@@ -112,6 +113,11 @@ export class GraphicsSystem {
     this._s = null;        // cadence window (demotion)
     this._w = null;        // measured-work window (promotion)
     this._promoted = false; // at most one automatic step up per session
+    // The rich colour grade is a CSS filter over the live canvas: it runs in
+    // the compositor at SCREEN resolution, so dprCap cannot shrink it and the
+    // fps counter cannot see it. On by default (it is the tuned look); the
+    // player may turn it off, and Low has never used it at all.
+    this.colourGrade = readKey(this.storage, GRADE_KEY) !== 'off';
     this.subs = new Set();
   }
 
@@ -126,6 +132,19 @@ export class GraphicsSystem {
 
   // Scale a base particle count by the preset (min 3 so effects never vanish).
   particles(base) { return Math.max(3, Math.round(base * this.particleScale)); }
+
+  // The grade is independent of the preset: a player may want High geometry and
+  // no full-screen filter, which is the cheapest way to buy frames back on a
+  // machine where the compositor is the bottleneck rather than the GPU.
+  setColourGrade(on) {
+    const next = !!on;
+    if (next === this.colourGrade) return;
+    this.colourGrade = next;
+    writeKey(this.storage, GRADE_KEY, next ? 'on' : 'off');
+    // 'explicit' so PostFX re-composes immediately — no reload, so the switch
+    // can be flipped against a live fps readout.
+    this._notify({ source: 'explicit', previous: this.name, name: this.name });
+  }
 
   set(name) {
     if (!GRAPHICS_PRESETS[name]) return;

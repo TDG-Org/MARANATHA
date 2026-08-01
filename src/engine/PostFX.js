@@ -76,7 +76,7 @@ export class PostFX {
     this._unsub = Graphics.subscribe(() => this.applyPreset());
   }
 
-  get _base() { return BASE[Graphics.name] ?? BASE.medium; }
+  get _base() { return Graphics.colourGrade ? (BASE[Graphics.name] ?? BASE.medium) : ''; }
 
   _compose(extra = '') {
     const f = `${this._base} ${FILTERS[this.filter] ?? ''} ${extra}`.trim();

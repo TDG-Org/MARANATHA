@@ -446,12 +446,20 @@ export function buildNoahArk({ scene, camera, renderer, app, signal = null }) {
 
   // ── PER-FRAME ──────────────────────────────────────────────────────────────
   const tmpV = new THREE.Vector3();
+  const nearest3 = [null, null, null];   // reused lantern selection (no per-frame alloc)
+  const nearDist = [Infinity, Infinity, Infinity];
   function update(dt, tMs) {
     const t = tMs / 1000;
     sky.update(dt);
-    motes.update(dt, t);
-    smoke.update(dt, t);
-    embers.update(dt, t);
+    // Only simulate what is on screen. These were being stepped AND uploaded to
+    // the GPU every frame while the player was below decks with the whole site
+    // hidden — buffer traffic for particles nobody can see. Joseph gates its
+    // camp particles the same way; this scene simply had not.
+    if (motes.points.visible) motes.update(dt, t);
+    if (site.group.visible) {
+      smoke.update(dt, t);
+      embers.update(dt, t);
+    }
     for (const f of fireLights) {
       const flick = 0.85 + Math.sin(t * 11 + f.phase) * 0.16 + Math.sin(t * 5.3 + f.phase) * 0.09;
       f.light.intensity = Math.max(0, flick);
@@ -474,13 +482,25 @@ export function buildNoahArk({ scene, camera, renderer, app, signal = null }) {
     // The lantern pool follows the player along whichever deck they are on.
     if (insideK > 0.05) {
       const deck = controller.deck;
-      let n = 0;
-      // nearest anchors on this deck, forward and back
-      const sorted = lanternAnchors
-        .filter((a) => !deck || `deck${a.deck + 1}` === deck || Math.abs(a.y - p.y) < 3.2)
-        .sort((a, b) => Math.abs(a.x - p.x) - Math.abs(b.x - p.x));
-      for (; n < lanternPool.length; n++) {
-        const a = sorted[n];
+      // Pick the three nearest lanterns on this deck WITHOUT building and
+      // sorting a fresh array every frame — a selection pass over ~18 anchors
+      // costs nothing and allocates nothing, where filter().sort() made two
+      // arrays and a closure sixty times a second for the whole visit.
+      nearest3[0] = nearest3[1] = nearest3[2] = null;
+      nearDist[0] = nearDist[1] = nearDist[2] = Infinity;
+      for (let i = 0; i < lanternAnchors.length; i++) {
+        const a = lanternAnchors[i];
+        if (deck && `deck${a.deck + 1}` !== deck && Math.abs(a.y - p.y) >= 3.2) continue;
+        const d0 = Math.abs(a.x - p.x);
+        for (let slot = 0; slot < 3; slot++) {
+          if (d0 >= nearDist[slot]) continue;
+          for (let k = 2; k > slot; k--) { nearDist[k] = nearDist[k - 1]; nearest3[k] = nearest3[k - 1]; }
+          nearDist[slot] = d0; nearest3[slot] = a;
+          break;
+        }
+      }
+      for (let n = 0; n < lanternPool.length; n++) {
+        const a = nearest3[n];
         if (!a) { lanternPool[n].intensity = 0; continue; }
         lanternPool[n].position.set(a.x, a.y, a.z);
         lanternPool[n].intensity = insideK * (2.25 - daylight * 1.5) * (1 + Math.sin(t * 7 + a.x) * 0.06);

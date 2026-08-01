@@ -595,3 +595,30 @@ for (const hz of [60, 85, 90, 120, 140, 144, 165, 240]) {
 }
 
 console.log('Graphics quality and GPU power policy checks passed.');
+
+// ── THE COLOUR GRADE IS A SWITCH ────────────────────────────────────────────
+// Nate: "the game is just way too laggy... and choppy". The 3D scene measures
+// tiny (44 draws / 93k tris / ~2.5ms at 720p), so the frames are not being lost
+// to geometry. The one always-on full-screen cost left is this CSS filter over
+// the live canvas: it runs in the COMPOSITOR at screen resolution, so dprCap
+// cannot shrink it and the fps counter cannot see it. It has to be switchable
+// so the cost can be isolated on the machine that actually has the problem.
+{
+  const gfx = readFileSync(new URL('../src/systems/Graphics.js', import.meta.url), 'utf8');
+  const fx = readFileSync(new URL('../src/engine/PostFX.js', import.meta.url), 'utf8');
+
+  assert.match(gfx, /setColourGrade\s*\(/, 'Graphics must expose a colour-grade switch');
+  assert.match(gfx, /colourGrade\s*=\s*readKey\([^)]*GRADE_KEY[^)]*\)\s*!==\s*'off'/,
+    'the grade must persist, and default to ON (it is the tuned look)');
+  // Flipping it must notify as 'explicit', which is what makes PostFX re-compose
+  // with no reload — the whole point is A/B-ing it against a live fps readout.
+  const setter = gfx.slice(gfx.indexOf('setColourGrade'), gfx.indexOf('setColourGrade') + 600);
+  assert.match(setter, /source:\s*'explicit'/, 'the switch must notify explicitly so the grade applies live');
+
+  assert.match(fx, /get _base\(\)\s*\{\s*return Graphics\.colourGrade\s*\?/,
+    'PostFX must drop the base grade entirely when the switch is off');
+
+  // Low has never carried the grade; the switch must not resurrect it there.
+  assert.match(fx, /low:\s*''/, 'Low still ships with no base grade at all');
+  console.log('colour grade: switchable, persisted, defaults on, live-applied');
+}

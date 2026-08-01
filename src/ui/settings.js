@@ -142,6 +142,55 @@ export function openSettings({ onReset } = {}) {
   panel.append(gfxWrap);
   paintGfx();
 
+  // --- Colour grade (the one full-screen cost the fps counter cannot see) ----
+  // The rich look is a CSS filter over the live canvas. Unlike everything else
+  // in here it runs in the COMPOSITOR at the screen's own resolution, so the
+  // Graphics preset's pixel-ratio cap cannot touch it and `#debug` never counts
+  // it — it shows up only as frames that do not arrive. Two performance audits
+  // ranked it the single largest remaining cost in the game.
+  //
+  // It is a real look, tuned over many passes, so it is not something to remove
+  // behind Nate's back. It is a switch, it applies instantly with no reload, and
+  // flipping it while watching #debug answers "is this what is costing me?" in
+  // about five seconds.
+  const gradeWrap = document.createElement('div');
+  gradeWrap.style.cssText = 'margin:16px 0 6px; font-family:"Segoe UI",system-ui,sans-serif;';
+  const gradeHead = document.createElement('div');
+  gradeHead.style.cssText = 'display:flex; justify-content:space-between; font-size:13.5px; margin-bottom:8px; opacity:0.9;';
+  const gradeName = document.createElement('span'); gradeName.textContent = 'Colour grade';
+  const gradeHint = document.createElement('span');
+  gradeHint.style.cssText = 'font-size:11.5px; opacity:0.6;';
+  gradeHead.append(gradeName, gradeHint);
+  const gradeRow = document.createElement('div');
+  gradeRow.style.cssText = 'display:flex; gap:8px;';
+  const gradeBtns = {};
+  const paintGrade = () => {
+    const on = Graphics.colourGrade;
+    Object.entries(gradeBtns).forEach(([k, b]) => {
+      const sel = (k === 'on') === on;
+      b.style.background = sel ? '#f2b880' : 'rgba(255,255,255,0.06)';
+      b.style.color = sel ? '#241f38' : '#fdf6e3';
+      b.style.fontWeight = sel ? '700' : '500';
+    });
+    gradeHint.textContent = on ? 'richer colour · costs a full-screen pass' : 'off · cheapest, plainer colour';
+  };
+  [['on', 'Rich'], ['off', 'Off (faster)']].forEach(([key, label]) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = label;
+    b.style.cssText = [
+      'flex:1', 'padding:9px 0', 'border-radius:9px', 'cursor:pointer', 'min-height:44px',
+      'font:600 13px "Segoe UI",system-ui,sans-serif',
+      'border:1px solid rgba(242,184,128,0.4)', 'transition:filter 140ms ease',
+    ].join(';');
+    b.onclick = () => { Audio.uiClick?.(); Graphics.setColourGrade(key === 'on'); paintGrade(); };
+    gradeBtns[key] = b;
+    gradeRow.append(b);
+  });
+  gradeWrap.append(gradeHead, gradeRow);
+  panel.append(gradeWrap);
+  paintGrade();
+
   // --- Backdrop (the home map's time of day) --------------------------------
   // Nate: "allow the user in the settings to change the background, and toggle
   // off 'match with time of day' and all that!" Auto follows the clock; picking
