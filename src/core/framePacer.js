@@ -109,11 +109,55 @@ export function createFramePacer(startTime = 0) {
     const view = scratch.subarray(0, n);
     view.set(periods.subarray(0, n));
     view.sort();
+    // ...AND THE MEDIAN IS CONTAMINATED BY THE GAME'S OWN FRAME COST.
+    //
+    // A chained callback is one refresh after the last one — UNLESS the frame
+    // before it overran, in which case it is two, or three. So the sample is
+    // not "the panel with some jitter", it is the panel MIXED WITH how long the
+    // game took. Once more than half the frames overrun a refresh, the median
+    // gap IS two refreshes, and the pacer concludes the panel is half its real
+    // rate. Measured: a true 144Hz panel with a ~7ms scene was estimated at
+    // 72Hz. It then paces to that wrong number, the scene gets momentarily
+    // cheaper, the estimate snaps back toward 144, the divisor re-snaps and the
+    // deadline re-anchors — and the player gets an endless mix of 7ms and 14ms
+    // gaps. On a 60Hz panel it never appears, because a frame that fits in
+    // 16.7ms never overruns; on a gaming monitor it is constant.
+    //
+    // The invariant that fixes it: a gap can never be SHORTER than one refresh.
+    // Every sample is therefore one refresh, or a whole multiple of one, plus
+    // jitter — so the truth lives in the FASTEST cluster and everything above
+    // it is the game's cost, not the display's. Take a low percentile as a
+    // jitter-robust floor (the strict minimum is biased low by about twice the
+    // jitter, which is why this is not just min()), then average that cluster.
+    // ASK FIRST WHETHER THE SAMPLE IS ONE CLUSTER OR TWO, then estimate.
+    //
+    // Neither estimator alone survives both hazards. A median is unbiased under
+    // jitter but sits in the WRONG cluster once most frames overrun a refresh.
+    // Anchoring low and taking a window around the anchor is immune to that but
+    // truncates the top of the jitter spread and biases low — which is exactly
+    // the failure that made min() unusable in the first place, and it reappears
+    // the moment the jitter is severe.
+    //
+    // A low percentile and the median answer the question between them: if the
+    // median sits far above the fast anchor, the sample is BIMODAL (one refresh
+    // and two), and only the fast cluster describes the panel. Otherwise it is
+    // a single jittery cluster and the median window is the unbiased choice.
     const median = view[n >> 1];
+    const fastest = view[Math.min(n - 1, Math.max(0, Math.floor(n * 0.05)))];
+    // 1.8, not 1.6: a genuinely bimodal sample separates by 2.0, while a
+    // unimodal one under SEVERE jitter can reach about 1.6 (the gap between two
+    // callbacks carries the wobble of both endpoints, so it spreads twice as
+    // wide as the timestamps do). At 1.6 the discriminator fired on heavy
+    // jitter, took the fast half of a single cluster, and mis-measured the panel
+    // low — caught by the pacer suite's beyond-the-limit case.
+    const bimodal = fastest > 0 && median > fastest * 1.8;
+    const lo = bimodal ? fastest * 0.8 : median * 0.6;
+    const hi = bimodal ? fastest * 1.5 : median * 1.4;
     let sum = 0;
     let count = 0;
     for (let i = 0; i < n; i++) {
-      if (view[i] >= median * 0.6 && view[i] <= median * 1.4) { sum += view[i]; count += 1; }
+      if (view[i] > hi) break;                // sorted: nothing later qualifies
+      if (view[i] >= lo) { sum += view[i]; count += 1; }
     }
     cachedPeriod = count ? sum / count : median;
     return cachedPeriod;

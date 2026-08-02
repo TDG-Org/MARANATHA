@@ -1,4 +1,4 @@
-import { detectTier, AdaptiveQuality, DebugHud, RateGovernor } from './quality.js';
+import { detectTier, AdaptiveQuality, DebugHud, RateGovernor, RATE_FLOOR } from './quality.js';
 import { disposeDeep } from './dispose.js';
 import { createVeil } from '../ui/veil.js';
 import { createLoader } from '../ui/loader.js';
@@ -357,7 +357,7 @@ export function createApp(container) {
   // and the pacer prefers an even 45 over a ragged 60 for them.
   const SMOOTH_CEILING = 144;
   const mobile = /Android|iPhone|iPad|Mobi/i.test(navigator.userAgent || '');
-  const rate = new RateGovernor({ ceiling: SMOOTH_CEILING, floor: 60 });
+  const rate = new RateGovernor({ ceiling: SMOOTH_CEILING, floor: RATE_FLOOR });
   Graphics.subscribe((_g, change) => { if (change?.source === 'explicit') rate.reset(); });
   const fullRateFps = (displayHz) => {
     if (mobile || Graphics.name === 'low') return 60;

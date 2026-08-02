@@ -386,3 +386,61 @@ for (const hz of [120, 144, 165]) {
 }
 
 console.log('Frame pacer acceptance checks passed.');
+
+// ── THE PANEL MEASUREMENT MUST NOT BE CONTAMINATED BY THE GAME'S OWN COST ───
+//
+// Nate: "still way too choppy and laggy... find the deep root". This was it.
+//
+// `observe` learns the refresh period from the gap between chained rAF
+// callbacks. But a callback is one refresh after the last one only if the frame
+// before it FIT IN ONE REFRESH. A ~7ms scene on a 6.94ms (144Hz) panel overruns
+// most frames, so most gaps are TWO refreshes — and a median-based estimator
+// then concludes the panel is 72Hz. It paces to that wrong number; the scene
+// gets momentarily cheaper; the estimate snaps back toward 144; the divisor
+// re-snaps and the deadline re-anchors. The player gets an endless mix of 7ms
+// and 14ms gaps. On a 60Hz panel it can never happen (a frame that fits in
+// 16.7ms never overruns), which is why it only ever showed up on a gaming PC.
+{
+  const contaminated = (trueHz, overrunFraction, jitter = 0.4) => {
+    const pacer = createFramePacer(0);
+    const period = 1000 / trueHz;
+    let seed = 7;
+    const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+    let t = 0;
+    for (let i = 0; i < 400; i++) {
+      t += period * (rnd() < overrunFraction ? 2 : 1) + (rnd() - 0.5) * jitter;
+      pacer.observe(t, true);
+    }
+    return pacer.displayHz;
+  };
+
+  for (const hz of [120, 144, 165, 240]) {
+    for (const overrun of [0, 0.25, 0.5, 0.65, 0.9]) {
+      const measured = contaminated(hz, overrun);
+      assert.ok(
+        Math.abs(measured - hz) <= hz * 0.05,
+        `${hz}Hz with ${Math.round(overrun * 100)}% of frames overrunning a refresh `
+        + `measured ${measured}Hz — the estimate is following the GAME, not the panel`,
+      );
+    }
+  }
+
+  // ...while a panel that genuinely runs at half the rate must still read as
+  // itself, or the fix would just be the old bug pointing the other way.
+  for (const hz of [60, 72, 75]) {
+    const measured = contaminated(hz, 0);
+    assert.ok(Math.abs(measured - hz) <= hz * 0.05,
+      `a real ${hz}Hz panel measured ${measured}Hz`);
+  }
+
+  // And the jitter robustness that forced the median in the first place has to
+  // survive: the strict minimum of a jittered sample is biased low by about
+  // twice the jitter, which is what mis-read 144Hz as ~168Hz and collapsed the
+  // pacing to 48fps.
+  for (const jitter of [0, 0.4, 1.0, 2.0]) {
+    const measured = contaminated(144, 0, jitter);
+    assert.ok(Math.abs(measured - 144) <= 144 * 0.05,
+      `144Hz at +-${jitter}ms jitter measured ${measured}Hz`);
+  }
+  console.log('panel measurement: immune to frame-cost contamination, and still jitter-robust');
+}

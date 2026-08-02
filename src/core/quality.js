@@ -108,35 +108,74 @@ export class AdaptiveQuality {
 // STICKY-DOWN for the same reason DPR is: a paced stream can prove a machine is
 // struggling, never that it has room. Coming down one whole step (144 -> 72)
 // keeps landing on real refresh boundaries, so a demotion is still even.
+// THE CEILING HAS TO BE ABLE TO GO LOW ENOUGH TO BE EVEN.
+//
+// The floor used to be 60, and core/app.js additionally clamped its request to
+// `Math.max(60, ...)`. On a 144Hz panel the slowest EVEN cadence at or above a
+// 60fps request is every 2nd refresh — 72fps. So a machine that could sustain,
+// say, 65fps could never be given a target it could actually hold: it sat above
+// 72 forever, missing roughly every third deadline, and the player got a
+// permanent mix of 14ms and 21ms gaps. 48 is the next even step down on a 144Hz
+// panel (every 3rd refresh) and is still a perfectly watchable rate; on a 60Hz
+// panel nothing changes, because 48 still snaps to 60.
+export const RATE_FLOOR = 48;
+
 export class RateGovernor {
-  constructor({ ceiling = 144, floor = 60, sampleFrames = 240 } = {}) {
+  constructor({ ceiling = 144, floor = RATE_FLOOR, sampleFrames = 90, cooldownFrames = 60 } = {}) {
     this.max = ceiling;
     this.ceiling = ceiling;
     this.floor = floor;
     this.sampleFrames = Math.max(1, sampleFrames);
+    this.cooldownFrames = Math.max(0, cooldownFrames);
+    this._cooldown = 0;
     this._w = null;
   }
 
   reset() {
     this.ceiling = this.max;
     this._w = null;
+    this._cooldown = 0;
   }
 
   frame(dtMs, budgetMs) {
     if (this.ceiling <= this.floor) return;
     if (!Number.isFinite(dtMs) || dtMs <= 0) return;
+    // A DEMOTION CHANGES THE TARGET, SO THE OLD EVIDENCE IS SPENT. Every frame
+    // sampled before the step down was measured against a budget that no longer
+    // applies; judging the next window before the new cadence has actually been
+    // delivered demotes twice for one problem and lands well below what the
+    // machine could hold. Wait, re-measure, then decide again.
+    if (this._cooldown > 0) { this._cooldown -= 1; return; }
     const budget = Number.isFinite(budgetMs) && budgetMs > 0 ? budgetMs : 1000 / 60;
     const w = this._w || (this._w = { n: 0, totalMs: 0, missed: 0 });
     w.n += 1;
     w.totalMs += dtMs;
     if (dtMs > budget * 1.35) w.missed += 1;
-    if (w.n < this.sampleFrames) return;
+
+    // TWO SPEEDS, BECAUSE THE PLAYER FEELS THE WAIT.
+    //
+    // One long window was demanding on purpose — a single hitch must not halve
+    // the frame rate forever. But it also meant a machine that plainly could
+    // not hold the panel's rate spent SECONDS juddering before being given a
+    // cadence it could keep (measured: 5.5s every time, and again after every
+    // settings change, because an explicit change resets the ceiling). When the
+    // evidence is overwhelming rather than marginal, there is nothing to wait
+    // for: three quarters of the frames missing their deadline is not a hitch.
+    const overwhelming = w.n >= 24 && w.missed / w.n >= 0.75;
+    if (!overwhelming && w.n < this.sampleFrames) return;
+
     const averageMs = w.totalMs / w.n;
     const missedRatio = w.missed / w.n;
     this._w = null;
-    // Demanding on purpose: one hitch must not halve the frame rate forever.
-    if (averageMs > budget * 1.25 && missedRatio >= 0.4) {
+    // JUDGE THE MISSES, NOT THE AVERAGE. The old rule also required the mean
+    // frame time to be 25% over budget, which a stream that HOLDS the cadence
+    // four times out of five never reaches — so a machine delivering 12ms,
+    // 12ms, 12ms, 21ms forever was judged to be coping. It is not coping: one
+    // frame in five arriving half a beat late is precisely what "choppy" means,
+    // and an even slower cadence would look better than an uneven faster one.
+    if (overwhelming || missedRatio >= 0.25 || (averageMs > budget * 1.25 && missedRatio >= 0.15)) {
       this.ceiling = Math.max(this.floor, Math.round(this.ceiling / 2));
+      this._cooldown = this.cooldownFrames;
     }
   }
 }
