@@ -191,6 +191,55 @@ export function openSettings({ onReset } = {}) {
   panel.append(gradeWrap);
   paintGrade();
 
+  // --- Frame rate (the biggest power dial in the app) -----------------------
+  // A frame costs GPU work, compositor work and a wake-up. The game used to ask
+  // for the panel's own rate, so a 144Hz monitor got 144 frames a second of a
+  // slow painterly scene — two to three times the power for something nobody
+  // can see here. Every option below still lands on a whole number of refreshes,
+  // so none of them judder; they just differ in how many of those frames the
+  // machine is asked to draw.
+  const rateWrap = document.createElement('div');
+  rateWrap.style.cssText = 'margin:16px 0 6px; font-family:"Segoe UI",system-ui,sans-serif;';
+  const rateHead = document.createElement('div');
+  rateHead.style.cssText = 'display:flex; justify-content:space-between; font-size:13.5px; margin-bottom:8px; opacity:0.9;';
+  const rateName = document.createElement('span'); rateName.textContent = 'Frame rate';
+  const rateHint = document.createElement('span');
+  rateHint.style.cssText = 'font-size:11.5px; opacity:0.6;';
+  rateHead.append(rateName, rateHint);
+  const rateRow = document.createElement('div');
+  rateRow.style.cssText = 'display:flex; gap:8px;';
+  const RATE_LABELS = {
+    saver: ['Saver', 'coolest and quietest'],
+    balanced: ['Balanced', 'smooth, and about half the power of Maximum'],
+    max: ['Maximum', 'every frame your screen can show — much more power'],
+  };
+  const rateBtns = {};
+  const paintRate = () => {
+    Object.entries(rateBtns).forEach(([k, b]) => {
+      const on = Graphics.frameRate === k;
+      b.style.background = on ? '#f2b880' : 'rgba(255,255,255,0.06)';
+      b.style.color = on ? '#241f38' : '#fdf6e3';
+      b.style.fontWeight = on ? '700' : '500';
+    });
+    rateHint.textContent = RATE_LABELS[Graphics.frameRate]?.[1] || '';
+  };
+  Object.keys(RATE_LABELS).forEach((key) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = RATE_LABELS[key][0];
+    b.style.cssText = [
+      'flex:1', 'padding:9px 0', 'border-radius:9px', 'cursor:pointer', 'min-height:44px',
+      'font:600 13px "Segoe UI",system-ui,sans-serif',
+      'border:1px solid rgba(242,184,128,0.4)', 'transition:filter 140ms ease',
+    ].join(';');
+    b.onclick = () => { Audio.uiClick?.(); Graphics.setFrameRate(key); paintRate(); };
+    rateBtns[key] = b;
+    rateRow.append(b);
+  });
+  rateWrap.append(rateHead, rateRow);
+  panel.append(rateWrap);
+  paintRate();
+
   // --- Backdrop (the home map's time of day) --------------------------------
   // Nate: "allow the user in the settings to change the background, and toggle
   // off 'match with time of day' and all that!" Auto follows the clock; picking

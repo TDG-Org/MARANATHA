@@ -622,3 +622,54 @@ console.log('Graphics quality and GPU power policy checks passed.');
   assert.match(fx, /low:\s*''/, 'Low still ships with no base grade at all');
   console.log('colour grade: switchable, persisted, defaults on, live-applied');
 }
+
+// ── FRAME RATE IS THE BIGGEST POWER DIAL, SO IT MUST ACTUALLY TURN ──────────
+// The app used to ask for the panel's own rate, so a 144Hz monitor drew 144
+// frames a second of a slow painterly scene — 2-3x the GPU, compositor and
+// wake-up cost of a rate nobody can tell apart here. Every option must still
+// land on a WHOLE number of refreshes (an even 72 beats an uneven 144), and
+// Saver must actually save on the commonest panel there is.
+{
+  const { FRAME_TARGETS, Graphics: G } = await import('../src/systems/Graphics.js');
+  const { snapToRefresh } = await import('../src/core/framePacer.js');
+  const RATE_FLOOR_LOCAL = 48;
+  const delivered = (hz, pref) => {
+    const ask = Math.max(RATE_FLOOR_LOCAL, Math.min(hz, 144, FRAME_TARGETS[pref]));
+    return 1000 / snapToRefresh(ask, 1000 / hz, { allowOvershoot: true });
+  };
+
+  assert.equal(G.frameRate ?? 'balanced', 'balanced', 'the efficient option must be the default');
+  assert.ok(FRAME_TARGETS.balanced < 144, 'balanced must not chase a high-refresh panel');
+
+  for (const hz of [60, 75, 120, 144, 165, 240]) {
+    const period = 1000 / hz;
+    for (const pref of Object.keys(FRAME_TARGETS)) {
+      const fps = delivered(hz, pref);
+      // Whole number of refreshes: the interval must divide evenly by the period.
+      const refreshes = (1000 / fps) / period;
+      assert.ok(
+        Math.abs(refreshes - Math.round(refreshes)) < 1e-6,
+        `${hz}Hz '${pref}' delivers ${fps.toFixed(1)}fps — ${refreshes.toFixed(3)} refreshes, not a whole number (that is judder)`,
+      );
+      assert.ok(fps >= 28, `${hz}Hz '${pref}' fell to ${fps.toFixed(1)}fps`);
+    }
+    // ...and the dial must actually change something on a high-refresh panel.
+    if (hz >= 120) {
+      assert.ok(
+        delivered(hz, 'balanced') < delivered(hz, 'max') * 0.75,
+        `${hz}Hz: balanced (${delivered(hz, 'balanced').toFixed(0)}) saves too little against max (${delivered(hz, 'max').toFixed(0)})`,
+      );
+    }
+    // Saver must save on EVERY panel, including the commonest one.
+    assert.ok(
+      delivered(hz, 'saver') <= delivered(hz, 'balanced'),
+      `${hz}Hz: Saver (${delivered(hz, 'saver').toFixed(0)}) is not below Balanced (${delivered(hz, 'balanced').toFixed(0)})`,
+    );
+  }
+  assert.ok(delivered(60, 'saver') < 60, 'Saver saves nothing on a 60Hz panel');
+
+  const saved144 = 1 - delivered(144, 'balanced') / delivered(144, 'max');
+  const saved165 = 1 - delivered(165, 'balanced') / delivered(165, 'max');
+  console.log(`frame rate: balanced draws ${Math.round(saved144 * 100)}% fewer frames than max on 144Hz, `
+    + `${Math.round(saved165 * 100)}% on 165Hz — every option a whole number of refreshes`);
+}

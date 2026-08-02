@@ -5,6 +5,18 @@ import { detectTier } from '../core/quality.js';
 const KEY = 'maranatha-graphics-v1'; // the player's explicit choice
 const AUTO_KEY = 'maranatha-graphics-auto'; // the last automatic demotion
 const GRADE_KEY = 'maranatha-colour-grade'; // the full-screen grade, on/off
+const RATE_KEY = 'maranatha-frame-rate';    // the frame-rate power dial
+
+// What each choice ASKS for. The pacer snaps the request to a whole number of
+// refreshes, so the delivered rate is always even: 'balanced' becomes 60 on a
+// 60Hz panel, 72 on 144Hz, 55 on 165Hz — all of them steady, none of them
+// costing the 144-165 frames a second the panel would otherwise be given.
+// Infinity means "whatever the panel can do", for anyone who wants it.
+// Saver asks for 33, not 40: on the commonest panel of all, 40 snaps straight
+// back up to 60 (every refresh) because every-2nd-refresh is 30 and the floor
+// rejects it — so "Saver" saved nothing at all on a 60Hz screen. 33 lands on
+// every 2nd refresh there (30fps) and every 4th on 144Hz (36fps).
+export const FRAME_TARGETS = { saver: 33, balanced: 60, max: Infinity };
 const PRESET_ORDER = ['low', 'medium', 'high'];
 const AUTO_START_CEILING = 'medium';
 const AUTO_SAMPLE_FRAMES = 600;
@@ -118,7 +130,24 @@ export class GraphicsSystem {
     // fps counter cannot see it. On by default (it is the tuned look); the
     // player may turn it off, and Low has never used it at all.
     this.colourGrade = readKey(this.storage, GRADE_KEY) !== 'off';
+    // FRAME RATE IS A POWER DIAL, and it is the biggest one in the app: a frame
+    // costs GPU work, compositor work and a wake-up, so halving the rate very
+    // nearly halves the draw. 'balanced' is the default because nobody can tell
+    // 72 from 144 in a slow painterly scene, and the pacer makes every option
+    // land on a whole number of refreshes so none of them judder.
+    const savedRate = readKey(this.storage, RATE_KEY);
+    this.frameRate = FRAME_TARGETS[savedRate] ? savedRate : 'balanced';
     this.subs = new Set();
+  }
+
+  // The fps this machine should ASK for. The pacer then snaps it to the panel.
+  get frameTargetFps() { return FRAME_TARGETS[this.frameRate] ?? 60; }
+
+  setFrameRate(name) {
+    if (!FRAME_TARGETS[name] || name === this.frameRate) return;
+    this.frameRate = name;
+    writeKey(this.storage, RATE_KEY, name);
+    this._notify({ source: 'explicit', previous: this.name, name: this.name });
   }
 
   get autoDetected() { return this.provenance === 'auto'; }

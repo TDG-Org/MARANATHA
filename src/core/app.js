@@ -359,10 +359,27 @@ export function createApp(container) {
   const mobile = /Android|iPhone|iPad|Mobi/i.test(navigator.userAgent || '');
   const rate = new RateGovernor({ ceiling: SMOOTH_CEILING, floor: RATE_FLOOR });
   Graphics.subscribe((_g, change) => { if (change?.source === 'explicit') rate.reset(); });
+  // ── HOW MANY FRAMES THIS GAME ACTUALLY NEEDS ───────────────────────────────
+  //
+  // This asked for the panel's own rate, so a gaming monitor got 144 or 165
+  // frames every second of a slow, painterly Bible game. That is not free: it
+  // is 2-3x the GPU work, 2-3x the compositor work and 2-3x the wake-ups of a
+  // rate nobody could tell apart here, and it is the single largest power draw
+  // in the app. It also made the frame budget 6.9ms instead of 13.9ms, which is
+  // what put the scene on the wrong side of a refresh in the first place.
+  //
+  // So the target is a PREFERENCE now, defaulting to the efficient one, and
+  // every option still snaps to a whole number of refreshes — an even 72 on a
+  // 144Hz panel beats an uneven 144 every time.
   const fullRateFps = (displayHz) => {
-    if (mobile || Graphics.name === 'low') return 60;
     const hz = Number.isFinite(displayHz) && displayHz > 0 ? displayHz : 60;
-    return Math.max(60, Math.min(hz, rate.ceiling));
+    // A phone or an explicit Low never chases a high-refresh panel.
+    const ask = (mobile || Graphics.name === 'low') ? 60 : Graphics.frameTargetFps;
+    // The floor is the GOVERNOR's, not a hard 60. Clamping to 60 here meant a
+    // struggling machine on a 144Hz panel could never be offered anything
+    // slower than every-2nd-refresh (72fps), so if it could not hold 72 it
+    // juddered forever with nowhere to step down to.
+    return Math.max(rate.floor, Math.min(hz, rate.ceiling, ask));
   };
   const targetFps = (displayHz) => {
     const now = performance.now();
