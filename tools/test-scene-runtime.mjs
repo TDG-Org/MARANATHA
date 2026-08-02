@@ -15,7 +15,7 @@
 //
 // Run: node tools/test-scene-runtime.mjs
 import assert from 'node:assert/strict';
-import { bootScene, drawStats } from './harness/scene.mjs';
+import { bootScene, drawStats, undisposedFrom } from './harness/scene.mjs';
 
 let checks = 0;
 const ok = (c, m) => { assert.ok(c, m); checks += 1; };
@@ -141,24 +141,27 @@ ok(bootMs < 8000, `built in ${bootMs}ms — well inside the app's 12s readiness 
     + '— it is leaning on disposeDeep for resources it created itself',
   );
 
-  // STEP 2 — after the full app teardown nothing graph-reachable is left.
+  // STEP 2 — after the full app teardown, nothing the scene OWNED is left
+  // undisposed. Judged against the snapshot taken while it was alive, because
+  // disposeDeep ends with root.clear(): a census taken afterwards walks an
+  // EMPTY graph, so every "=== 0" passes over an empty set and can never fail.
   await h.disposeDeep();
-  const after = h.census();
+  const after = undisposedFrom(before);
   // The contract is that dispose() was CALLED on everything, not that the graph
   // shrank. Comparing reachable-before to reachable-after was the first version
   // of this and it could never fail — dispose frees the GPU handle, it does not
   // unlink the object.
   ok(
-    after.undisposedGeometries === 0,
-    `${after.undisposedGeometries} geometries were never disposed (of ${before.geometries})`,
+    after.geometries === 0,
+    `${after.geometries} geometries were never disposed (of ${before.geometries})`,
   );
   ok(
-    after.undisposedTextures === 0,
-    `${after.undisposedTextures} textures were never disposed (of ${before.textures})`,
+    after.textures === 0,
+    `${after.textures} textures were never disposed (of ${before.textures})`,
   );
   ok(
-    after.undisposedMaterials === 0,
-    `${after.undisposedMaterials} materials were never disposed (of ${before.materials})`,
+    after.materials === 0,
+    `${after.materials} materials were never disposed (of ${before.materials})`,
   );
   console.log(`  gpu census: ${before.geometries} geometries / ${before.textures} textures / `
     + `${before.materials} materials — all disposed on teardown`);

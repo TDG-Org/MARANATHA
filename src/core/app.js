@@ -373,8 +373,14 @@ export function createApp(container) {
   // 144Hz panel beats an uneven 144 every time.
   const fullRateFps = (displayHz) => {
     const hz = Number.isFinite(displayHz) && displayHz > 0 ? displayHz : 60;
-    // A phone or an explicit Low never chases a high-refresh panel.
-    const ask = (mobile || Graphics.name === 'low') ? 60 : Graphics.frameTargetFps;
+    // A phone or an explicit Low never chases a high-refresh panel — but CAP it
+    // there, do not REPLACE it. Returning a flat 60 threw away the player's own
+    // frame-rate choice on exactly the devices the dial exists for: tapping
+    // Saver on a phone asked for 60 and delivered 60, saving nothing at all.
+    // (Math.min(60, Infinity) is 60, so 'Maximum' stays pinned as intended.)
+    const ask = (mobile || Graphics.name === 'low')
+      ? Math.min(60, Graphics.frameTargetFps)
+      : Graphics.frameTargetFps;
     // The floor is the GOVERNOR's, not a hard 60. Clamping to 60 here meant a
     // struggling machine on a 144Hz panel could never be offered anything
     // slower than every-2nd-refresh (72fps), so if it could not hold 72 it
@@ -385,7 +391,13 @@ export function createApp(container) {
     // flat Math.max(48, ...), choosing Saver delivered 60fps on a 60Hz panel —
     // no saving whatsoever, the exact failure Saver's target was picked to
     // avoid — and 48 rather than 36 on a 144Hz one.
-    const floor = Math.min(rate.floor, ask);
+    // ...and the floor may never exceed what the DISPLAY can serve. A stream
+    // measured at 30Hz (Low Power Mode, a mirrored or remote display — the
+    // pacer deliberately admits down to ~29Hz) was still asked for 48, which is
+    // a rate the panel physically cannot produce; snapToRefresh then fell out of
+    // its loop with no candidate at all and returned an UNSNAPPED interval, so
+    // every budget downstream was computed from an unreachable number.
+    const floor = Math.min(rate.floor, ask, hz);
     return Math.max(floor, Math.min(hz, rate.ceiling, ask));
   };
   const targetFps = (displayHz) => {

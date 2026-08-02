@@ -54,12 +54,17 @@ export function snapToRefresh(requestedFps, periodMs, { allowOvershoot = true } 
   for (let d = 1; d <= MAX_DIVISOR; d++) {
     const interval = periodMs * d;
     const rate = 1000 / interval;
-    if (rate < floor) break; // every larger divisor is slower still
     const err = Math.abs(interval - wanted);
     const better = (a, b) => !b || a.err < b.err - 1e-6
       || (Math.abs(a.err - b.err) <= 1e-6 && a.interval < b.interval);
     const candidate = { interval, err };
+    // RECORD BEFORE THE FLOOR TEST. If even every-single-refresh is slower than
+    // the floor — a 30Hz stream against a floor of 48 — the old order broke out
+    // having recorded nothing, and the function returned the UNSNAPPED wanted
+    // interval: a request for frames the display cannot serve. Every refresh is
+    // the fastest a panel can go, so it must always survive as the fallback.
     if (better(candidate, fallback)) fallback = candidate;
+    if (rate < floor) break;
     if (allowOvershoot || rate <= ceilingRate) {
       if (better(candidate, best)) best = candidate;
     }

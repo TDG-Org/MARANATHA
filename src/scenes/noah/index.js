@@ -148,7 +148,12 @@ export function buildNoahArk({ scene, camera, renderer, app, signal = null }) {
     return hit ? hit.point.y : 0;
   };
 
-  const site = buildSite(wood, { heightAt });
+  // Where the player can actually go. Declared here because the forest's
+  // level-of-detail bucketing is measured against it — two hard-coded copies
+  // would drift the moment anyone widened the playable area.
+  const bounds = { minX: -104, maxX: 104, minZ: -56, maxZ: 68 };
+
+  const site = buildSite(wood, { heightAt, bounds });
   scene.add(site.group);
   site.colliders.forEach((c) => colliders.add(c));
 
@@ -304,7 +309,6 @@ export function buildNoahArk({ scene, camera, renderer, app, signal = null }) {
   let contactShadows = null;
   let ready = false;
 
-  const bounds = { minX: -104, maxX: 104, minZ: -56, maxZ: 68 };
   const director = new CameraDirector(camera, {
     yaw: Math.PI,
     // Outside, stand well back: the subject of the shot is a 137 m ship, not a
@@ -481,6 +485,14 @@ export function buildNoahArk({ scene, camera, renderer, app, signal = null }) {
     // hidden — buffer traffic for particles nobody can see. Joseph gates its
     // camp particles the same way; this scene simply had not.
     if (motes.points.visible) motes.update(dt, t);
+    // The smoke and embers belong to the fires OUTSIDE, but they are children of
+    // the scene rather than of site.group — so gating only their SIMULATION left
+    // them still being submitted below decks, two draw calls of frozen vertex
+    // buffers hanging in mid-air inside the hull. Hide them as well as still them.
+    if (smoke.points.visible !== site.group.visible) {
+      smoke.points.visible = site.group.visible;
+      embers.points.visible = site.group.visible;
+    }
     if (site.group.visible) {
       smoke.update(dt, t);
       embers.update(dt, t);

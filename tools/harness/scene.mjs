@@ -125,10 +125,26 @@ export function gpuCensus(scene) {
     geometries: geometries.size,
     textures: textures.size,
     materials: materials.size,
-    // 0 after teardown is the whole contract.
     undisposedGeometries: undisposed(geometries),
     undisposedTextures: undisposed(textures),
     undisposedMaterials: undisposed(materials),
+    // THE SETS THEMSELVES, so a caller can hold on to what the scene owned
+    // BEFORE teardown. Censusing after teardown is worthless: disposeDeep ends
+    // with root.clear(), so the graph is empty and every "undisposed === 0"
+    // assertion runs over an empty set and can never fail. Worse, that is
+    // exactly the leak shape worth catching — an object DETACHED but never
+    // disposed vanishes from a graph walk while its GPU handle lives on.
+    sets: { geometries, textures, materials },
+  };
+}
+
+// How much of a pre-teardown snapshot never had dispose() called on it.
+export function undisposedFrom(snapshot) {
+  const count = (set) => [...set].filter((x) => !DISPOSED.has(x)).length;
+  return {
+    geometries: count(snapshot.sets.geometries),
+    textures: count(snapshot.sets.textures),
+    materials: count(snapshot.sets.materials),
   };
 }
 

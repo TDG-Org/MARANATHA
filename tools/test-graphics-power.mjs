@@ -633,13 +633,18 @@ console.log('Graphics quality and GPU power policy checks passed.');
   const { FRAME_TARGETS, Graphics: G } = await import('../src/systems/Graphics.js');
   const { snapToRefresh } = await import('../src/core/framePacer.js');
   const RATE_FLOOR_LOCAL = 48;
-  // Mirrors core/app.js fullRateFps EXACTLY — including that the governor's
-  // floor must not override a LOWER rate the player explicitly asked for.
-  const delivered = (hz, pref) => {
-    const want = FRAME_TARGETS[pref];
-    const floor = Math.min(RATE_FLOOR_LOCAL, want);
+  // Mirrors core/app.js fullRateFps EXACTLY — including the mobile/Low branch,
+  // which the first version of this helper simply did not have. That omission
+  // let a real HIGH-severity bug through green: the app REPLACED the player's
+  // choice with a flat 60 on phones and Low instead of capping it there, so the
+  // Saver dial saved nothing on precisely the devices it exists for.
+  const delivered = (hz, pref, { mobile = false, low = false } = {}) => {
+    const raw = FRAME_TARGETS[pref];
+    const want = (mobile || low) ? Math.min(60, raw) : raw;
+    const floor = Math.min(RATE_FLOOR_LOCAL, want, hz);
     const ask = Math.max(floor, Math.min(hz, 144, want));
-    return 1000 / snapToRefresh(ask, 1000 / hz, { allowOvershoot: true });
+    // renderer.js sets allowOvershoot false for mobile / Low.
+    return 1000 / snapToRefresh(ask, 1000 / hz, { allowOvershoot: !(mobile || low) });
   };
 
   assert.equal(G.frameRate ?? 'balanced', 'balanced', 'the efficient option must be the default');
@@ -684,4 +689,48 @@ console.log('Graphics quality and GPU power policy checks passed.');
   const saved165 = 1 - delivered(165, 'balanced') / delivered(165, 'max');
   console.log(`frame rate: balanced draws ${Math.round(saved144 * 100)}% fewer frames than max on 144Hz, `
     + `${Math.round(saved165 * 100)}% on 165Hz — every option a whole number of refreshes`);
+}
+
+// ── THE DIAL MUST WORK ON THE DEVICES IT EXISTS FOR ─────────────────────────
+// Phones and the Low preset are exactly who "Saver" is for, and the app used to
+// discard the choice there. Settings shows the option unconditionally, so a
+// player tapping it got a control that did nothing.
+{
+  const { FRAME_TARGETS } = await import('../src/systems/Graphics.js');
+  const { snapToRefresh } = await import('../src/core/framePacer.js');
+  const FLOOR = 48;
+  const deliver = (hz, pref, { mobile = false, low = false } = {}) => {
+    const raw = FRAME_TARGETS[pref];
+    const want = (mobile || low) ? Math.min(60, raw) : raw;
+    const floor = Math.min(FLOOR, want, hz);
+    const ask = Math.max(floor, Math.min(hz, 144, want));
+    return 1000 / snapToRefresh(ask, 1000 / hz, { allowOvershoot: !(mobile || low) });
+  };
+
+  for (const opts of [{ mobile: true }, { low: true }]) {
+    for (const hz of [60, 90, 120, 144]) {
+      const s = deliver(hz, 'saver', opts);
+      const b = deliver(hz, 'balanced', opts);
+      assert.ok(
+        s <= b * 0.8,
+        `${hz}Hz ${JSON.stringify(opts)}: Saver delivers ${s.toFixed(1)} against Balanced ${b.toFixed(1)} — the dial does nothing`,
+      );
+      // ...and a phone still never chases a high-refresh panel.
+      assert.ok(deliver(hz, 'max', opts) <= 60.01,
+        `${hz}Hz ${JSON.stringify(opts)}: Maximum ran past the 60 cap`);
+    }
+  }
+  assert.ok(Math.abs(deliver(60, 'saver', { mobile: true }) - 30) < 0.5,
+    'a 60Hz phone on Saver should render every 2nd refresh');
+
+  // A DISPLAY SLOWER THAN THE FLOOR must still be given a whole multiple of its
+  // own refresh, not a rate it physically cannot serve.
+  for (const hz of [24, 30, 40, 48]) {
+    const fps = deliver(hz, 'balanced');
+    const refreshes = (1000 / fps) / (1000 / hz);
+    assert.ok(Math.abs(refreshes - Math.round(refreshes)) < 1e-6,
+      `${hz}Hz delivered ${fps.toFixed(1)}fps = ${refreshes.toFixed(3)} refreshes — unsnapped`);
+    assert.ok(fps <= hz + 0.01, `${hz}Hz was asked for ${fps.toFixed(1)}fps, more than it can serve`);
+  }
+  console.log('frame rate: the dial works on mobile/Low, and slow displays still get whole refreshes');
 }

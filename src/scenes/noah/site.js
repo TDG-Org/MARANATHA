@@ -14,7 +14,13 @@ import { station } from './hull.js';
 // Everything repeated is instanced and everything static is merged, because the
 // ark itself already owns a good share of the frame budget.
 
-const rnd = mulberry32(20260730);
+// SEEDED PER BUILD, not per module. A module-level generator keeps advancing
+// across scene entries, so walking out of the ark and back in rebuilt a
+// completely different site — different forest, different stump and collider
+// counts, a different triangle total. Every other scene in this game is
+// identical on every load, and a bug that only appears on the second visit is
+// the hardest kind to reproduce.
+const SITE_SEED = 20260730;
 
 function instanced(geo, material, placements, name, tint = 0xffffff) {
   const mesh = new THREE.InstancedMesh(tinted(geo, tint), material, placements.length);
@@ -31,7 +37,16 @@ function instanced(geo, material, placements, name, tint = 0xffffff) {
   return mesh;
 }
 
-export function buildSite(wood, { heightAt = () => 0 } = {}) {
+export function buildSite(wood, { heightAt = () => 0, bounds = null } = {}) {
+  const rnd = mulberry32(SITE_SEED);
+  // How far a point is from the region the player can actually occupy. Passed
+  // in from the scene so the two numbers cannot drift: widening the playable
+  // area used to silently leave the forest's LOD bucketing behind.
+  const reach = bounds || { minX: -104, maxX: 104, minZ: -56, maxZ: 68 };
+  const distToReach = (x, z) => Math.hypot(
+    Math.max(reach.minX - x, 0, x - reach.maxX),
+    Math.max(reach.minZ - z, 0, z - reach.maxZ),
+  );
   const group = new THREE.Group();
   group.name = 'ark-site';
   const colliders = [];
@@ -353,14 +368,20 @@ export function buildSite(wood, { heightAt = () => 0 } = {}) {
       const h = 5.4 * scale;
       const gy = heightAt(x, z);
       trunks.push({ x, y: gy + h * 0.32, z, sy: h * 0.64, sx: scale, sz: scale, ry: rnd() * 3 });
-      // NEAR trees get the three-lump canopy; the far woodland gets one lump.
-      // At 150-200 units out, through fog, across a 137 m hull, the difference
-      // between three overlapping blobs and one is not visible — but it was
-      // 40 triangles per tree on 200-odd trees, the largest single item in the
-      // whole scene's budget.
+      // NEAR trees get the three-lump canopy; the far woodland gets one lump,
+      // purely to buy back triangles — it was 40 per tree on 200-odd trees, the
+      // largest single item in the scene's budget.
+      //
+      // BUCKET ON REAL DISTANCE, not on `rr`. `rr` is the pre-stretch ellipse
+      // parameter, and the world position stretches it by 1.25 in x and 0.86 in
+      // z, so bucketing on it put low-detail trees as close as 33 units to a
+      // place the player can stand while high-detail ones sat 69 units out —
+      // the two categories overlapped and partly inverted. (And the justification
+      // written here first — "through fog" — was simply false: scene.fog.near is
+      // 170, so no tree in this forest is ever fogged from anywhere reachable.)
       canopy.push({
         x, y: gy + h * 0.82, z, sx: scale, sy: scale * (0.85 + rnd() * 0.4), sz: scale, ry: rnd() * 3,
-        near: rr < CLEAR + 62,
+        near: distToReach(x, z) < 70,
       });
       // Only the near ring blocks: the far woodland is scenery, and 300
       // colliders would be paid for on every step the player takes.
@@ -396,7 +417,11 @@ export function buildSite(wood, { heightAt = () => 0 } = {}) {
     canopyGeo.computeVertexNormals();
     // The distant canopy: one lump, slightly wider so it covers the same
     // silhouette from far away.
-    const canopyFarGeo = new THREE.IcosahedronGeometry(2.85, 0);
+    // Matched to the near canopy's silhouette. A plain sphere of radius 2.85 was
+    // 14% TALLER and 6% narrower than the three-lump version, so the LOD swap
+    // changed a tree's shape as well as its detail.
+    const canopyFarGeo = new THREE.IcosahedronGeometry(2.5, 0);
+    canopyFarGeo.scale(1.21, 1.0, 1.05);
     const stumpGeo = new THREE.CylinderGeometry(0.5, 0.58, 0.44, 7);
 
     // Per-tree tint: a wood is never one green.
