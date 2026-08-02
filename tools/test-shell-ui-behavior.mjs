@@ -8,117 +8,12 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 // ── the minimal DOM ─────────────────────────────────────────────────────────
-class FakeTarget {
-  constructor() { this._l = new Map(); }
-  addEventListener(type, fn) {
-    if (!this._l.has(type)) this._l.set(type, new Set());
-    this._l.get(type).add(fn);
-  }
-  removeEventListener(type, fn) { this._l.get(type)?.delete(fn); }
-  dispatchEvent(event) {
-    event.target ??= this;
-    event.preventDefault ??= () => { event.defaultPrevented = true; };
-    event.stopPropagation ??= () => {};
-    event.stopImmediatePropagation ??= () => {};
-    for (const fn of [...(this._l.get(event.type) || [])]) fn(event);
-    return !event.defaultPrevented;
-  }
-  listenerCount(type) { return this._l.get(type)?.size || 0; }
-}
+// The DOM stub this file used to carry inline now lives in tools/harness/dom.mjs
+// so the scene-runtime group shares exactly the same one — two copies would
+// drift, and a stub that drifts from the thing it stands in for is worse than
+// no stub at all.
+import { FakeElement, window as win, document as doc, store } from './harness/dom.mjs';
 
-class FakeClassList {
-  constructor() { this._s = new Set(); }
-  add(c) { this._s.add(c); }
-  remove(c) { this._s.delete(c); }
-  toggle(c, on) { if (on === undefined) { if (this._s.has(c)) this._s.delete(c); else this._s.add(c); } else if (on) this._s.add(c); else this._s.delete(c); }
-  contains(c) { return this._s.has(c); }
-}
-
-// A CSSStyleDeclaration behaves in one way this suite must reproduce exactly:
-// `cssText` POPULATES the individual properties, so writing '' to one of them
-// later DELETES that declaration rather than reverting to the cssText value.
-// That is the whole shape of the pause-blur defect below; a plain {} stub
-// would have let the bug pass.
-class FakeStyle {
-  set cssText(text) {
-    for (const decl of String(text).split(';')) {
-      const i = decl.indexOf(':');
-      if (i < 0) continue;
-      const prop = decl.slice(0, i).trim().replace(/-([a-z])/g, (_, c) => c.toUpperCase());
-      if (prop) this[prop] = decl.slice(i + 1).trim();
-    }
-  }
-  get cssText() { return Object.keys(this).map((k) => `${k}:${this[k]}`).join(';'); }
-}
-
-class FakeElement extends FakeTarget {
-  constructor(tag = 'div') {
-    super();
-    this.tagName = tag.toUpperCase();
-    this.style = new FakeStyle();
-    this.children = [];
-    this.parentNode = null;
-    this.textContent = '';
-    this.className = '';
-    this.dataset = {};
-    this.attributes = new Map();
-    this.classList = new FakeClassList();
-    this.inert = false;
-    this.offsetWidth = 100;
-    this.scrollHeight = 40;
-    this.clientHeight = 40;
-    this.focusCount = 0;
-  }
-  append(...nodes) { for (const n of nodes) { n.parentNode = this; this.children.push(n); } }
-  appendChild(n) { this.append(n); return n; }
-  remove() {
-    if (!this.parentNode) return;
-    const i = this.parentNode.children.indexOf(this);
-    if (i >= 0) this.parentNode.children.splice(i, 1);
-    this.parentNode = null;
-  }
-  setAttribute(n, v) { this.attributes.set(n, String(v)); }
-  getAttribute(n) { return this.attributes.get(n) ?? null; }
-  removeAttribute(n) { this.attributes.delete(n); }
-  hasAttribute(n) { return this.attributes.has(n); }
-  contains(node) { return node === this || this.children.some((c) => c.contains?.(node)); }
-  getBoundingClientRect() { return { left: 0, top: 0, width: 800, height: 600 }; }
-  animate() { return { cancel() {} }; }
-  focus() { this.focusCount += 1; document.activeElement = this; }
-  blur() { if (document.activeElement === this) document.activeElement = document.body; }
-}
-
-const win = new FakeTarget();
-win.innerWidth = 800;
-win.innerHeight = 600;
-win.devicePixelRatio = 1;
-win.matchMedia = () => ({ matches: false });
-win.location = { hash: '' };
-win.requestIdleCallback = () => {}; // deterministic: no engine prefetch mid-test
-const doc = new FakeTarget();
-doc.hidden = false;
-doc.body = new FakeElement('body');
-doc.head = new FakeElement('head');
-doc.createElement = (tag) => new FakeElement(tag);
-doc.getElementById = () => null;
-doc.activeElement = doc.body;
-
-globalThis.window = win;
-globalThis.document = doc;
-// node 24 exposes a getter-only navigator — redefine rather than assign
-Object.defineProperty(globalThis, 'navigator', {
-  value: { userAgent: 'node', hardwareConcurrency: 8, deviceMemory: 8 },
-  configurable: true,
-});
-globalThis.screen = { width: 1920, height: 1080 };
-const store = new Map();
-globalThis.localStorage = {
-  getItem: (k) => (store.has(k) ? store.get(k) : null),
-  setItem: (k, v) => store.set(k, String(v)),
-  removeItem: (k) => store.delete(k),
-};
-globalThis.requestAnimationFrame = (fn) => setTimeout(() => fn(performance.now()), 0);
-globalThis.cancelAnimationFrame = (id) => clearTimeout(id);
 
 const tick = (ms) => new Promise((r) => setTimeout(r, ms));
 

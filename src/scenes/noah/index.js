@@ -383,7 +383,15 @@ export function buildNoahArk({ scene, camera, renderer, app, signal = null }) {
       floors: decks.floors,
       signal,
     });
-    controller.onFootstep = () => Audio.play('sfx.footstep_grass');
+    // Surface-aware: the whole interior and both ramps are planking, and the
+    // building site outside is grass. The wood slot was declared with the rest
+    // of the Noah audio and then never wired — every step on 137 m of timber
+    // deck played the grass sample, which the headless runtime harness caught
+    // on its first run.
+    controller.onFootstep = () => {
+      const onTimber = controller.deck !== null; // any deck, ramp or the gangway
+      Audio.play(onTimber ? 'sfx.footstep_wood' : 'sfx.footstep_grass');
+    };
 
     if (Graphics.contactShadow) {
       contactShadows = new ContactShadowPool(scene, 4);
