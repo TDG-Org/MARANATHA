@@ -87,7 +87,24 @@ export function drawStats(scene) {
   return { calls, triangles: Math.round(triangles), instanced };
 }
 
-// Every GPU resource the scene owns, for a before/after leak census.
+// ── DID IT ACTUALLY GIVE THE GPU RESOURCES BACK? ────────────────────────────
+//
+// Counting what is still REACHABLE after teardown proves nothing: `dispose()`
+// frees the GPU handle, it does not remove the object from the graph, and the
+// first version of this census compared reachable-before with reachable-after
+// and could therefore never fail. What matters is whether `.dispose()` was
+// CALLED on every geometry and texture the scene created — which is exactly the
+// D10 skeleton leak, where 30 textures per entry were never released and
+// nothing noticed until somebody counted.
+const DISPOSED = new WeakSet();
+for (const Cls of [THREE.BufferGeometry, THREE.Texture, THREE.Material]) {
+  const real = Cls.prototype.dispose;
+  Cls.prototype.dispose = function patchedDispose(...args) {
+    DISPOSED.add(this);
+    return real?.apply(this, args);
+  };
+}
+
 export function gpuCensus(scene) {
   const geometries = new Set();
   const textures = new Set();
@@ -103,7 +120,16 @@ export function gpuCensus(scene) {
       }
     }
   });
-  return { geometries: geometries.size, textures: textures.size, materials: materials.size };
+  const undisposed = (set) => [...set].filter((x) => !DISPOSED.has(x)).length;
+  return {
+    geometries: geometries.size,
+    textures: textures.size,
+    materials: materials.size,
+    // 0 after teardown is the whole contract.
+    undisposedGeometries: undisposed(geometries),
+    undisposedTextures: undisposed(textures),
+    undisposedMaterials: undisposed(materials),
+  };
 }
 
 // Build a scene the way core/app.js does, and hand back the controls a test
@@ -148,9 +174,29 @@ export async function bootScene(builder, { params } = {}) {
     key,
     stats: () => drawStats(scene),
     census: () => gpuCensus(scene),
-    dispose: () => {
+    // TEARDOWN IS TWO STEPS, AND THEY PROVE DIFFERENT THINGS.
+    //
+    // core/app.js runs the scene's own dispose() and THEN disposeDeep(scene).
+    // disposeDeep is a safety net that frees everything reachable from the
+    // graph — so a census taken after it can never fail for a graph-attached
+    // resource, however sloppy the scene was. (Proven: deleting the ark's
+    // wood.dispose() call changed nothing at all.)
+    //
+    // Censusing between the two steps is the assertion with teeth: it asks
+    // whether the SCENE released what it owns, rather than leaning on the net.
+    disposeScene: () => {
       lifetime.abort(new Error('harness teardown'));
       instance.dispose?.();
+    },
+    disposeDeep: async () => {
+      const { disposeDeep } = await import('../../src/core/dispose.js');
+      disposeDeep(scene);
+    },
+    dispose: async () => {
+      lifetime.abort(new Error('harness teardown'));
+      instance.dispose?.();
+      const { disposeDeep } = await import('../../src/core/dispose.js');
+      disposeDeep(scene);
     },
   };
 }

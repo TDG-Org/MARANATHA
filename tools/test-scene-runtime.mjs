@@ -52,7 +52,7 @@ ok(bootMs < 8000, `built in ${bootMs}ms — well inside the app's 12s readiness 
 // frame, which is the number a budget deserves to be judged against.
 {
   const s = h.stats();
-  ok(s.calls <= 120, `worst-case draw calls ${s.calls} (High ceiling is 120)`);
+  ok(s.calls <= 100, `worst-case draw calls ${s.calls} — Low/Med ceiling is 100, and that is the guarantee`);
   ok(s.triangles <= 120000, `worst-case triangles ${s.triangles} (ceiling 120k)`);
   ok(s.instanced >= 8, `${s.instanced} instanced meshes — repeats are batched, not per-object`);
   console.log(`  worst-case frame: ${s.calls} draws / ${s.triangles} tris / ${s.instanced} instanced`);
@@ -108,19 +108,56 @@ ok(bootMs < 8000, `built in ${bootMs}ms — well inside the app's 12s readiness 
 }
 
 // ── DISPOSE MUST GIVE EVERYTHING BACK ───────────────────────────────────────
-// The D10 skeleton leak cost 30 textures per scene entry and was invisible
-// until somebody counted. Counting is cheap; assume nothing.
+//
+// HONEST SCOPE, because the first version of this test overstated itself: this
+// walks the SCENE GRAPH, so it can only see resources attached to it. It cannot
+// detect the D10 skeleton-leak class (bone-matrix DataTextures are reachable
+// from no material) — that still needs a real renderer.info census on a device.
+//
+// It proves two different things in two steps, and the FIRST is the one with
+// teeth: core/app.js runs the scene's own dispose() and then disposeDeep(scene),
+// and disposeDeep frees everything graph-reachable — so a census taken only
+// after it can never fail however sloppy the scene was. Measured: deleting the
+// ark's wood.dispose() call changed the after-everything numbers not at all.
 {
   const before = h.census();
   ok(before.geometries > 5, `the live scene owns ${before.geometries} geometries`);
-  h.dispose();
-  const after = h.census();
+  ok(before.textures > 0, `the live scene owns ${before.textures} textures`);
+
+  // STEP 1 — the scene must release the textures IT creates, not lean on the
+  // sweeper. It creates its own canvas wood/plank textures and owns them
+  // explicitly. Measured: 7 of 13 released here normally, 3 of 13 with
+  // wood.dispose() deleted, so half is a real line rather than a magic number.
+  h.disposeScene();
+  const own = h.census();
+  const released = before.textures - own.undisposedTextures;
   ok(
-    after.geometries <= before.geometries,
-    `dispose released geometry (${before.geometries} -> ${after.geometries})`,
+    released >= before.textures * 0.5,
+    `the scene's own dispose released only ${released}/${before.textures} textures `
+    + '— it is leaning on disposeDeep for resources it created itself',
   );
-  console.log(`  gpu census: ${before.geometries} geometries / ${before.textures} textures live, `
-    + `${after.geometries}/${after.textures} after dispose`);
+
+  // STEP 2 — after the full app teardown nothing graph-reachable is left.
+  await h.disposeDeep();
+  const after = h.census();
+  // The contract is that dispose() was CALLED on everything, not that the graph
+  // shrank. Comparing reachable-before to reachable-after was the first version
+  // of this and it could never fail — dispose frees the GPU handle, it does not
+  // unlink the object.
+  ok(
+    after.undisposedGeometries === 0,
+    `${after.undisposedGeometries} geometries were never disposed (of ${before.geometries})`,
+  );
+  ok(
+    after.undisposedTextures === 0,
+    `${after.undisposedTextures} textures were never disposed (of ${before.textures})`,
+  );
+  ok(
+    after.undisposedMaterials === 0,
+    `${after.undisposedMaterials} materials were never disposed (of ${before.materials})`,
+  );
+  console.log(`  gpu census: ${before.geometries} geometries / ${before.textures} textures / `
+    + `${before.materials} materials — all disposed on teardown`);
 }
 
 // ── AND IT SURVIVES BEING ENTERED AGAIN ─────────────────────────────────────
@@ -131,7 +168,7 @@ ok(bootMs < 8000, `built in ${bootMs}ms — well inside the app's 12s readiness 
   ok(again.debug.ready, 'the scene builds a second time after a full dispose');
   const s = drawStats(again.scene);
   ok(s.calls <= 120, `second entry still inside the draw budget (${s.calls})`);
-  again.dispose();
+  await again.dispose();
 }
 
 // ── NO SOUND THE SCENE PLAYS MAY BE MISSING FROM THE MANIFEST ───────────────
