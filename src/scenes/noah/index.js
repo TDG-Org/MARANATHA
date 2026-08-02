@@ -428,6 +428,7 @@ export function buildNoahArk({ scene, camera, renderer, app, signal = null }) {
     && Math.abs(p.z) < station(p.x / ARK.halfLength).halfWidth - 0.1
   );
   let insideK = 0;      // 0 = fully outside, 1 = fully aboard
+  let poolRole = null;  // which job the shared point lights are currently doing
   let hullFaded = false;
   hull.exterior.material.transparent = false;
 
@@ -515,10 +516,12 @@ export function buildNoahArk({ scene, camera, renderer, app, signal = null }) {
         const a = nearest3[n];
         if (!a) { lanternPool[n].intensity = 0; continue; }
         lanternPool[n].position.set(a.x, a.y, a.z);
-        lanternPool[n].color.setHex(0xffb974); // back to lamplight from firelight
-        lanternPool[n].distance = 17;
+        // Role only changes when the player crosses in or out, so writing the
+        // colour and range every frame is 180 pointless conversions a second.
+        if (poolRole !== 'lantern') { lanternPool[n].color.setHex(0xffb974); lanternPool[n].distance = 17; }
         lanternPool[n].intensity = insideK * (2.25 - daylight * 1.5) * (1 + Math.sin(t * 7 + a.x) * 0.06);
       }
+      poolRole = 'lantern';
     } else {
       // Outside, the SAME three lights become the pitch fires. They are never
       // needed for both jobs at once — the whole site is hidden below decks —
@@ -527,11 +530,11 @@ export function buildNoahArk({ scene, camera, renderer, app, signal = null }) {
         const f = firePlaces[n];
         if (!f) { lanternPool[n].intensity = 0; continue; }
         lanternPool[n].position.set(f.x, f.y, f.z);
-        lanternPool[n].color.setHex(0xff8a3c);
-        lanternPool[n].distance = 9;
+        if (poolRole !== 'fire') { lanternPool[n].color.setHex(0xff8a3c); lanternPool[n].distance = 9; }
         const flick = 0.85 + Math.sin(t * 11 + f.phase) * 0.16 + Math.sin(t * 5.3 + f.phase) * 0.09;
         lanternPool[n].intensity = Math.max(0, flick) * (1 - insideK);
       }
+      poolRole = 'fire';
     }
 
     // The shafts only exist on the top deck; keep them out of the way otherwise.
