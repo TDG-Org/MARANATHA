@@ -42,3 +42,9 @@ TRIED.md
 # Instructions/to-do for Nate now live at nate-drop/NATE.md beside the files.
 # Never published — the public repo shows none of this.
 nate-drop/
+
+# Throwaway measurement scripts — these are scratch, never deliverables.
+# One was committed to the public repo because a bare `git add -A` swept it up.
+tmp-*.mjs
+probe*.tmp.mjs
+*.tmp.mjs
