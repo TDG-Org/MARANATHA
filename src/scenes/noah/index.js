@@ -15,7 +15,7 @@ import { openSettings } from '../../ui/settings.js';
 import { confirmModal } from '../../ui/modal.js';
 import { makeAbortError } from '../../core/async.js';
 import {
-  ARK, KEEL_Y, EAVES_Y, DECK_Y, DOOR, HOLD, CORRIDOR, HULL, COLORS, CUBIT,
+  ARK, KEEL_Y, EAVES_Y, DECK_Y, DECK_PITCH, DOOR, HOLD, CORRIDOR, HULL, COLORS, CUBIT,
 } from './arkSpec.js';
 import { buildHull, station } from './hull.js';
 import { buildDecks } from './decks.js';
@@ -191,6 +191,7 @@ export function buildNoahArk({ scene, camera, renderer, app, signal = null }) {
     return l;
   });
   const lanternAnchors = [];
+  let lanternGlows = null;
   {
     const g = [];
     for (let d = 0; d < 3; d++) {
@@ -211,19 +212,24 @@ export function buildNoahArk({ scene, camera, renderer, app, signal = null }) {
     m.name = 'lanterns';
     arkGroup.add(m);
 
-    // the flame glows, additive and fog-exempt
+    // The flame glows, additive and fog-exempt. ONE material for all of them —
+    // a Sprite is a draw call each, and eighteen of them was 22% of the whole
+    // scene's draw budget spent on little blobs of light.
     const tex = glowSprite();
+    const glowMat = new THREE.SpriteMaterial({
+      map: tex, color: 0xffc487, transparent: true, opacity: 0.85,
+      blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
+    });
     const sprites = new THREE.Group();
     lanternAnchors.forEach((a) => {
-      const s = new THREE.Sprite(new THREE.SpriteMaterial({
-        map: tex, color: 0xffc487, transparent: true, opacity: 0.85,
-        blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
-      }));
+      const s = new THREE.Sprite(glowMat);
       s.position.set(a.x, a.y, a.z);
       s.scale.setScalar(1.1);
+      s.userData.anchorY = a.y;
       sprites.add(s);
     });
     sprites.name = 'lantern-glows';
+    lanternGlows = sprites;
     arkGroup.add(sprites);
   }
 
@@ -429,6 +435,7 @@ export function buildNoahArk({ scene, camera, renderer, app, signal = null }) {
   );
   let insideK = 0;      // 0 = fully outside, 1 = fully aboard
   let poolRole = null;  // which job the shared point lights are currently doing
+  let glowLevel = -999; // the height the lantern-glow visibility was last solved for
   let hullFaded = false;
   hull.exterior.material.transparent = false;
 
@@ -535,6 +542,17 @@ export function buildNoahArk({ scene, camera, renderer, app, signal = null }) {
         lanternPool[n].intensity = Math.max(0, flick) * (1 - insideK);
       }
       poolRole = 'fire';
+    }
+
+    // A lantern two decks below is behind a solid deck slab: the depth test
+    // throws its pixels away, but the DRAW CALL is paid in full either way.
+    // Only the ones on the player's own level can ever be seen, and there is a
+    // whole deck of headroom in the test so a ramp climb never pops one out.
+    if (Math.abs(p.y - glowLevel) > 1.6) {
+      glowLevel = p.y;
+      for (const s of lanternGlows.children) {
+        s.visible = Math.abs(s.userData.anchorY - p.y) < DECK_PITCH * 1.15;
+      }
     }
 
     // The shafts only exist on the top deck; keep them out of the way otherwise.

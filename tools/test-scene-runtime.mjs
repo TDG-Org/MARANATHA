@@ -51,6 +51,10 @@ ok(bootMs < 8000, `built in ${bootMs}ms — well inside the app's 12s readiness 
 // This counts EVERYTHING visible with no frustum culling — the worst possible
 // frame, which is the number a budget deserves to be judged against.
 {
+  // Measure a SETTLED frame. Visibility culling (the site, the lantern glows,
+  // the particle fields) is applied in update(), so a stats read taken straight
+  // after build reports a state the player never actually sees.
+  h.step(30);
   const s = h.stats();
   ok(s.calls <= 100, `worst-case draw calls ${s.calls} — Low/Med ceiling is 100, and that is the guarantee`);
   ok(s.triangles <= 120000, `worst-case triangles ${s.triangles} (ceiling 120k)`);
