@@ -379,7 +379,14 @@ export function createApp(container) {
     // struggling machine on a 144Hz panel could never be offered anything
     // slower than every-2nd-refresh (72fps), so if it could not hold 72 it
     // juddered forever with nowhere to step down to.
-    return Math.max(rate.floor, Math.min(hz, rate.ceiling, ask));
+    //
+    // ...but that floor exists to stop the AUTOMATIC governor demoting into
+    // uselessness. It must never override a rate the PLAYER asked for: with a
+    // flat Math.max(48, ...), choosing Saver delivered 60fps on a 60Hz panel —
+    // no saving whatsoever, the exact failure Saver's target was picked to
+    // avoid — and 48 rather than 36 on a 144Hz one.
+    const floor = Math.min(rate.floor, ask);
+    return Math.max(floor, Math.min(hz, rate.ceiling, ask));
   };
   const targetFps = (displayHz) => {
     const now = performance.now();

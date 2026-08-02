@@ -633,8 +633,12 @@ console.log('Graphics quality and GPU power policy checks passed.');
   const { FRAME_TARGETS, Graphics: G } = await import('../src/systems/Graphics.js');
   const { snapToRefresh } = await import('../src/core/framePacer.js');
   const RATE_FLOOR_LOCAL = 48;
+  // Mirrors core/app.js fullRateFps EXACTLY — including that the governor's
+  // floor must not override a LOWER rate the player explicitly asked for.
   const delivered = (hz, pref) => {
-    const ask = Math.max(RATE_FLOOR_LOCAL, Math.min(hz, 144, FRAME_TARGETS[pref]));
+    const want = FRAME_TARGETS[pref];
+    const floor = Math.min(RATE_FLOOR_LOCAL, want);
+    const ask = Math.max(floor, Math.min(hz, 144, want));
     return 1000 / snapToRefresh(ask, 1000 / hz, { allowOvershoot: true });
   };
 
@@ -666,7 +670,15 @@ console.log('Graphics quality and GPU power policy checks passed.');
       `${hz}Hz: Saver (${delivered(hz, 'saver').toFixed(0)}) is not below Balanced (${delivered(hz, 'balanced').toFixed(0)})`,
     );
   }
-  assert.ok(delivered(60, 'saver') < 60, 'Saver saves nothing on a 60Hz panel');
+  // The commonest panel there is, named explicitly so it can never regress.
+  assert.ok(
+    Math.abs(delivered(60, 'saver') - 30) < 0.5,
+    `60Hz Saver should be every 2nd refresh (30fps), got ${delivered(60, 'saver').toFixed(2)}`,
+  );
+  assert.ok(
+    Math.abs(delivered(144, 'saver') - 36) < 0.5,
+    `144Hz Saver should be every 4th refresh (36fps), got ${delivered(144, 'saver').toFixed(2)}`,
+  );
 
   const saved144 = 1 - delivered(144, 'balanced') / delivered(144, 'max');
   const saved165 = 1 - delivered(165, 'balanced') / delivered(165, 'max');
