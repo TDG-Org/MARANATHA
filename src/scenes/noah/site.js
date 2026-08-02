@@ -353,7 +353,15 @@ export function buildSite(wood, { heightAt = () => 0 } = {}) {
       const h = 5.4 * scale;
       const gy = heightAt(x, z);
       trunks.push({ x, y: gy + h * 0.32, z, sy: h * 0.64, sx: scale, sz: scale, ry: rnd() * 3 });
-      canopy.push({ x, y: gy + h * 0.82, z, sx: scale, sy: scale * (0.85 + rnd() * 0.4), sz: scale, ry: rnd() * 3 });
+      // NEAR trees get the three-lump canopy; the far woodland gets one lump.
+      // At 150-200 units out, through fog, across a 137 m hull, the difference
+      // between three overlapping blobs and one is not visible — but it was
+      // 40 triangles per tree on 200-odd trees, the largest single item in the
+      // whole scene's budget.
+      canopy.push({
+        x, y: gy + h * 0.82, z, sx: scale, sy: scale * (0.85 + rnd() * 0.4), sz: scale, ry: rnd() * 3,
+        near: rr < CLEAR + 62,
+      });
       // Only the near ring blocks: the far woodland is scenery, and 300
       // colliders would be paid for on every step the player takes.
       // Only the near ring blocks — and only where the ground is genuinely
@@ -386,16 +394,28 @@ export function buildSite(wood, { heightAt = () => 0 } = {}) {
     // material with no normals is BLACK, which is exactly how the D5 flock lost
     // its wool. Every merged geometry that is going to be lit must do this.
     canopyGeo.computeVertexNormals();
+    // The distant canopy: one lump, slightly wider so it covers the same
+    // silhouette from far away.
+    const canopyFarGeo = new THREE.IcosahedronGeometry(2.85, 0);
     const stumpGeo = new THREE.CylinderGeometry(0.5, 0.58, 0.44, 7);
 
-    const foliage = instanced(canopyGeo, toonMat(0xffffff, { vertexColors: true }), canopy, 'forest-canopy', 0xffffff);
     // Per-tree tint: a wood is never one green.
     const tints = [0x5f8a44, 0x6e9a4e, 0x54793c, 0x7aa457, 0x4c6f38];
     const c = new THREE.Color();
-    canopy.forEach((_, n) => { c.set(tints[(rnd() * tints.length) | 0]); foliage.setColorAt(n, c); });
-    if (foliage.instanceColor) foliage.instanceColor.needsUpdate = true;
-    foliage.frustumCulled = false;
-    group.add(foliage);
+    const foliageMat = toonMat(0xffffff, { vertexColors: true });
+    const addFoliage = (list, geo, name) => {
+      if (!list.length) return;
+      const mesh = instanced(geo, foliageMat, list, name, 0xffffff);
+      list.forEach((_, n) => { c.set(tints[(rnd() * tints.length) | 0]); mesh.setColorAt(n, c); });
+      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+      mesh.frustumCulled = false;
+      group.add(mesh);
+    };
+    // Two draws instead of one, and both share a material — a trade that buys
+    // back roughly 8,000 triangles from geometry nobody can resolve anyway.
+    addFoliage(canopy.filter((t) => t.near), canopyGeo, 'forest-canopy');
+    addFoliage(canopy.filter((t) => !t.near), canopyFarGeo, 'forest-canopy-far');
+    geos.push(canopyFarGeo);
     group.add(instanced(trunkGeo, timberMat, trunks, 'forest-trunks', 0xbdaa8e));
     group.add(instanced(stumpGeo, timberMat, stumps, 'forest-stumps', 0xe8d8bc));
     geos.push(trunkGeo, canopyGeo, stumpGeo);

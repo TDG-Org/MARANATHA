@@ -83,7 +83,13 @@ export function buildNoahArk({ scene, camera, renderer, app, signal = null }) {
     mottle: [0xfbffe8, 0xf2e6c4],
     map: grassTex,
     width: 460, depth: 320, z: 0,
-    segX: 110, segZ: 76,
+    // 110x76 was 16,720 triangles — 18% of the whole scene — spent on a pad
+    // that is DEAD FLAT across the entire building site. Tessellation only buys
+    // anything where the terrain actually rolls (beyond the pad) and for the
+    // vertex mottle, and neither needs a vertex every four metres. At 64x44 the
+    // cells are ~7m, the mottle is a near-white wash over a grass photo so it
+    // reads identically, and 11,088 triangles come back.
+    segX: 64, segZ: 44,
     pads: [{ x: 0, z: 8, flatCore: 118, falloff: 62 }],
   });
   ground.position.y = 0.02; // so the walked surface is exactly y = 0
@@ -260,12 +266,15 @@ export function buildNoahArk({ scene, camera, renderer, app, signal = null }) {
   smoke.init();
   embers.init();
   scene.add(smoke.points, embers.points);
-  const fireLights = site.fireEmitters.map((e) => {
-    const l = new THREE.PointLight(0xff8a3c, 0.9, 9, 1.6);
-    l.position.set(e.x, 1.0, e.z);
-    scene.add(l);
-    return { light: l, phase: e.x * 1.7 };
-  });
+  // ONE POOL, NOT TWO. The pitch fires and the below-decks lanterns are never
+  // both relevant: the fires are outside and the whole site is hidden while the
+  // player is aboard. Two separate pools meant the scene carried FIVE point
+  // lights at all times, and every lit fragment in the game pays for every one
+  // of them whether it contributes or not — the count cannot be changed at
+  // runtime either, because it is baked into each material's shader cache key
+  // (D24). Sharing three lights between the two jobs cuts the per-pixel lighting
+  // work by 40% and never changes the count.
+  const firePlaces = site.fireEmitters.map((e) => ({ x: e.x, y: 1.0, z: e.z, phase: e.x * 1.7 }));
 
   // ── AUDIO ──────────────────────────────────────────────────────────────────
   Audio.unlock?.();
@@ -468,11 +477,6 @@ export function buildNoahArk({ scene, camera, renderer, app, signal = null }) {
       smoke.update(dt, t);
       embers.update(dt, t);
     }
-    for (const f of fireLights) {
-      const flick = 0.85 + Math.sin(t * 11 + f.phase) * 0.16 + Math.sin(t * 5.3 + f.phase) * 0.09;
-      f.light.intensity = Math.max(0, flick);
-    }
-
     if (!ready) return;
     controller.update(dt);
 
@@ -511,10 +515,23 @@ export function buildNoahArk({ scene, camera, renderer, app, signal = null }) {
         const a = nearest3[n];
         if (!a) { lanternPool[n].intensity = 0; continue; }
         lanternPool[n].position.set(a.x, a.y, a.z);
+        lanternPool[n].color.setHex(0xffb974); // back to lamplight from firelight
+        lanternPool[n].distance = 17;
         lanternPool[n].intensity = insideK * (2.25 - daylight * 1.5) * (1 + Math.sin(t * 7 + a.x) * 0.06);
       }
     } else {
-      for (const l of lanternPool) l.intensity = 0;
+      // Outside, the SAME three lights become the pitch fires. They are never
+      // needed for both jobs at once — the whole site is hidden below decks —
+      // so the scene never carries more than three point lights.
+      for (let n = 0; n < lanternPool.length; n++) {
+        const f = firePlaces[n];
+        if (!f) { lanternPool[n].intensity = 0; continue; }
+        lanternPool[n].position.set(f.x, f.y, f.z);
+        lanternPool[n].color.setHex(0xff8a3c);
+        lanternPool[n].distance = 9;
+        const flick = 0.85 + Math.sin(t * 11 + f.phase) * 0.16 + Math.sin(t * 5.3 + f.phase) * 0.09;
+        lanternPool[n].intensity = Math.max(0, flick) * (1 - insideK);
+      }
     }
 
     // The shafts only exist on the top deck; keep them out of the way otherwise.

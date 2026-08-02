@@ -180,4 +180,37 @@ ok(bootMs < 8000, `built in ${bootMs}ms — well inside the app's 12s readiness 
   );
 }
 
+
+// ── THE SCENE MUST NOT CARRY LIGHTS IT IS NOT USING ────────────────────────
+// Every lit fragment in the game pays for every point light in the scene,
+// whether it contributes or not — and the count cannot be changed at runtime,
+// because it is baked into each material's shader cache key (D24: toggling one
+// recompiles the world mid-stride). So the count must be as low as the scene
+// can manage and CONSTANT. The pitch fires and the below-decks lanterns are
+// never both relevant, so they share one pool of three.
+{
+  const h2 = await bootScene(buildNoahArk);
+  const pointLights = [];
+  h2.scene.traverse((o) => { if (o.isPointLight) pointLights.push(o); });
+  ok(pointLights.length <= 3, `${pointLights.length} point lights — every lit pixel pays for each one`);
+
+  const lit = () => pointLights.filter((l) => l.intensity > 0.01).length;
+  h2.debug.controller.teleport(DOOR.x, 0, 40);
+  h2.step(120);
+  const outside = lit();
+  ok(outside > 0, 'the pitch fires light the building site');
+
+  h2.debug.controller.teleport(0, DECK_Y[0], 0);
+  h2.step(240);
+  ok(lit() > 0, 'the lanterns light the hold');
+
+  // ...and the COUNT never moved, only the intensities.
+  let after = 0;
+  h2.scene.traverse((o) => { if (o.isPointLight) after += 1; });
+  ok(after === pointLights.length,
+    `the point-light count changed from ${pointLights.length} to ${after} — that recompiles every lit material`);
+  console.log(`  lighting: ${pointLights.length} point lights, shared between the fires and the lanterns`);
+  await h2.dispose();
+}
+
 console.log(`scene runtime: ${checks} checks passed — real scene, no browser, ${bootMs}ms to boot`);
