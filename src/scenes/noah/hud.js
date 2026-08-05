@@ -38,7 +38,20 @@ const DECK_NAMES = {
   boarding: 'Boarding ramp',
 };
 
-export function buildHud({ onHome, onSettings }) {
+// NOTE: this HUD deliberately has NO settings gear.
+//
+// It used to carry one at top-right, which is the corner the persistent
+// #volume control already owns (index.html, z-index 30) — and this root is
+// z-index 24, so the gear sat UNDER it. Measured with elementFromPoint: 0 of 49
+// probes across the button reached it on every phone size, and a real press at
+// its centre fell through to the master-volume slider and slammed the volume
+// from 0.30 to 0.83 while opening nothing. A control that is 100% dead and
+// destructive is worse than no control.
+//
+// The pause menu's own gear (ui/pause.js, top:56px, z-index 57) is live, opens
+// the same panel, and is deliberately offset to clear #volume — the rule this
+// surface had missed. Two identical cogs in one corner was the real mistake.
+export function buildHud({ onHome }) {
   const root = document.createElement('div');
   root.style.cssText = 'position:fixed; inset:0; z-index:24; pointer-events:none; font-family:"Segoe UI",system-ui,sans-serif; color:#f6efe0; text-shadow:0 1px 3px rgba(0,0,0,0.55);';
 
@@ -58,10 +71,7 @@ export function buildHud({ onHome, onSettings }) {
 
   const home = mkBtn('⌂', 'Return home', onHome);
   home.style.cssText += ';position:fixed; top:calc(12px + env(safe-area-inset-top)); left:calc(14px + env(safe-area-inset-left));';
-  const gear = mkBtn('⚙', 'Settings', onSettings);
-  gear.style.cssText += ';position:fixed; top:calc(12px + env(safe-area-inset-top)); right:calc(14px + env(safe-area-inset-right));';
-
-  root.append(title, hint, readout, home, gear);
+  root.append(title, hint, readout, home);
   document.body.append(root);
 
   let lastLabel = null;

@@ -444,3 +444,99 @@ console.log('Frame pacer acceptance checks passed.');
   }
   console.log('panel measurement: immune to frame-cost contamination, and still jitter-robust');
 }
+
+// ── POISON AND RECOVER ──────────────────────────────────────────────────────
+//
+// Frames that steadily overrun a refresh make every chained gap a whole
+// MULTIPLE of the refresh, and the estimator is allowed to read that as the
+// panel (24ms of work on a 144Hz panel puts the next callback 27.8ms later,
+// which is under MAX_PERIOD_MS). The pace then follows the wrong number down,
+// and under 45fps the loop sleeps on a timer — which stops chained callbacks,
+// which stops sampling. The wrong number used to be PERMANENT: measured live,
+// a throttled 144Hz panel settled on "display 44Hz" and never moved again once
+// the throttle was removed. Only a reload escaped.
+{
+  const priorRaf = globalThis.requestAnimationFrame;
+  const priorCancel = globalThis.cancelAnimationFrame;
+  const priorTimeout = globalThis.setTimeout;
+  const priorClear = globalThis.clearTimeout;
+  const priorDoc = globalThis.document;
+  const priorPerf = globalThis.performance;
+
+  // Same virtual clock as above, plus the thing that actually matters here: a
+  // frame that COSTS time delays the next callback past one or more vsyncs.
+  const run = async (displayHz, phases) => {
+    let clock = 0;
+    let nextId = 1;
+    let busyUntil = 0;
+    let didWork = false;
+    let seenHz = 0;
+    const rafQueue = new Map();
+    const timerQueue = new Map();
+
+    globalThis.performance = { now: () => clock };
+    globalThis.document = { hidden: false, addEventListener() {}, removeEventListener() {} };
+    globalThis.requestAnimationFrame = (fn) => { const id = nextId++; rafQueue.set(id, fn); return id; };
+    globalThis.cancelAnimationFrame = (id) => rafQueue.delete(id);
+    globalThis.setTimeout = (fn, ms = 0) => {
+      const id = nextId++;
+      timerQueue.set(id, { fn, at: clock + Math.max(0, ms) });
+      return id;
+    };
+    globalThis.clearTimeout = (id) => timerQueue.delete(id);
+
+    const { startLoop } = await import(`../src/core/renderer.js?latch=${displayHz}-${Date.now()}`);
+    // Mirrors app.js: the request is clamped by whatever the pacer believes the
+    // display to be, which is how a poisoned estimate drags the pace under 45.
+    const loop = startLoop(
+      () => { didWork = true; },
+      (hz) => { seenHz = hz; return Math.max(30, Math.min(hz > 0 ? hz : 60, 60)); },
+    );
+
+    const step = 1000 / displayHz;
+    const marks = [];
+    let elapsed = 0;
+    for (const phase of phases) {
+      const until = elapsed + phase.seconds * 1000;
+      while (elapsed < until) {
+        elapsed += step;
+        for (const [id, t] of [...timerQueue]) {
+          if (t.at <= elapsed) { clock = t.at; timerQueue.delete(id); t.fn(); }
+        }
+        clock = elapsed;
+        if (clock >= busyUntil) {
+          const pending = [...rafQueue];
+          rafQueue.clear();
+          for (const [, fn] of pending) fn(clock);
+          if (didWork) { didWork = false; busyUntil = clock + phase.costMs; }
+        }
+      }
+      marks.push({ label: phase.label, seenHz });
+    }
+    loop.stop();
+    globalThis.requestAnimationFrame = priorRaf;
+    globalThis.cancelAnimationFrame = priorCancel;
+    globalThis.setTimeout = priorTimeout;
+    globalThis.clearTimeout = priorClear;
+    globalThis.document = priorDoc;
+    globalThis.performance = priorPerf;
+    return marks;
+  };
+
+  for (const hz of [144, 60]) {
+    const cost = hz === 144 ? 24 : 22;
+    const marks = await run(hz, [
+      { label: 'warm', seconds: 1.2, costMs: 1 },
+      { label: 'slow', seconds: 6, costMs: cost },
+      { label: 'recovered', seconds: 10, costMs: 1 },
+    ]);
+    const byLabel = Object.fromEntries(marks.map((m) => [m.label, m.seenHz]));
+    assert.ok(byLabel.warm >= hz * 0.9,
+      `${hz}Hz: the panel must measure correctly while frames are cheap (got ${byLabel.warm})`);
+    assert.ok(byLabel.recovered >= hz * 0.9,
+      `${hz}Hz: after the slow phase the pacer must RE-MEASURE the real panel, not stay `
+      + `latched on the game's own frame cost (poisoned to ${byLabel.slow}, `
+      + `still reporting ${byLabel.recovered} ten seconds later)`);
+  }
+  console.log('pacer latch: a mis-measured display recovers once frames are cheap again (144Hz + 60Hz)');
+}

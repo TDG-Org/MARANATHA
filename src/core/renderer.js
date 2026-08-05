@@ -113,9 +113,48 @@ export function startLoop(tick, getFps = () => 60) {
   // callbacks anyway. (Before the pacer snapped to the panel, this compared
   // against a flat 60 and would now put an even 72fps on a timer.)
   const CHAIN_ABOVE_FPS = 45;
+  // THE LATCH THIS BREAKS.
+  //
+  // Only a CHAINED callback is one refresh after the last, so the pacer samples
+  // nothing else. But the timer path below is taken whenever the pace drops
+  // under 45 — and the pace drops under 45 when the pacer has mis-measured the
+  // panel, which it does whenever frames steadily overrun a refresh (a 24ms
+  // frame on a 144Hz panel arrives 4 refreshes later, and 27.8ms is a legal
+  // "period"). From then on there are no chained callbacks, so there are no
+  // samples, so the wrong number can never be corrected: measured live in
+  // Chrome, a throttled 144Hz panel settled on "display 44Hz -> paced 43.7" and
+  // stayed there after the throttle was removed, for the rest of the session.
+  // Only a reload escaped it. Every budget the adaptive systems judge against
+  // is derived from that number, so the machines most in need of tuning were
+  // the ones whose tuning was calibrated wrong.
+  //
+  // So: on the timer path, take a short BURST of chained callbacks now and
+  // then. Consecutive ones are needed — a lone chained wake-up is a second
+  // after the last and gets filtered as a stall — and once real refresh-length
+  // gaps are back in the ring the estimator's fast-cluster anchor recovers the
+  // true panel by itself. ~32 cheap callbacks every 3s; they cost a rejected
+  // advance() each.
+  const REMEASURE_EVERY_MS = 3000;
+  const REMEASURE_FRAMES = 32;
+  let remeasureLeft = 0;
+  let lastRemeasure = 0;
   const arm = (delay) => {
     const paced = pacer.pacedFps;
+    if (remeasureLeft > 0) {
+      remeasureLeft -= 1;
+      wokeChained = true;
+      raf = requestAnimationFrame(frame);
+      return;
+    }
     if (paced > 0 && paced < CHAIN_ABOVE_FPS && delay > ARM_EARLY_MS) {
+      const now = performance.now();
+      if (now - lastRemeasure > REMEASURE_EVERY_MS) {
+        lastRemeasure = now;
+        remeasureLeft = REMEASURE_FRAMES;
+        wokeChained = true;
+        raf = requestAnimationFrame(frame);
+        return;
+      }
       gap = setTimeout(() => {
         gap = 0;
         if (!running) return;

@@ -1,4 +1,5 @@
 import { withObjectivePrepaint } from '../../ui/objectivePrepaint.js';
+import { saveGeneration } from '../../systems/SaveSystem.js';
 export { withObjectivePrepaint, isObjectivePrepaintActive } from '../../ui/objectivePrepaint.js';
 
 const INTERACTIVE_CHECKPOINTS = new Set([1, 2, 4, 6]);
@@ -15,12 +16,17 @@ export function createCheckpointPersistence({
   saveBeat = () => {},
   saveCompletion = () => {},
 } = {}) {
+  // If the player wipes their progress from the pause menu mid-story, this
+  // handle is stale: every later beat would write its checkpoint back into the
+  // save that was just cleared. Born in one generation, silent after a reset.
+  const bornIn = saveGeneration();
+  const live = () => !isolated && saveGeneration() === bornIn;
   return Object.freeze({
     checkpoint(beat) {
-      if (!isolated) saveBeat(beat);
+      if (live()) saveBeat(beat);
     },
     complete() {
-      if (!isolated) saveCompletion();
+      if (live()) saveCompletion();
     },
   });
 }

@@ -174,7 +174,11 @@ function buildUI({ onState, onBeat, onNarrate, onSettings, onHome }) {
   const home = mkBtn('⌂ Home', onHome);
   home.style.cssText += 'position:fixed; top:calc(12px + env(safe-area-inset-top)); left:calc(14px + env(safe-area-inset-left));';
   const gear = mkBtn('⚙', onSettings);
-  gear.style.cssText += 'position:fixed; top:calc(12px + env(safe-area-inset-top)); right:calc(14px + env(safe-area-inset-right));';
+  // 56px, not 12px: the persistent #volume control owns the top-right corner at
+  // z-index 30 and this root is 24, so a gear at 12px sits UNDER it and every
+  // press lands on the volume slider instead (the same collision that made the
+  // ark's gear 100% dead). ui/pause.js offsets its own gear for exactly this.
+  gear.style.cssText += 'position:fixed; top:calc(56px + env(safe-area-inset-top)); right:calc(14px + env(safe-area-inset-right));';
 
   // Animation state row (also keys 1-5).
   const row = document.createElement('div');

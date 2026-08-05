@@ -5,7 +5,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "test": "npm run test:pacing && npm run test:camera && npm run test:backdrop && npm run test:lifetime && npm run test:ui-lifetime && npm run test:beats && npm run test:story && npm run test:layout && npm run test:models && npm run test:collision && npm run test:decks && npm run test:ark && npm run test:audio-power && npm run test:graphics-power && npm run test:render-power && npm run test:scene-runtime && npm run test:app && npm run test:shell-ui && npm run test:vo && npm run test:license && npm run test:gpu",
+    "test": "npm run test:pacing && npm run test:camera && npm run test:backdrop && npm run test:lifetime && npm run test:ui-lifetime && npm run test:beats && npm run test:story && npm run test:layout && npm run test:models && npm run test:collision && npm run test:decks && npm run test:ark && npm run test:audio-power && npm run test:graphics-power && npm run test:render-power && npm run test:scene-runtime && npm run test:app && npm run test:shell-ui && npm run test:vo && npm run test:license && npm run test:gpu && npm run test:traps",
     "start": "vite --port 1225 --strictPort --open",
     "vo": "node tools/make-vo.mjs",
     "shots": "node tools/capture-screenshots.mjs",
@@ -29,6 +29,7 @@
     "test:vo": "node tools/test-vo-assets.mjs",
     "test:license": "node tools/test-license.mjs",
     "test:gpu": "node tools/test-gpu-fallback.mjs",
+    "test:traps": "node tools/test-player-traps.mjs",
     "test:shell-ui": "node tools/test-shell-ui-behavior.mjs",
     "test:decks": "node tools/test-deck-field.mjs",
     "test:ark": "node tools/test-ark-model.mjs",

@@ -346,10 +346,22 @@ export function buildNoahArk({ scene, camera, renderer, app, signal = null }) {
     },
   ]);
 
+  // THE SCENE'S OWN TRUTH ABOUT INPUT, kept separately from the controller's
+  // live flag. The pause menu restores input on resume by asking the scene what
+  // it WANTS ("a cutscene may have legally changed input state while we were
+  // paused"). Asking `controller.enabled` cannot answer that: pause itself sets
+  // it to false on the way in, so the question returns pause's own answer and
+  // input is restored to OFF — permanently. Measured: after one Esc-open-close
+  // the player could not move again for the rest of the visit, on keyboard AND
+  // on the touch stick. Joseph has always kept this separate variable
+  // (joseph3d/index.js `inputOn`); the ark was the one scene that did not.
+  let sceneWantsInput = true;
+  const setSceneInput = (on) => { sceneWantsInput = !!on; controller?.setEnabled(!!on); };
+
   const hud = buildHud({
     onHome: async () => {
-      const wasOn = controller?.enabled;
-      controller?.setEnabled(false);
+      const wasOn = sceneWantsInput;
+      setSceneInput(false);
       const leave = await confirmModal({
         title: 'Return home?',
         body: 'The ark will be here when you come back.',
@@ -357,14 +369,13 @@ export function buildNoahArk({ scene, camera, renderer, app, signal = null }) {
         cancelText: 'Keep looking',
       });
       if (leave) await app.navigate('home');
-      else controller?.setEnabled(wasOn !== false);
+      else setSceneInput(wasOn !== false);
     },
-    onSettings: () => openSettings({}),
   });
 
   const pause = createPauseMenu({
     app,
-    isInputOn: () => !!controller?.enabled,
+    isInputOn: () => sceneWantsInput,
     setInput: (on) => controller?.setEnabled(on),
     onSettings: () => openSettings({}),
     onHome: async () => {

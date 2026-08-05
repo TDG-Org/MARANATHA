@@ -5,6 +5,17 @@ import { STORIES } from '../data/stories.js';
 // can never get into a broken state.
 const KEY = 'maranatha-save-v1';
 
+// A RESET HAS TO STICK EVEN WHILE A STORY IS RUNNING.
+//
+// The pause menu's ⚙ is reachable at every moment of the story, so a player can
+// reset progress mid-scene, resume, and have the very next beat write its
+// checkpoint straight back — the confirm modal says "This cannot be undone" and
+// then it quietly is. Only the home screen ever passed an onReset hook, so the
+// fix cannot live in the UI wiring. Anything holding a save handle records the
+// generation it was born in and stops writing when that changes.
+let generation = 0;
+export const saveGeneration = () => generation;
+
 function read() {
   try {
     const raw = localStorage.getItem(KEY);
@@ -96,6 +107,9 @@ export function clearCheckpoint(sceneId) {
 }
 
 export function resetProgress() {
+  // Bump FIRST: even if the removal throws (storage denied), anything holding a
+  // save handle must stop writing, or the wipe is undone by the next beat.
+  generation += 1;
   try {
     localStorage.removeItem(KEY);
   } catch {

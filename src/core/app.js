@@ -282,7 +282,18 @@ export function createApp(container) {
         try {
           const readyResult = await waitWithDeadline(
             ready,
-            12000,
+            // 40s, not 12. This deadline exists to catch a WEDGED load — a
+            // fetch that will never finish — but it was catching merely SLOW
+            // ones too. A story pulls ~3.7 MB of rigs, textures and narration;
+            // measured, a 3G-class link (100 KB/s) was bounced back to the menu
+            // TWICE with "The story assets did not finish loading" before the
+            // third attempt inherited a warm HTTP cache, and even an ordinary
+            // 400 KB/s mobile link revealed at 12.8s against a ~13.1s deadline
+            // — a 300ms margin, so a cold CDN or a busy phone tipped it over.
+            // A wedged fetch still fails, just later; a slow one now succeeds,
+            // which is the far commoner case. (The honest long-term fix is a
+            // stall-aware deadline that resets while bytes are still arriving.)
+            40000,
             `Screen "${readyKey}" readiness timed out`,
             { rejectOnTimeout: false },
           );
