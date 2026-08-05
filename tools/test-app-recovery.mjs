@@ -322,3 +322,72 @@ assert.match(
 );
 
 console.log('App deadline, failed-screen disposal, and visible recovery checks passed.');
+
+// ── SLOW IS NOT STUCK ───────────────────────────────────────────────────────
+//
+// A flat wall-clock deadline over a download cannot tell them apart. A story
+// pulls ~3.7MB; a 12s limit threw 3G-class connections back to the menu with
+// "The story assets did not finish loading" while the download was progressing
+// perfectly, and a 400 KB/s link finished with ~300ms to spare. Raising the
+// number only moves the line. This waits while things keep ARRIVING.
+{
+  const { waitWhileProgressing } = await import('../src/core/deadline.js');
+
+  // A slow load: progress keeps ticking, far past any flat deadline.
+  {
+    let n = 0;
+    let done;
+    const promise = new Promise((r) => { done = r; });
+    const t = setInterval(() => { n += 1; if (n === 12) done('loaded'); }, 20);
+    const result = await waitWhileProgressing(promise, {
+      progress: () => n, stallMs: 200, hardCapMs: 60000, pollMs: 10,
+    });
+    clearInterval(t);
+    assert.equal(result, 'loaded',
+      'a download that keeps progressing must be allowed to finish, however slow');
+  }
+
+  // A wedged load: progress freezes, and it must give up promptly.
+  {
+    const started = Date.now();
+    const result = await waitWhileProgressing(new Promise(() => {}), {
+      progress: () => 7, // never changes
+      stallMs: 250, hardCapMs: 60000, pollMs: 10, rejectOnTimeout: false,
+    });
+    const took = Date.now() - started;
+    assert.equal(result, false, 'a wedged download must resolve to the recoverable sentinel');
+    assert.ok(took < 3000, `a wedge must be caught promptly, took ${took}ms`);
+  }
+
+  // The hard cap is the backstop when the progress signal itself lies.
+  {
+    let n = 0;
+    const result = await waitWhileProgressing(new Promise(() => {}), {
+      progress: () => (n += 1), // "progress" forever, but nothing ever loads
+      stallMs: 5000, hardCapMs: 300, pollMs: 10, rejectOnTimeout: false,
+    });
+    assert.equal(result, false, 'a progress signal that always changes must still hit the hard cap');
+  }
+
+  // A progress source that throws must never be the reason a player is stranded.
+  {
+    const result = await waitWhileProgressing(Promise.resolve('ok'), {
+      progress: () => { throw new Error('no timing API'); },
+      stallMs: 100, hardCapMs: 1000, pollMs: 10,
+    });
+    assert.equal(result, 'ok', 'a throwing progress source must not break a successful load');
+  }
+
+  // A real rejection is still an error, never a silent false.
+  {
+    let threw = false;
+    try {
+      await waitWhileProgressing(Promise.reject(new Error('boom')), {
+        progress: () => 1, stallMs: 100, hardCapMs: 1000, pollMs: 10, rejectOnTimeout: false,
+      });
+    } catch (e) { threw = e.message === 'boom'; }
+    assert.ok(threw, 'a genuine load failure must still reject, not resolve false');
+  }
+
+  console.log('loading: waits while assets keep arriving, gives up promptly when they stop');
+}

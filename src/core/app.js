@@ -7,7 +7,7 @@ import { Settings } from '../systems/Settings.js';
 import { Graphics } from '../systems/Graphics.js';
 import { PostFX } from '../engine/PostFX.js';
 import { makeAbortError } from './async.js';
-import { waitWithDeadline } from './deadline.js';
+import { waitWithDeadline, waitWhileProgressing } from './deadline.js';
 import { resolveLazyScreen } from './lazyScreen.js';
 
 // The app shell: owns the renderer, camera, loop, adaptive quality, and the
@@ -57,6 +57,26 @@ export function createApp(container) {
   let busy = false;
   let updateErrors = 0;
   let dismissGpuNotice = null; // body-level, so the screen teardown must own it
+
+  // "Is anything still arriving?" — the signal that lets the loading wait tell a
+  // slow connection from a wedged one. Any monotonic measure would do; completed
+  // resource entries plus their bytes is the one the platform gives us for free
+  // and needs no plumbing into every loader.
+  const assetProgress = () => {
+    try {
+      const entries = performance.getEntriesByType('resource');
+      let bytes = 0;
+      for (const entry of entries) bytes += entry.transferSize || entry.encodedBodySize || 0;
+      // The resource-timing buffer is CAPPED (250 entries by default). Once it
+      // fills, new entries stop appearing and a perfectly healthy download would
+      // look stalled — the exact false failure this wait exists to prevent.
+      // Clearing is safe: nothing else in the app reads these.
+      if (entries.length > 200) performance.clearResourceTimings?.();
+      return `${entries.length}:${bytes}`;
+    } catch {
+      return ''; // no timing API: the hard cap is the only backstop
+    }
+  };
   let loopController = null;
 
   const initEngine = (mod) => {
@@ -280,23 +300,19 @@ export function createApp(container) {
           loaderVisible = true;
         }
         try {
-          const readyResult = await waitWithDeadline(
-            ready,
-            // 40s, not 12. This deadline exists to catch a WEDGED load — a
-            // fetch that will never finish — but it was catching merely SLOW
-            // ones too. A story pulls ~3.7 MB of rigs, textures and narration;
-            // measured, a 3G-class link (100 KB/s) was bounced back to the menu
-            // TWICE with "The story assets did not finish loading" before the
-            // third attempt inherited a warm HTTP cache, and even an ordinary
-            // 400 KB/s mobile link revealed at 12.8s against a ~13.1s deadline
-            // — a 300ms margin, so a cold CDN or a busy phone tipped it over.
-            // A wedged fetch still fails, just later; a slow one now succeeds,
-            // which is the far commoner case. (The honest long-term fix is a
-            // stall-aware deadline that resets while bytes are still arriving.)
-            40000,
-            `Screen "${readyKey}" readiness timed out`,
-            { rejectOnTimeout: false },
-          );
+          // SLOW IS NOT STUCK. A flat wall-clock limit over ~3.7 MB of assets
+          // threw 3G-class connections back to the menu with "The story assets
+          // did not finish loading" while the download was progressing fine —
+          // and a 400 KB/s link finished with ~300ms to spare. This waits as
+          // long as things keep ARRIVING and gives up only when nothing has
+          // arrived for 20s, so a wedged fetch still fails promptly.
+          const readyResult = await waitWhileProgressing(ready, {
+            progress: assetProgress,
+            stallMs: 20000,
+            hardCapMs: 180000,
+            message: `Screen "${readyKey}" readiness timed out`,
+            rejectOnTimeout: false,
+          });
           if (readyResult === false) {
             throw new Error(`Screen "${readyKey}" readiness timed out`);
           }
