@@ -90,7 +90,7 @@ cubit that is <b>450 × 75 × 45 feet</b>, and it is built at exactly that size.
 
 | Action | Desktop | Touch |
 |---|---|---|
-| Move | **WASD** / **arrow keys**, or **click** a spot | on‑screen **joystick**, or **tap** a spot |
+| Move | **WASD** / **arrow keys** | on‑screen **joystick** |
 | Run | hold **Shift** | push the joystick fully |
 | Talk / interact | walk close, press **E** | tap the **Talk** prompt |
 | Advance dialogue | **Enter** / **Space** / **click** | tap |
