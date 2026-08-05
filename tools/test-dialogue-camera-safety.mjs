@@ -1176,18 +1176,17 @@ assert.ok(
 // Betrayal prowl -> strip: dialogue duration can end the orbit at any phase.
 // The visible transition is covered, and all phases must therefore land on
 // one identical endpoint that clears the full escort formation and pit rim.
-const coldOpenSource = readFileSync(
-  new URL('../src/scenes/joseph3d/beats/coldOpen.js', import.meta.url),
-  'utf8',
-);
-const tellingSource = readFileSync(
-  new URL('../src/scenes/joseph3d/beats/telling.js', import.meta.url),
-  'utf8',
-);
-const campCameraSource = readFileSync(
-  new URL('../src/scenes/joseph3d/beats/camp.js', import.meta.url),
-  'utf8',
-);
+// LINE ENDINGS MUST NOT COUNT. Several assertions below use a bounded window
+// (`[\s\S]{0,500}`) between two tokens, and this repo checks out with CRLF on
+// Windows (core.autocrlf) — which adds one character per line. Measured: the
+// SHOT 3 -> groupArc window is 495 characters with LF and 507 with CRLF, so a
+// 500-character window passed on the machine that wrote it and failed on a
+// fresh clone, on code nobody had touched. Normalise once, here.
+const readSource = (rel) => readFileSync(new URL(rel, import.meta.url), 'utf8')
+  .split('\r\n').join('\n');
+const coldOpenSource = readSource('../src/scenes/joseph3d/beats/coldOpen.js');
+const tellingSource = readSource('../src/scenes/joseph3d/beats/telling.js');
+const campCameraSource = readSource('../src/scenes/joseph3d/beats/camp.js');
 const loneSourceStart = tellingSource.indexOf('const lone =');
 const loneSourceEnd = tellingSource.indexOf("heading: 'To be continued'", loneSourceStart);
 assert.ok(loneSourceStart >= 0 && loneSourceEnd > loneSourceStart);

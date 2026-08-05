@@ -250,8 +250,22 @@ assert.match(
 );
 assert.match(pitSource, /const MEAL = \{ x: PIT\.x \+ 31, z: PIT\.z - 9\.5 \}/,
   'the meal camp drifted back beside the cistern');
-assert.match(pitSource, /const campTents = new THREE\.InstancedMesh\(/,
-  'the distant tree/fire destination has no readable camp silhouette');
+// Keyed to the GUARANTEE, not the construction. This required a literal
+// `new THREE.InstancedMesh(`, so building the same silhouette from the shared
+// tent maker — which upgraded three flat black cones into six real tents —
+// broke a test whose intent the change strengthened.
+assert.match(pitSource, /const \{ mesh: campTents \} = makeTents\(|const campTents = new THREE\.InstancedMesh\(/,
+  'the distant meal destination has no readable camp silhouette');
+// ...and it must be the camp at DOTHAN, not Jacob's camp at Hebron. Genesis
+// 37:12-17 puts a journey between them, and 37:31-35 needs that distance for
+// the bloodied tunic to be necessary at all — so the cold open must never
+// reveal the family camp (62 units away) as the brothers' destination.
+assert.ok(
+  !/ctx\.setDistantCamp\?\.\(true\)/.test(coldOpenSource),
+  'the cold open walks the brothers home to the HEBRON camp, 62 units from the pit — '
+  + 'Scripture puts a journey between Dothan and Hebron, and the closing card promises '
+  + '"the road to Dothan" as the next chapter',
+);
 assert.match(
   sceneSource,
   /ground\.material\.color\.set\(name === 'pit' \? 0x46505c : 0xffffff\)/,

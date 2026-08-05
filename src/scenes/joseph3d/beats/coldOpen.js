@@ -458,9 +458,10 @@ export function makeColdOpen(ctx, h) {
         ctx.sound('sfx.pit_impact'); // the dull earth landing
       } },
       { t: 'wait', ms: 1500 },
-      // SHOT 5 — CUT: the brothers walk away SLOWLY toward a nearby fire/meal.
+      // SHOT 5 — CUT: the brothers walk away SLOWLY toward the meal camp.
       // Genesis 37:25 says they sat down to eat; it does not say they went
-      // home. The scene fades before arrival and makes no stronger claim.
+      // home, and this shot must not say so either. The scene fades before
+      // arrival and makes no stronger claim than the verse.
       // Framed from behind so no one ever looks back.
       { t: 'fade', on: true, ms: 500 },
       { t: 'fn', fn: () => {
@@ -469,12 +470,15 @@ export function makeColdOpen(ctx, h) {
         // outside as a stray white disc over the brothers' walk-off.
         P.setSkyLight(0);
         P.setMealGlow(1);
-        // They are walking home. Show the REAL camp out there rather than the
-        // three stand-in silhouettes that used to fake it — same direction,
-        // 62u away, hazed by the scene's own fog into a true distance. Its
-        // life stays asleep; this is set dressing, not a second stage.
-        ctx.setDistantCamp?.(true);
-        P.campTents.visible = false;
+        // They are walking to the MEAL, not home — and the camp they walk
+        // toward is the one at Dothan, which the pit stage builds with the same
+        // real tents the family camp uses. This used to reveal Jacob's actual
+        // Hebron camp 62 units away, which looks right and reads wrong: Genesis
+        // 37:12-17 puts a journey between Hebron and Dothan, and 37:31-35 needs
+        // that distance for the bloodied tunic to be necessary at all. The
+        // comment eight lines above says this shot "makes no stronger claim"
+        // than Gen 37:25 — now it doesn't.
+        P.campTents.visible = true;
         const mealSlots = [
           { x: P.MEAL.x - 1.5, z: P.MEAL.z + 0.6 },
           { x: P.MEAL.x + 0.1, z: P.MEAL.z - 1.25 },

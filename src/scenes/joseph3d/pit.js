@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { mulberry32, toonMat } from '../../engine/world.js';
+import { makeTents } from './props.js';
 
 // --- the pit: the cold-open stage (Genesis 37:23–24) -------------------------
 // A dry cistern in the rocky country near Dothan. The cold open plays here with the
@@ -129,28 +130,33 @@ export function buildPitStage(tex = {}) {
   crowns.instanceColor.needsUpdate = true;
   group.add(trunks, crowns);
 
-  // Three almost-black tent silhouettes make the fire read as a distant camp.
-  // They share one instanced draw and own no texture, animation, or light.
-  const tentGeo = new THREE.ConeGeometry(1.25, 1.75, 4);
-  tentGeo.translate(0, 0.875, 0);
-  const campTents = new THREE.InstancedMesh(
-    tentGeo,
-    new THREE.MeshBasicMaterial({ color: 0x17151c, fog: true }),
-    3,
-  );
-  const tentDummy = new THREE.Object3D();
-  [
-    [MEAL.x - 3.0, MEAL.z + 1.7, 0.15, 1.1],
-    [MEAL.x + 2.8, MEAL.z + 1.5, -0.22, 0.9],
-    [MEAL.x + 0.4, MEAL.z - 3.2, 0.75, 0.82],
-  ].forEach(([x, z, yaw, scale], i) => {
-    tentDummy.position.set(x, 0, z);
-    tentDummy.rotation.y = Math.PI / 4 + yaw;
-    tentDummy.scale.set(1.45 * scale, scale, 0.9 * scale);
-    tentDummy.updateMatrix();
-    campTents.setMatrixAt(i, tentDummy.matrix);
-  });
-  campTents.instanceMatrix.needsUpdate = true;
+  // THE MEAL CAMP AT DOTHAN — a REAL camp, and it has to be, for two reasons.
+  //
+  // It used to be three flat black 4-sided cones, which read as a mock-up; the
+  // cold open answered that by revealing Jacob's actual Hebron camp instead,
+  // 62 units away, and walking the brothers home to it. That fixed the look and
+  // broke the Bible. Genesis 37:12-17 puts a journey between Hebron and Dothan
+  // — Joseph is SENT from the valley of Hebron, misses them at Shechem and
+  // follows on — and 37:31-35 NEEDS that distance: the bloodied tunic is only
+  // necessary because Jacob cannot walk over and look. A 62-unit stroll (about
+  // twenty seconds at walking speed) teaches the opposite, in a game whose
+  // whole claim is that it is accurate. The closing card even promises "the
+  // road to Dothan" as the next chapter.
+  //
+  // So the camp is real AND it is here, at the meal, where Genesis 37:25 puts
+  // them sitting down to eat. Same tent geometry and material the family camp
+  // uses (props.js makeTents) — six of them, full size, not silhouettes — in
+  // ONE instanced draw. It is also cheaper than what it replaced: revealing the
+  // whole Hebron camp woke roughly forty draws of set dressing for a shot that
+  // only ever needed a horizon.
+  const { mesh: campTents } = makeTents([
+    { x: MEAL.x - 3.4, z: MEAL.z + 1.9, rot: 0.15, scale: 1.05 },
+    { x: MEAL.x + 3.1, z: MEAL.z + 1.6, rot: -0.22, scale: 0.92 },
+    { x: MEAL.x + 0.5, z: MEAL.z - 3.4, rot: 0.75, scale: 0.86 },
+    { x: MEAL.x - 6.8, z: MEAL.z - 1.2, rot: 0.42, scale: 0.8 },
+    { x: MEAL.x + 6.4, z: MEAL.z - 2.6, rot: -0.6, scale: 0.75 },
+    { x: MEAL.x - 1.2, z: MEAL.z + 5.2, rot: 1.1, scale: 0.7 },
+  ]);
   group.add(campTents);
 
   // (D7: the old opaque "mouth" disc is GONE — the hole is real. Looking down
