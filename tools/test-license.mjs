@@ -145,7 +145,7 @@ let passedOn = false;
 middleware({ url: '/index.html' }, { setHeader() {}, end() {} }, () => { passedOn = true; });
 assert.ok(passedOn, 'the license middleware must only intercept the license paths');
 
-// --- 6. every local link in the README resolves ----------------------------
+// --- 6. every local link AND image in the README resolves ------------------
 
 let localLinks = 0;
 for (const [, , target] of readme.matchAll(/\[([^\]]*)\]\(([^)]+)\)/g)) {
@@ -153,6 +153,22 @@ for (const [, , target] of readme.matchAll(/\[([^\]]*)\]\(([^)]+)\)/g)) {
   const path = resolve(ROOT, target.split('#')[0]);
   assert.ok(existsSync(path), `README links to ${target}, which does not exist on disk`);
   localLinks += 1;
+}
+
+// The README leads with ten screenshots, written as HTML so they can be laid
+// out in a grid — which the markdown link pattern above cannot see at all. A
+// missing one is a broken image on the front page of the project.
+let images = 0;
+for (const [, src] of readme.matchAll(/<img[^>]*\ssrc="([^"]+)"/g)) {
+  if (/^https?:/.test(src)) continue;
+  assert.ok(existsSync(resolve(ROOT, src)), `README shows <img src="${src}">, which is not on disk`);
+  images += 1;
+}
+assert.ok(images >= 5, `expected the README to still show its screenshots, found ${images}`);
+// Every screenshot must also carry alt text — the images ARE the pitch, so a
+// reader who cannot see them should still get it.
+for (const [tag] of readme.matchAll(/<img[^>]*>/g)) {
+  assert.match(tag, /\salt="[^"]{10,}"/, `an <img> in the README has no real alt text: ${tag.slice(0, 70)}`);
 }
 
 // --- 7. the built artifact actually carries the license --------------------
@@ -197,6 +213,6 @@ assert.ok(
 
 console.log(
   `license passed: ${holderNames.length} holder(s) [${holderNames.join(', ')}] ${YEAR} consistent `
-  + `across LICENSE/README/package.json · ${localLinks} local README links resolve · `
+  + `across LICENSE/README/package.json · ${localLinks} local links + ${images} screenshots resolve (alt text checked) · `
   + `${creditsLinks.length} third-party credits linked · ${distNote}`,
 );
