@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import './harness/dom.mjs';
-import { bootScene } from './harness/scene.mjs';
+import { bootScene, undisposedFrom } from './harness/scene.mjs';
 import { getCheckpoint, resetProgress, saveGeneration, setCheckpoint } from '../src/systems/SaveSystem.js';
 import { createCheckpointPersistence } from '../src/scenes/joseph3d/checkpointEntry.js';
 
@@ -133,8 +133,46 @@ import { createCheckpointPersistence } from '../src/scenes/joseph3d/checkpointEn
   }
 }
 
+
+// ── 4. THE MAIN STORY MUST GIVE ITS TEXTURES BACK ───────────────────────────
+//
+// A real, measured leak: entering and leaving the Joseph story left ONE extra
+// 512x512 on the GPU every time. Measured live in Chrome across five cycles —
+// home-screen textures 5, 6, 7, 8, 9, monotonic, while geometries and shader
+// programs both returned cleanly to zero.
+//
+// The cause is worth remembering because it is invisible to a graph walk taken
+// at the wrong moment: the scene loads four file textures and OWNS them, but
+// only disposed the ones `disposeDeep` happened to reach. `brick` is used by
+// the pit stage alone, and `pit.dispose()` runs FIRST and takes its group with
+// it — correctly leaving a shared texture alone, since a stage must not free
+// what it borrowed. So nothing freed it.
+//
+// Until now nothing executed this scene at all: every other test reads its
+// SOURCE. tools/test-scene-runtime.mjs censuses the ark, and the ark alone.
+{
+  const { buildJoseph3D } = await import('../src/scenes/joseph3d/index.js');
+  const booted = await bootScene(buildJoseph3D);
+  const before = booted.census();
+  assert.ok(before.textures > 0, `the live story must own textures (got ${before.textures})`);
+
+  // Snapshot while ALIVE, then judge that snapshot. A census taken after
+  // teardown walks an empty graph, so "undisposed === 0" passes vacuously —
+  // and a detached-but-never-disposed object is exactly the leak shape.
+  booted.disposeScene();
+  await booted.disposeDeep();
+  const after = undisposedFrom(before);
+  assert.equal(after.textures, 0,
+    `${after.textures} of ${before.textures} textures the story owned were never disposed — `
+    + 'each one is a GPU allocation the player keeps for the rest of the session, every '
+    + 'time they enter the story');
+  assert.equal(after.geometries, 0,
+    `${after.geometries} of ${before.geometries} geometries were never disposed`);
+}
+
 console.log(
   'player traps passed: pause restores input in every scene (no scene answers '
   + '"is input on?" from the flag pause clears), a reset survives a running story, '
-  + 'and nothing is parked under the persistent volume control.',
+  + 'nothing is parked under the persistent volume control, and the main story '
+  + 'gives every texture and geometry it owns back on dispose.',
 );

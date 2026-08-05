@@ -836,6 +836,18 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
     dream.dispose();
     pit.dispose();
     tentInterior.dispose();
+    // THE SCENE OWNS THESE FOUR, so the scene has to free them.
+    //
+    // disposeDeep() walks the scene graph after this and catches grass, rock
+    // and dirt, because those sit on long-lived objects still in the graph. It
+    // never reaches BRICK: that texture is used only by the pit's shaft wall,
+    // and pit.dispose() has already run and taken its group with it — correctly
+    // leaving a SHARED texture alone, since a stage must not free something it
+    // borrowed. So nothing freed it, and the GPU kept one more 512x512 every
+    // time the story was entered. Measured before this line existed: home
+    // screen textures 5 -> 6 -> 7 -> 8 -> 9 over five enter/exit cycles,
+    // monotonic, while geometries and programs both returned cleanly to zero.
+    for (const texture of Object.values(worldTextures)) texture.dispose();
   }
 
   // level-layout audit (run in QA via debug.audit() — must return []).

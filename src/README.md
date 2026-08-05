@@ -92,7 +92,9 @@ ramp, in through the door, and climb all three decks.
   `objectivePrepaint.js` (generic synchronous checkpoint first-frame scope) · `cinema.js` (letterbox/title/
   fade/tint) · `nameTags.js` (projected tags) · `pause.js` (true pause) · `settings.js` ·
   `modal.js` (confirm + isModalOpen) · `joystick.js` · `volume.js` · `skipButton.js` ·
-  `veil.js` (screen transitions) · `loader.js` (loading screen) · `verse.js` (legacy 2D)
+  `veil.js` (screen transitions) · `loader.js` (loading screen) · `verse.js` (legacy 2D) ·
+  `gpuNotice.js` (tells a player whose browser is drawing the game on the CPU where the
+  setting is — lazily imported, so the menu's boot chunk never carries it)
 
 ## `core/` — the app shell
 
@@ -111,9 +113,16 @@ ramp, in through the door, and climb all three decks.
 - `quality.js` — tier detect · `AdaptiveQuality` (sticky-down DPR) · `RateGovernor` (the
   full-rate ceiling, sticky-down) · the `#debug` HUD. Every threshold is a fraction of the
   PACED budget, never an absolute millisecond count
-- `deadline.js` (bounded async gate) · `lazyScreen.js` (retry-safe import identity/cache) ·
-  `dispose.js` (deep GPU free) · `reducedMotion.js` (the one shared
-  prefers-reduced-motion gate every DOM surface asks)
+- `gpuCapability.js` — is there actually a GPU behind the canvas? A browser with hardware
+  acceleration switched off returns a working WebGL context that is rasterized on the CPU,
+  with no error: measured 72fps vs 12fps on the same machine. `#debug` cannot see the cost
+  (it lands after `submit()` returns), so it is detected explicitly and drives the DPR
+  floor, the colour grade, and the notice in `ui/gpuNotice.js`
+- `deadline.js` — `waitWithDeadline` (bounded async gate) + `waitWhileProgressing`, which
+  waits while assets keep ARRIVING and gives up only when they stop, because a flat
+  wall-clock limit cannot tell a slow connection from a wedged one
+- `lazyScreen.js` (retry-safe import identity/cache) · `dispose.js` (deep GPU free) ·
+  `reducedMotion.js` (the one shared prefers-reduced-motion gate every DOM surface asks)
 
 ## `screens/` + `data/`
 

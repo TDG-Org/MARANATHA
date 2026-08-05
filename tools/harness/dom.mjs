@@ -73,6 +73,10 @@ class FakeElement extends FakeTarget {
   }
   append(...nodes) { for (const n of nodes) { n.parentNode = this; this.children.push(n); } }
   appendChild(n) { this.append(n); return n; }
+  // Interactables builds its prompt pill with prepend(). Without this the whole
+  // Joseph story could not be booted here at all — which is exactly why nothing
+  // in the suite executed it, and why a texture leak in its dispose() shipped.
+  prepend(...nodes) { for (const n of nodes.reverse()) { n.parentNode = this; this.children.unshift(n); } }
   remove() {
     if (!this.parentNode) return;
     const i = this.parentNode.children.indexOf(this);
