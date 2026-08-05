@@ -1,8 +1,14 @@
 # /audio — drop-in sound guide
 
-Sounds are sorted into folders. **Drop a correctly-named file in the right folder, reload — it
-plays.** No code editing. `.mp3` preferred (`.ogg`/`.webm` also work). Keys the game calls stay
-stable; the loader maps them to these paths.
+Sounds are sorted into folders. **Drop a correctly-named file in the right folder, then flip that
+key's `available` to `true` in `src/data/audioManifest.js` — reload, and it plays.**
+`.mp3` preferred (`.ogg`/`.webm` also work). Keys the game calls stay stable; the loader maps them
+to these paths.
+
+> This used to say "no code editing", and that was never true: every fetch path in
+> `AudioSystem.js` is gated on `available`, so a file nobody flagged is never even requested —
+> it just keeps playing the procedural fallback, silently, exactly as if the file were missing.
+> The flag exists so the game makes **zero 404 requests** for sounds that have not arrived yet.
 
 ```
 audio/

@@ -241,10 +241,22 @@ export const UI_CSS = `
 .mr-era-chip.is-shut { opacity: .42; cursor: default; border-style: dashed; }
 .mr-era-chip.is-shut .mr-era-dots { opacity: .55; }
 .mr-era-name {
-  font: 600 calc(10.5px * var(--u)) 'Segoe UI', system-ui, sans-serif;
+  /* The floor matters more than the scale here. The --u scale took this to 7.8px at
+     320px wide — under the readable minimum — and .2em of tracking on uppercase
+     costs about a character and a half of width, which is why EVERY era name
+     ellipsised on EVERY phone size: GENESIS, EXODUS, JUDGES, KINGS, PROPHETS,
+     all five, at 320/360/390/414. Measured. */
+  font: 600 max(9.5px, calc(10.5px * var(--u))) 'Segoe UI', system-ui, sans-serif;
   letter-spacing: .2em; text-transform: uppercase; color: rgba(253,246,227,.6);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+/* NOT FIXED, and deliberately not papered over: on every phone width all five
+   era names still ellipsise (GENESIS, EXODUS, JUDGES, KINGS, PROPHETS at
+   320/360/390/414 — measured). Cutting the tracking to .04em was tried and did
+   not clear it: five uppercase names across ~320px is a density problem, not a
+   typography one, and the honest fixes are design calls — fewer chips on a
+   phone, a scrolling ribbon, or dots-only with the name on the active era.
+   Left as Nate's decision rather than restyled on a guess. */
 .mr-era-chip.is-on .mr-era-name { color: #ffeccd; }
 .mr-era-dots { display: flex; align-items: center; gap: calc(4px * var(--u)); }
 .mr-era-dots i { flex: 0 0 auto; border-radius: 50%; }
