@@ -155,7 +155,7 @@ export function openAboutPanel({ onClose }) {
     <p style="margin:0 0 14px;"><strong>MARANATHA</strong> is a Bible game — a biblically accurate
     browser world that lets you <em>walk through the Bible</em> — so you come to know God, the people
     of that time, and how His promise always comes true.</p>
-    <p style="margin:0 0 14px;">It's built to be <strong>free and open to everyone</strong>: no login,
+    <p style="margin:0 0 14px;">It's built to be <strong>free for everyone</strong>: no login,
     no cost, no barrier. You just start playing. Every scene shows the real Scripture on screen and
     stays faithful to the text — the goal is to help people meet God in His own story, not to preach.</p>
     <p style="margin:0 0 14px;">The first playable story is <strong>Joseph</strong> (Genesis 37–50) —
@@ -163,7 +163,15 @@ export function openAboutPanel({ onClose }) {
     “You meant evil against me, but God meant it for good.” (Genesis 50:20)</p>
     <p style="margin:0 0 14px; opacity:0.82;">Your progress is kept in <strong>your own browser
     only</strong> — there is no account, and nothing is ever sent to a server.</p>
-    <p style="margin:0; opacity:0.82;">Made with care, for the God who keeps His promises. <em>Come, Lord.</em></p>
+    <p style="margin:0 0 20px; opacity:0.82;">Made with care, for the God who keeps His promises. <em>Come, Lord.</em></p>
+    <p style="margin:0; padding-top:15px; border-top:1px solid rgba(255,255,255,0.13);
+       font:400 12.5px/1.6 'Segoe UI',system-ui,sans-serif; color:rgba(253,246,227,0.6);">
+      © 2026 Nate McIlvenny and Luke McIlvenny (TDG). Free to play and to read the code —
+      publishing, redistributing or selling it needs written permission.
+      <a href="./license.txt" target="_blank" rel="noopener"
+         style="color:#f2b880; text-decoration:none; border-bottom:1px solid rgba(242,184,128,0.4);"
+         >Read the license</a>. Third‑party models, textures and audio keep their own licenses.
+    </p>
   `;
   return cleanup;
 }

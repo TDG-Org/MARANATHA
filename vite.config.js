@@ -15,18 +15,40 @@ const ROOT = dirname(fileURLToPath(import.meta.url));
 // of thing that silently goes stale, and there is no way to notice. Reading it
 // here also means a missing or unreadable LICENSE FAILS the build loudly
 // instead of quietly producing a build with no license in it.
+// Two names, ONE source file, both emitted here so neither can drift:
+//
+//   LICENSE      — the extensionless name GitHub's detector looks for.
+//   license.txt  — the one the game itself links to. A static host serves an
+//                  extensionless file as application/octet-stream, so linking
+//                  ./LICENSE from the About panel would DOWNLOAD it instead of
+//                  showing it. `.txt` is served as text/plain and just opens.
+const LICENSE_NAMES = ['LICENSE', 'license.txt'];
+
 function shipLicense() {
   return {
     name: 'maranatha-ship-license',
-    apply: 'build',
-    generateBundle() {
-      this.emitFile({
-        type: 'asset',
-        fileName: 'LICENSE',
-        // A Buffer keeps the bytes exact — the em dash and the LF endings
-        // survive the round trip, so dist/LICENSE hashes identical to source.
-        source: readFileSync(join(ROOT, 'LICENSE')),
+
+    // DEV must match the build. The emit below only happens at build time, so
+    // in `npm run dev` a request for /license.txt fell through to Vite's SPA
+    // fallback and got index.html back with a 200 — clicking "Read the
+    // license" opened a second copy of the game. Served here from the same one
+    // file so the link means the same thing in both.
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const path = (req.url || '').split('?')[0];
+        if (!LICENSE_NAMES.includes(path.replace(/^\//, ''))) return next();
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        res.end(readFileSync(join(ROOT, 'LICENSE')));
       });
+    },
+
+    generateBundle() {
+      // A Buffer keeps the bytes exact — the em dash and the LF endings survive
+      // the round trip, so both emitted files hash identical to the source.
+      const source = readFileSync(join(ROOT, 'LICENSE'));
+      for (const fileName of LICENSE_NAMES) {
+        this.emitFile({ type: 'asset', fileName, source });
+      }
     },
   };
 }

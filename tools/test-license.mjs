@@ -100,7 +100,52 @@ for (const file of ['README.md', 'src/screens/pages.js']) {
   );
 }
 
-// --- 5. every local link in the README resolves ----------------------------
+// --- 5. the vite plugin, exercised for real (both paths) -------------------
+
+// Calling the plugin's own hooks catches the divergence a config read cannot:
+// the build emit and the dev server must hand out the SAME bytes under the
+// SAME names, or the in-game link means one thing in dev and another shipped.
+const licenseBytes = readFileSync(licensePath);
+const viteConfig = (await import('../vite.config.js')).default;
+const plugin = (viteConfig.plugins ?? []).flat().find((p) => p?.name === 'maranatha-ship-license');
+assert.ok(plugin, 'vite.config.js must register the maranatha-ship-license plugin');
+
+const emitted = [];
+plugin.generateBundle.call({ emitFile: (file) => emitted.push(file) });
+assert.deepEqual(
+  emitted.map((f) => f.fileName).sort(), ['LICENSE', 'license.txt'],
+  'the build must emit both the detector name (LICENSE) and the servable one (license.txt)',
+);
+for (const file of emitted) {
+  assert.deepEqual(file.source, licenseBytes, `emitted ${file.fileName} is not the source bytes`);
+}
+
+let middleware = null;
+plugin.configureServer({ middlewares: { use: (fn) => { middleware = fn; } } });
+assert.ok(middleware, 'the plugin must serve the license in dev too');
+for (const name of ['license.txt', 'LICENSE']) {
+  let body = null;
+  let type = null;
+  let fellThrough = false;
+  middleware(
+    { url: `/${name}` },
+    { setHeader: (k, v) => { if (/content-type/i.test(k)) type = v; }, end: (b) => { body = b; } },
+    () => { fellThrough = true; },
+  );
+  assert.ok(
+    !fellThrough,
+    `dev did not serve /${name}; it would fall through to Vite's SPA fallback and return `
+    + 'index.html with a 200 — the link would open the game, not the license',
+  );
+  assert.deepEqual(body, licenseBytes, `dev served the wrong bytes for /${name}`);
+  assert.match(type ?? '', /text\/plain/, `/${name} must be served as text/plain to be readable`);
+}
+// ...and it must not swallow anything else.
+let passedOn = false;
+middleware({ url: '/index.html' }, { setHeader() {}, end() {} }, () => { passedOn = true; });
+assert.ok(passedOn, 'the license middleware must only intercept the license paths');
+
+// --- 6. every local link in the README resolves ----------------------------
 
 let localLinks = 0;
 for (const [, , target] of readme.matchAll(/\[([^\]]*)\]\(([^)]+)\)/g)) {
@@ -110,26 +155,45 @@ for (const [, , target] of readme.matchAll(/\[([^\]]*)\]\(([^)]+)\)/g)) {
   localLinks += 1;
 }
 
-// --- 6. the built artifact actually carries the license --------------------
+// --- 7. the built artifact actually carries the license --------------------
 
 // Opportunistic: `npm test` does not build. When a build IS present it must be
 // byte-identical to the source of truth — the point of emitting it at build
 // time rather than checking a second copy into public/.
-const distLicense = join(ROOT, 'dist', 'LICENSE');
+// `license.txt` is the copy the game links to: a static host serves an
+// extensionless file as application/octet-stream, which downloads instead of
+// displaying. Both are emitted from the one root LICENSE, so both are checked.
+const DIST_NAMES = ['LICENSE', 'license.txt'];
 let distNote = 'no dist/ present (run `npm run build` to check the artifact)';
 if (existsSync(join(ROOT, 'dist'))) {
-  assert.ok(
-    existsSync(distLicense),
-    'the build produced no dist/LICENSE — every deployed copy would ship with our '
-    + 'notices stripped, which clause 2(e) forbids',
-  );
-  assert.deepEqual(
-    readFileSync(distLicense),
-    readFileSync(licensePath),
-    'dist/LICENSE is not byte-identical to the root LICENSE',
-  );
-  distNote = 'dist/LICENSE byte-identical to source';
+  for (const name of DIST_NAMES) {
+    const emitted = join(ROOT, 'dist', name);
+    assert.ok(
+      existsSync(emitted),
+      `the build produced no dist/${name} — every deployed copy would ship with our `
+      + 'notices stripped, which clause 2(e) forbids',
+    );
+    assert.deepEqual(
+      readFileSync(emitted),
+      readFileSync(licensePath),
+      `dist/${name} is not byte-identical to the root LICENSE`,
+    );
+  }
+  distNote = `${DIST_NAMES.length} dist copies byte-identical to source`;
 }
+
+// The product must actually link the license it ships, and must link the
+// SERVABLE name — ./LICENSE would download rather than open.
+const about = read('src/screens/pages.js');
+assert.ok(
+  about.includes('license.txt'),
+  'the About panel must link the license that ships with the build (./license.txt)',
+);
+assert.ok(
+  !/href="\.\/LICENSE"/.test(about),
+  'link ./license.txt, not ./LICENSE — a static host serves the extensionless file as '
+  + 'application/octet-stream, so the link downloads the file instead of showing it',
+);
 
 console.log(
   `license passed: ${holderNames.length} holder(s) [${holderNames.join(', ')}] ${YEAR} consistent `
