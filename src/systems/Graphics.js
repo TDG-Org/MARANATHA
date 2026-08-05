@@ -57,7 +57,11 @@ export function particleCapacity(base) {
 
 // Automatic policy starts conservatively. Medium preserves the complete
 // visual language while avoiding a speculative 2x-DPR/dGPU startup on an
-// unknown device. Runtime evidence may step down; it never promotes.
+// unknown device. It is a STARTING point, not a ceiling: sampleFrame() below
+// may step it down on cadence, and sampleWork() may promote it once per
+// session on measured update+submit work (D25 — the flat "never promotes"
+// rule, combined with powerPreference:'low-power', is what stranded every
+// automatic player on the integrated GPU at 25fps).
 function autoDefault() {
   return detectTier().tier === 'low' ? 'low' : 'medium';
 }
