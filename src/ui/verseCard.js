@@ -37,6 +37,17 @@ export function createVerseCard({ signal = null, isPaused = null } = {}) {
     'font-family:"Segoe UI",system-ui,sans-serif', 'font-size:clamp(10.5px,1.3vw,12px)',
     'letter-spacing:0.16em', 'opacity:0.64', 'margin-top:7px', 'color:#f5e6c4', 'text-transform:uppercase',
   ].join(';');
+  // ANNOUNCED. This is the scripture — the one surface in the game that must
+  // never be silent to a screen reader — and it carried no ARIA at all, so a
+  // reader was told nothing when a verse appeared. Polite, not assertive: it
+  // must fall in behind the narrator rather than interrupt the line being read
+  // aloud. `aria-atomic` so the verse and its reference are announced as one
+  // thing instead of two fragments.
+  panel.setAttribute('role', 'note');
+  panel.setAttribute('aria-live', 'polite');
+  panel.setAttribute('aria-atomic', 'true');
+  panel.setAttribute('aria-label', 'Scripture');
+
   panel.append(textEl, refEl);
   document.body.append(panel);
 

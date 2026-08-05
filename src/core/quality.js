@@ -205,11 +205,15 @@ export class RateGovernor {
 // Tiny on-screen perf readout, enabled with #debug in the URL. This is how
 // real frame rate gets reported honestly from real devices.
 export class DebugHud {
-  constructor(renderer, { enabled = true } = {}) {
+  constructor(renderer, { enabled = false } = {}) {
     this.el = document.getElementById('debug');
     this.renderer = renderer;
-    // Perf HUD is ON by default (performance mandate: honest fps visible at all
-    // times); Settings can hide it. #debug in the URL still forces it on.
+    // OFF unless asked for. This defaulted to ON so that "honest fps is visible
+    // at all times" — a good instinct aimed at the wrong audience: it put a
+    // black box of frame times and a GPU driver string over the corner of a
+    // painterly Bible story for every player who had never opened Settings.
+    // Both routes to it survive: `#debug` in the URL forces it on regardless,
+    // and Settings.bindHud() applies the player's saved choice a moment later.
     this.enabled = enabled || /debug/.test(window.location.hash);
     this._applyVisibility();
     this.acc = 0;

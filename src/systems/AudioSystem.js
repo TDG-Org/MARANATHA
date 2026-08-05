@@ -157,6 +157,25 @@ class AudioSystem {
     return this.enabled && !!this.ctx;
   }
 
+  // CAN A ONE-SHOT ACTUALLY BE HEARD RIGHT NOW?
+  //
+  // A source scheduled on a context that is not RUNNING never plays and never
+  // ends — so its `onended` never fires, and it holds one of the 14 one-shot
+  // slots forever. Pausing the game suspends the context on purpose, so every
+  // UI click made while the pause menu is open used to take a slot and keep it:
+  // after about a dozen (one settings-slider drag is enough, it fires a click
+  // per input event) every UI sound went silent for the rest of the pause, and
+  // then the whole backlog fired AT ONCE the instant the game resumed.
+  //
+  // Dropping them is the right answer, not queueing them: they were inaudible
+  // when they happened, so playing them later is not a fix, it is a burst.
+  _canOneShot() {
+    return this.on
+      && !this.holdSuspend
+      && this.ctx.state === 'running'
+      && this._liveOneShots < 14;
+  }
+
   unlock() {
     if (!this.ctx) {
       const AC = window.AudioContext || window.webkitAudioContext;
@@ -759,7 +778,7 @@ class AudioSystem {
       // D8 phone care: cap simultaneous one-shot sources — a burst past a
       // couple dozen crackles/kills mobile audio. Extra plays are dropped
       // (a 15th overlapping footstep adds nothing anyway).
-      if (this._liveOneShots >= 14) return;
+      if (!this._canOneShot()) return;
       this._liveOneShots += 1;
       const src = this.ctx.createBufferSource();
       src.buffer = buf;
@@ -1150,7 +1169,7 @@ class AudioSystem {
     if (!this.on || this.channels.sfx <= 0.004) return;
     // The same phone cap the sample branch has: procedural one-shots were
     // uncapped, and a settings-slider drag fires uiClick per input event.
-    if (this._liveOneShots >= 14) return;
+    if (!this._canOneShot()) return;
     this._liveOneShots += 1;
     const t = this.ctx.currentTime + delay;
     const o = this.ctx.createOscillator();
@@ -1188,7 +1207,7 @@ class AudioSystem {
 
   noiseHit({ dur = 0.6, type = 'bandpass', from = 400, to = 0, q = 1, gain = 0.2, attack = 0.05, delay = 0, send = 0.15 }) {
     if (!this.on || this.channels.sfx <= 0.004) return;
-    if (this._liveOneShots >= 14) return; // same cap as tone()/sample one-shots
+    if (!this._canOneShot()) return; // cap + "is the context actually running?"
     this._liveOneShots += 1;
     const t = this.ctx.currentTime + delay;
     const s = this.ctx.createBufferSource();

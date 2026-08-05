@@ -258,6 +258,101 @@ import { createCheckpointPersistence } from '../src/scenes/joseph3d/checkpointEn
 }
 
 
+// -- 7. PAUSING MUST NOT STARVE THE SOUND, THEN BURST ON RESUME -------------
+//
+// The pause menu suspends the AudioContext on purpose. A one-shot scheduled on
+// a suspended context never plays and never ends, so its onended never fires
+// and it holds one of the 14 one-shot slots forever. Measured: about a dozen UI
+// clicks during a pause (one settings-slider drag is enough -- it fires a click
+// per input event) silenced every UI sound for the rest of that pause, and the
+// whole backlog then fired AT ONCE on resume.
+{
+  const { Audio } = await import('../src/systems/AudioSystem.js');
+  // A minimal context stand-in: the real class only needs state + node factories.
+  const made = { osc: 0, buf: 0 };
+  const node = () => ({
+    connect: (n) => n, disconnect() {}, start() {}, stop() {},
+    frequency: { setValueAtTime() {}, exponentialRampToValueAtTime() {}, value: 0 },
+    gain: { setValueAtTime() {}, linearRampToValueAtTime() {}, value: 0 },
+    type: '', buffer: null, loop: false, onended: null, Q: { value: 1 },
+  });
+  Audio.ctx = {
+    state: 'running', currentTime: 0,
+    createOscillator: () => { made.osc += 1; return node(); },
+    createBufferSource: () => { made.buf += 1; return node(); },
+    createGain: () => node(), createBiquadFilter: () => node(),
+    resume: () => Promise.resolve(), suspend: () => Promise.resolve(),
+  };
+  Audio.master = node(); Audio.sfx = node(); Audio.music = node(); Audio.space = node();
+  Audio.volume = 0.8;
+  Audio.channels = { music: 1, sfx: 1, voice: 1 };
+  Audio._liveOneShots = 0;
+  Audio.holdSuspend = false;
+
+  const clicks = (n) => { for (let i = 0; i < n; i += 1) Audio.tone({ freq: 440, dur: 0.05 }); };
+
+  clicks(3);
+  assert.ok(made.osc >= 3, `precondition: a running context plays UI sound (made ${made.osc})`);
+
+  // Now pause exactly as ui/pause.js does.
+  Audio.holdSuspend = true;
+  Audio.ctx.state = 'suspended';
+  const beforePause = made.osc;
+  const slotsBefore = Audio._liveOneShots;
+  clicks(30); // a slider drag
+  assert.equal(made.osc, beforePause,
+    `${made.osc - beforePause} sources were scheduled on a SUSPENDED context — each one holds a `
+    + 'one-shot slot forever and fires as part of a burst on resume');
+  assert.equal(Audio._liveOneShots, slotsBefore,
+    `the one-shot cap gained ${Audio._liveOneShots - slotsBefore} permanently-stuck slots during a pause`);
+
+  // Resume: sound must work again immediately, not be exhausted.
+  Audio.holdSuspend = false;
+  Audio.ctx.state = 'running';
+  const afterResume = made.osc;
+  clicks(3);
+  assert.ok(made.osc - afterResume >= 3,
+    `after resuming, UI sound must work again (only ${made.osc - afterResume} of 3 played) — `
+    + 'the cap was still full of sources scheduled while paused');
+  Audio.ctx = null; // leave no stub behind for later tests
+}
+
+// -- 8. THE PAUSE OVERLAY MUST TAKE THE KEYBOARD WITH IT --------------------
+//
+// pointer-events on the dimmed world stops the MOUSE. It does not stop the
+// keyboard: every button in the frozen game -- home, gear, skip, the dialogue
+// footer -- stayed Tab-reachable and Enter-activatable behind the overlay, so a
+// keyboard player could act on a paused scene without seeing what they hit.
+{
+  const { createPauseMenu } = await import('../src/ui/pause.js');
+  const before = [...document.body.children];
+  const stray = document.createElement('button'); // stands in for a game control
+  document.body.append(stray);
+
+  let paused = null;
+  const pause = createPauseMenu({
+    app: { setPaused: (on) => { paused = on; } },
+    isInputOn: () => true,
+    setInput: () => {},
+  });
+
+  assert.notEqual(stray.inert, true, 'precondition: the game is reachable before pausing');
+  pause.open();
+  assert.equal(paused, true, 'the app must actually pause');
+  assert.equal(stray.inert, true,
+    'a game control behind the pause overlay is still keyboard-reachable — `inert` must close '
+    + 'the door pointer-events cannot');
+  for (const el of before) {
+    if (el === stray) continue;
+    assert.notEqual(el.inert, false, 'nothing behind the overlay may stay interactive');
+  }
+
+  pause.close();
+  assert.equal(stray.inert, false, 'closing must give the game its keyboard back');
+  pause.destroy?.();
+  stray.remove();
+}
+
 console.log(
   'player traps passed: pause restores input in every scene (no scene answers '
   + '"is input on?" from the flag pause clears), a reset survives a running story, '

@@ -6,7 +6,14 @@ import { Audio } from './AudioSystem.js';
 const KEY = 'maranatha-settings-v1';
 // `sky` is the home's backdrop. 'auto' follows the clock (dawn/day/dusk/night);
 // any other value pins that one and stops the map changing under the player.
-const DEFAULTS = { music: 0.8, sfx: 0.9, voice: 1.0, hud: true, sky: 'auto' };
+// `hud: false` — the performance meter is a DEVELOPER readout and it used to be
+// on for every player who had never opened Settings, phones included: a black
+// box of frame times and driver strings over the corner of a painterly Bible
+// story. The reason it was defaulted on ("honest fps visible at all times")
+// still holds for the people who need it, and they still have both routes:
+// `#debug` in the URL forces it on regardless of this setting, and Settings →
+// "Show performance meter" turns it on for good. Nobody has to see it to play.
+const DEFAULTS = { music: 0.8, sfx: 0.9, voice: 1.0, hud: false, sky: 'auto' };
 
 function read() {
   try {

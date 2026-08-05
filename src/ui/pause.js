@@ -14,6 +14,8 @@ import { isModalOpen } from './modal.js';
 export function createPauseMenu({ app, isInputOn, setInput, onSettings, onHome }) {
   let open = false;
   let subOpen = false; // a settings/confirm layer sits above us — ignore Esc
+  const inerted = [];  // what show() switched off, so close() can switch it back
+  let opener = null;   // where focus came from, so close() can hand it back
   let frozen = false;  // global audio/narration ownership outlives overlay state
 
   // --- the pause/settings button (top-right; ≥44px target) ------------------
@@ -47,6 +49,12 @@ export function createPauseMenu({ app, isInputOn, setInput, onSettings, onHome }
     'opacity:0', 'transition:opacity 200ms ease',
   ].join(';');
 
+  // Announced as what it is. Without these a screen reader reads the buttons
+  // with no idea the game is paused or that a dialog opened at all.
+  overlay.setAttribute('role', 'dialog');
+  overlay.setAttribute('aria-modal', 'true');
+  overlay.setAttribute('aria-label', 'Paused');
+
   const title = document.createElement('div');
   title.textContent = 'Paused';
   title.style.cssText = [
@@ -75,7 +83,7 @@ export function createPauseMenu({ app, isInputOn, setInput, onSettings, onHome }
     return b;
   };
 
-  mkItem('Resume', () => close());
+  const resumeBtn = mkItem('Resume', () => close());
   mkItem('Settings', async () => {
     subOpen = true;
     try { await onSettings?.(); } finally { subOpen = false; }
@@ -134,6 +142,23 @@ export function createPauseMenu({ app, isInputOn, setInput, onSettings, onHome }
     // hidden-tab safe (unlike a rAF, which may never fire there).
     void overlay.offsetWidth;
     overlay.style.opacity = '1';
+    // FOCUS CONTAINMENT (accessibility skill). pointer-events on the dimmed
+    // world stops the mouse, but it does not stop the KEYBOARD: every button in
+    // the frozen game — the home button, the gear, the skip pill, the dialogue
+    // footer — stayed Tab-reachable and Enter-activatable behind the overlay,
+    // so a keyboard player could act on a paused scene without ever seeing what
+    // they hit. `inert` closes both doors. Same contract the About/Support
+    // panels already use, and the reason close() restores it below.
+    inerted.length = 0;
+    for (const el of document.body.children) {
+      if (el === overlay || el === btn || el.inert) continue;
+      el.inert = true;
+      inerted.push(el);
+    }
+    opener = document.activeElement;
+    // Land on something inside the dialog rather than leaving focus on a
+    // now-inert element, which drops it to <body> and strands Tab order.
+    resumeBtn.focus?.();
   }
 
   function close({ navigating = false } = {}) {
@@ -148,6 +173,12 @@ export function createPauseMenu({ app, isInputOn, setInput, onSettings, onHome }
     overlay.style.opacity = '0';
     clearTimeout(hideT);
     hideT = setTimeout(() => { if (!open) overlay.style.display = 'none'; }, 220);
+    // Give the world its keyboard back, and put focus where it came from — a
+    // player who paused with the keyboard must not be dropped to <body>.
+    inerted.forEach((el) => { el.inert = false; });
+    inerted.length = 0;
+    if (!navigating) opener?.focus?.();
+    opener = null;
     freeze(false, { restoreInput: !navigating });
   }
 
