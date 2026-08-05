@@ -214,7 +214,15 @@ export class DebugHud {
     // painterly Bible story for every player who had never opened Settings.
     // Both routes to it survive: `#debug` in the URL forces it on regardless,
     // and Settings.bindHud() applies the player's saved choice a moment later.
-    this.enabled = enabled || /debug/.test(window.location.hash);
+    // `#debug` in the URL is a FORCE, not a default. It has to outrank the
+    // saved setting, because the moment the HUD stopped defaulting to on,
+    // Settings.bindHud() ran a beat later with the stored `false` and switched
+    // it straight back off — so `#debug` silently stopped working and the only
+    // honest way to read frame rate on a real device went with it. Measured
+    // before this line: default hidden (right), Settings-on visible (right),
+    // `#debug` HIDDEN (wrong).
+    this.forced = /debug/.test(window.location.hash);
+    this.enabled = enabled || this.forced;
     this._applyVisibility();
     this.acc = 0;
     this.frames = 0;
@@ -223,7 +231,8 @@ export class DebugHud {
   }
 
   setEnabled(on) {
-    this.enabled = !!on;
+    // A saved preference may turn it ON, never off against an explicit `#debug`.
+    this.enabled = this.forced || !!on;
     this._applyVisibility();
   }
 

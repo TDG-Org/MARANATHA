@@ -353,6 +353,44 @@ import { createCheckpointPersistence } from '../src/scenes/joseph3d/checkpointEn
   stray.remove();
 }
 
+// -- 9. `#debug` IS A FORCE, NOT A DEFAULT --------------------------------
+//
+// The performance meter is off by default (it is a developer readout, and it
+// used to sit over the corner of the game for every player who had never
+// opened Settings). The moment that default flipped, `#debug` silently
+// STOPPED WORKING: DebugHud honours the hash, and then Settings.bindHud()
+// runs a beat later and applies the stored `false` over the top. Measured in
+// a real browser: default hidden (right), Settings-on visible (right),
+// `#debug` HIDDEN (wrong) -- taking the only honest way to read frame rate on
+// a real device with it.
+{
+  const { DebugHud } = await import(`../src/core/quality.js?hud=${Date.now()}`);
+  const el = document.getElementById("debug") || document.createElement("div");
+  el.id = "debug";
+  if (!el.parentNode) document.body.append(el);
+  const renderer = { info: { render: { calls: 0, triangles: 0 } }, getContext: () => null };
+
+  const priorHash = window.location.hash;
+  try {
+    // No hash: the saved preference is in charge, both ways.
+    window.location.hash = "#joseph";
+    const plain = new DebugHud(renderer, { enabled: false });
+    assert.equal(plain.enabled, false, "with no #debug the meter follows the setting (off)");
+    plain.setEnabled(true);
+    assert.equal(plain.enabled, true, "...and the Settings toggle can turn it on");
+
+    // With #debug: forced on, and NOTHING may turn it back off.
+    window.location.hash = "#joseph-debug";
+    const forced = new DebugHud(renderer, { enabled: false });
+    assert.equal(forced.enabled, true, "#debug in the URL must force the meter on");
+    forced.setEnabled(false); // this is exactly what Settings.bindHud does
+    assert.equal(forced.enabled, true,
+      "a stored hud:false switched the meter back off over an explicit #debug -- the URL "
+      + "force must outrank the saved preference, or #debug stops working entirely");
+  } finally {
+    window.location.hash = priorHash;
+  }
+}
 console.log(
   'player traps passed: pause restores input in every scene (no scene answers '
   + '"is input on?" from the flag pause clears), a reset survives a running story, '
