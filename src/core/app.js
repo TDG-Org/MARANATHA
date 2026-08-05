@@ -1,5 +1,6 @@
 import { detectTier, AdaptiveQuality, DebugHud, RateGovernor, RATE_FLOOR } from './quality.js';
 import { disposeDeep } from './dispose.js';
+import { detectSoftwareRenderer, GPU } from './gpuCapability.js';
 import { createVeil } from '../ui/veil.js';
 import { createLoader } from '../ui/loader.js';
 import { Settings } from '../systems/Settings.js';
@@ -55,13 +56,28 @@ export function createApp(container) {
   let current = null;        // { key, scene, instance, lifetime }
   let busy = false;
   let updateErrors = 0;
+  let dismissGpuNotice = null; // body-level, so the screen teardown must own it
   let loopController = null;
 
   const initEngine = (mod) => {
     if (renderer) return;
     THREE3D = mod.THREE;
     renderer = mod.createRenderer(container);
-    quality = new AdaptiveQuality(renderer, { basePixelRatio: Math.min(dpr(), Graphics.dprCap) });
+    // Ask what is actually behind the canvas BEFORE anything is sized or
+    // graded. A CPU-rasterized context looks completely normal from here — it
+    // just runs ~6x slower — and every tuning system downstream would otherwise
+    // spend the session measuring a software rasterizer and blaming the scene.
+    const gpu = detectSoftwareRenderer(renderer);
+    quality = new AdaptiveQuality(renderer, {
+      basePixelRatio: Math.min(dpr(), Graphics.dprCap),
+      // Pixels are the only lever that scales with a software rasterizer's real
+      // cost, and the normal floor of 1.0 is unreachable-by-design on a DPR-1
+      // display: base becomes 1, min becomes 1, and frame() then early-returns
+      // forever. So on a CPU context, and only there, allow rendering below
+      // native and start low rather than discovering it 120 frames in.
+      floor: gpu.software ? 0.5 : undefined,
+      startAt: gpu.software ? 0.65 : undefined,
+    });
     camera = new THREE3D.PerspectiveCamera(46, safeAspect(), 0.1, 900);
     hud = new DebugHud(renderer);
     Settings.bindHud(hud); // apply the player's saved HUD-visibility choice
@@ -181,6 +197,10 @@ export function createApp(container) {
 
   function disposeCurrent(reason = 'Screen retired') {
     if (!current) return;
+    // Body-level UI is not parented to the scene, so nothing else here reaches
+    // it. The advice belongs to the screen that was slow.
+    dismissGpuNotice?.();
+    dismissGpuNotice = null;
     current.lifetime.abort(makeAbortError(reason));
     try { current.instance.dispose?.(); } catch (e) { console.error('[app] dispose error', e); }
     if (current.scene) disposeDeep(current.scene);
@@ -292,6 +312,22 @@ export function createApp(container) {
       paint(); // paint one frame before revealing (a flat screen has none to paint)
       await veil.reveal(first ? 900 : 620);
       current.instance.activate?.();
+      // Only tell the player about a CPU-rasterized context once they are in a
+      // 3D scene: the DOM menu runs fine either way, and a warning on a screen
+      // that is not slow reads as a false alarm.
+      // Fetched only by the players who need it. Almost nobody has hardware
+      // acceleration off, and the boot chunk is the menu's whole download
+      // budget (startup-efficiency), so this must not sit in it.
+      if (GPU.software && !current?.instance?.flat) {
+        import('../ui/gpuNotice.js')
+          // KEEP the cleanup. Discarding it left the notice on document.body
+          // for the rest of the session: it painted over the navigation veil
+          // (same z-index, appended later) and then sat on the DOM story map —
+          // the very screen the guard above exists to exclude — while its
+          // internal latch stopped it ever appearing again.
+          .then((m) => { dismissGpuNotice = m.maybeShowGpuNotice(); })
+          .catch(() => { /* the game is playable without the advice */ });
+      }
       // The menu is up and idle: pull the engine down NOW so the player's
       // Start click is a cut, not a download (startup-efficiency skill).
       if (current?.instance?.flat) idlePrefetchEngine();
@@ -447,6 +483,10 @@ export function createApp(container) {
     // the preview tab runs hidden and rAF/screenshots are paused there).
     get scene() { return current?.scene; },
     get instance() { return current?.instance; },
+    // The renderer is what a leak census has to count (geometries, textures,
+    // programs live on renderer.info). Without it, a "does it get slower the
+    // longer you play?" probe can only watch fps and guess at the cause.
+    get renderer() { return renderer; },
     // eco is what the governor ASKED for, not a number below 60: a 55fps pace
     // on a 165Hz panel is full rate, and a 72 on a 144Hz one certainly is.
     get power() { return { fps: liveFps, eco: requestedFps <= POWER.ecoFps }; },
@@ -495,7 +535,11 @@ export function createApp(container) {
       // room to spare: a paced stream reads its budget back whether the frame
       // took 3ms or 15ms. Actual work does prove it, so promotion is judged on
       // the update+submit time the HUD already measures.
-      Graphics.sampleWork(updMs + subMs, budgetMs);
+      // ...but not when there is no GPU. update+submit are precisely the two
+      // numbers that stay small on a CPU rasterizer (measured 0.6 and 5.0 ms
+      // beside an 83 ms frame), so this promoter reads "loads of headroom" on
+      // the slowest machine in the building and steps the preset UP.
+      if (!GPU.software) Graphics.sampleWork(updMs + subMs, budgetMs);
       // ...and if even the pace itself cannot be held, come down a whole step
       // rather than serving uneven frames.
       rate.frame(dt, budgetMs);

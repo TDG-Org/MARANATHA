@@ -1,4 +1,5 @@
 import { Graphics } from '../systems/Graphics.js';
+import { GPU } from '../core/gpuCapability.js';
 
 // PostFX (D6): the game's grade + named filters, built on one static CSS canvas
 // grade and simple alpha overlays. Full-frame filters are not "free" on every
@@ -76,9 +77,35 @@ export class PostFX {
     this._unsub = Graphics.subscribe(() => this.applyPreset());
   }
 
-  get _base() { return Graphics.colourGrade ? (BASE[Graphics.name] ?? BASE.medium) : ''; }
+  // The base grade is a CSS filter over the LIVE canvas. On a GPU compositor
+  // that is the cheap path it was chosen to be. On a CPU-rasterized context the
+  // compositor is also on the CPU, so it becomes a colour-matrix pass plus a
+  // blit over the whole 16 MB surface, every frame, on the same cores already
+  // rasterizing the scene. Drop it there — a capability override, deliberately
+  // NOT a write to the player's saved preference, so the look returns by itself
+  // the moment they turn hardware acceleration back on.
+  get _base() {
+    if (GPU.software) return '';
+    return Graphics.colourGrade ? (BASE[Graphics.name] ?? BASE.medium) : '';
+  }
 
   _compose(extra = '') {
+    // On a CPU-rasterized context EVERY full-frame filter is a colour-matrix
+    // pass over the whole surface on the cores already drawing the scene — the
+    // named looks (future, dream) just as much as the base grade. Dropping only
+    // the base left the cold open, which is where the heaviest one runs, still
+    // paying it. The overlays that carry these moods (vignette, glow, letterbox)
+    // are plain alpha and stay, so the beats still read.
+    // `extra` is the transition blur, and a full-canvas blur is the single most
+    // expensive thing that can be asked of a CPU compositor — so on a software
+    // context the canvas carries NO filter at all. The fades themselves are
+    // opacity on separate layers and still play; only the blur under them goes.
+    if (GPU.software) {
+      if (this._lastCanvasFilter === 'none') return false;
+      this._lastCanvasFilter = 'none';
+      this.canvas.style.filter = 'none';
+      return true;
+    }
     const f = `${this._base} ${FILTERS[this.filter] ?? ''} ${extra}`.trim();
     const next = f || 'none';
     if (next === this._lastCanvasFilter) return false;

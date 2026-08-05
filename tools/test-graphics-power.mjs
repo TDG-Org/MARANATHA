@@ -615,8 +615,18 @@ console.log('Graphics quality and GPU power policy checks passed.');
   const setter = gfx.slice(gfx.indexOf('setColourGrade'), gfx.indexOf('setColourGrade') + 600);
   assert.match(setter, /source:\s*'explicit'/, 'the switch must notify explicitly so the grade applies live');
 
-  assert.match(fx, /get _base\(\)\s*\{\s*return Graphics\.colourGrade\s*\?/,
+  // Keyed to the GUARANTEE, not to the formatting. This assertion used to
+  // require `return Graphics.colourGrade ?` to be the first thing inside the
+  // getter, so adding a second condition to it broke a test whose intent was
+  // untouched — the same failure as keying a guard to the literal "ms: 300".
+  const baseGetter = fx.slice(fx.indexOf('get _base()'), fx.indexOf('get _base()') + 500);
+  assert.match(baseGetter, /Graphics\.colourGrade\s*\?/,
     'PostFX must drop the base grade entirely when the switch is off');
+  // ...and on a CPU-rasterized context, where this CSS filter stops being the
+  // cheap compositor path it was chosen as and becomes a colour-matrix plus a
+  // blit over the whole surface, on the same cores already drawing the scene.
+  assert.match(baseGetter, /GPU\.software/,
+    'PostFX must also drop the base grade when there is no GPU behind the canvas');
 
   // Low has never carried the grade; the switch must not resurrect it there.
   assert.match(fx, /low:\s*''/, 'Low still ships with no base grade at all');

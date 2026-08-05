@@ -2,6 +2,7 @@
 // well on ANY device. Strategy: start from a device-appropriate pixel ratio
 // cap, then adapt DOWN at runtime if sustained frame times say the device
 // is struggling. Target 60fps mid-range; graceful floor on low-end.
+import { GPU } from './gpuCapability.js';
 
 export function detectTier() {
   const win = globalThis.window;
@@ -28,12 +29,30 @@ export function detectTier() {
 // device sustains slow frames. Steps are sticky-down; paced frame deltas
 // cannot prove headroom, so only an explicit preset choice may restore DPR.
 export class AdaptiveQuality {
-  constructor(renderer, { basePixelRatio, onChange } = {}) {
+  constructor(renderer, { basePixelRatio, onChange, floor, startAt } = {}) {
     this.renderer = renderer;
     this.base = basePixelRatio
       ?? Math.min(globalThis.window?.devicePixelRatio || 1, 2);
-    this.ratio = this.base;
-    this.min = Math.min(1, this.base);
+    // The floor is normally 1.0 — never render a desktop below native, because
+    // a painterly game at 0.8 looks soft for no reason on hardware that can
+    // afford native. But on a DPR-1 display that makes min === base === ratio,
+    // and frame() early-returns on `ratio <= min` FOREVER: the one automatic
+    // escape hatch is structurally dead on exactly the machines with no pixels
+    // to spare. A caller that KNOWS the context is CPU-rasterized may lower it.
+    this.hardFloor = Number.isFinite(floor) && floor > 0 ? Math.min(floor, this.base) : 1;
+    // A CAPABILITY CEILING, distinct from the base. `raise` exists so an
+    // explicit preset choice can hand the player their pixels back — but on a
+    // CPU-rasterized context that hands back a 12fps game, and Graphics
+    // notifies 'explicit' for the frame-rate and colour-grade buttons too, so
+    // merely opening Settings and touching either one undid the whole fix
+    // (measured 0.50 -> 1.00). Capability is not a preference: nothing the
+    // player picks may exceed it while it holds.
+    this.hasCap = Number.isFinite(startAt) && startAt > 0;
+    this.cap = this.hasCap
+      ? Math.max(this.hardFloor, Math.min(this.base, startAt))
+      : this.base;
+    this.ratio = this.cap;
+    this.min = Math.min(this.hardFloor, this.base);
     this.onChange = onChange;
     this._window = null;
     this._sampleFrames = 120;
@@ -76,16 +95,19 @@ export class AdaptiveQuality {
   setBase(basePixelRatio, { raise = false } = {}) {
     if (!Number.isFinite(basePixelRatio) || basePixelRatio <= 0) return;
     this.base = basePixelRatio;
+    // Without a declared capability ceiling the cap simply tracks the base, or
+    // a later display/zoom change would be clamped by a stale number.
+    if (!this.hasCap) this.cap = this.base;
     // A browser zoom/display change may raise native DPR after we were
     // legitimately rendering below 1. Sticky-down means even the floor cannot
     // clamp that 0.8 ratio upward; only an explicit preset action may do so.
-    this.min = Math.min(1, this.base, raise ? 1 : this.ratio);
+    this.min = Math.min(this.hardFloor, this.base, raise ? this.hardFloor : this.ratio);
     this._window = null;
     this.set(raise ? this.base : Math.min(this.ratio, this.base));
   }
 
   set(ratio) {
-    const next = Math.max(this.min, Math.min(this.base, ratio));
+    const next = Math.max(this.min, Math.min(this.base, this.cap, ratio));
     if (next === this.ratio) return;
     this.ratio = next;
     this.renderer.setPixelRatio(next);
@@ -222,6 +244,12 @@ export class DebugHud {
       // Driver strings are long and bracket-heavy: keep the useful middle.
       if (raw) this._gpuName = String(raw).replace(/^ANGLE \(|\)$/g, '').slice(0, 58);
     } catch { /* the extension is optional; the HUD survives without it */ }
+    // ...and a name is not enough, because the failure mode that cost the most
+    // time to find reads as an ordinary slow frame: hardware acceleration
+    // switched OFF in the browser, every pixel rasterized on the CPU, `script`
+    // and `submit` both reporting ~5ms beside an 83ms frame because the real
+    // work happens after submit returns. Say it in words, on the HUD.
+    if (GPU.software) this._gpuName = `⚠ SOFTWARE (no GPU) — ${this._gpuName}`;
     return this._gpuName;
   }
 
