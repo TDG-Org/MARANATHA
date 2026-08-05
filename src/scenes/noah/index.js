@@ -637,6 +637,11 @@ export function buildNoahArk({ scene, camera, renderer, app, signal = null }) {
     decks.dispose();
     site.dispose();
     wood.dispose();
+    // The scene loaded these from files and owns them, so the scene frees them.
+    // Same omission as the story's brick texture: disposeDeep() runs afterwards
+    // and only reaches what is still hanging on the graph, so a texture used by
+    // a stage that has already disposed its own group is freed by nobody.
+    for (const texture of Object.values(worldTextures)) texture.dispose();
   }
 
   const audit = () => auditLayout({

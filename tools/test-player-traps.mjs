@@ -170,6 +170,94 @@ import { createCheckpointPersistence } from '../src/scenes/joseph3d/checkpointEn
     `${after.geometries} of ${before.geometries} geometries were never disposed`);
 }
 
+// ── 5. A SETTING THE PLAYER CHOSE MUST SURVIVE A RELOAD ─────────────────────
+//
+// Graphics reads four localStorage keys through one helper that validated
+// EVERY value against the preset table — so `'on'`/`'off'` (the colour grade)
+// and `'saver'`/`'balanced'`/`'max'` (the frame-rate dial) could never pass.
+// Both were written on every click and thrown away on every load: a player who
+// chose Saver for heat, or turned the grade off to buy frames, silently got
+// Balanced and Rich back every single time they opened the game.
+{
+  const { GraphicsSystem } = await import('../src/systems/Graphics.js');
+  const store = () => {
+    const map = new Map();
+    return { getItem: (k) => (map.has(k) ? map.get(k) : null), setItem: (k, v) => map.set(k, String(v)), map };
+  };
+
+  for (const [rate, grade] of [['saver', false], ['max', false], ['balanced', true], ['max', true]]) {
+    const storage = store();
+    const first = new GraphicsSystem({ storage, detectedPreset: 'medium' });
+    first.setFrameRate(rate);
+    first.setColourGrade(grade);
+    assert.equal(first.frameRate, rate, 'precondition: the choice applies in the session');
+    assert.equal(first.colourGrade, grade, 'precondition: the grade applies in the session');
+
+    // A NEW instance over the SAME storage is exactly what a reload is.
+    const reloaded = new GraphicsSystem({ storage, detectedPreset: 'medium' });
+    assert.equal(reloaded.frameRate, rate,
+      `frame rate "${rate}" did not survive a reload (got "${reloaded.frameRate}") — `
+      + 'the dial writes to storage and the loader throws the value away');
+    assert.equal(reloaded.colourGrade, grade,
+      `colour grade ${grade} did not survive a reload (got ${reloaded.colourGrade})`);
+  }
+
+  // A junk or hand-edited value must fall back, not crash or stick.
+  {
+    const storage = store();
+    storage.setItem('maranatha-frame-rate', 'ludicrous');
+    storage.setItem('maranatha-colour-grade', 'maybe');
+    storage.setItem('maranatha-graphics-v1', 'ultra');
+    const g = new GraphicsSystem({ storage, detectedPreset: 'medium' });
+    assert.equal(g.frameRate, 'balanced', 'an unknown frame rate falls back to the default');
+    assert.equal(g.colourGrade, true, 'an unknown grade value falls back to on');
+    assert.ok(['low', 'medium', 'high'].includes(g.name), 'an unknown preset falls back to a real one');
+  }
+}
+
+// -- 6. A SCENE MUST FREE THE FILE TEXTURES IT LOADED, ITSELF ---------------
+//
+// The ownership rule, enforced directly. Leaning on disposeDeep() is what let
+// the brick leak ship: it sweeps whatever is still hanging on the graph when it
+// runs, so a texture used only by a stage that already disposed its own group
+// is freed by nobody, while its neighbours on long-lived objects are freed by
+// luck.
+//
+// Measured honestly: the ark does NOT leak today either way (five cycles in a
+// real browser, textures flat at 0 with and without its own disposal, because
+// disposeDeep happens to reach its two). That is exactly why the RULE is
+// asserted here rather than the symptom -- the ark is one refactor away from
+// the story's bug, and an assertion that only fires on today's symptom would
+// have passed on the ark while it was one line from breaking.
+{
+  const scenes = [
+    ['the story', '../src/scenes/joseph3d/index.js', 'buildJoseph3D'],
+    ['the ark', '../src/scenes/noah/index.js', 'buildNoahArk'],
+  ];
+  for (const [label, path, exportName] of scenes) {
+    const mod = await import(path);
+    const booted = await bootScene(mod[exportName]);
+    const owned = [...booted.census().sets.textures]
+      .filter((t) => String(t.image && t.image.src || '').includes('textures/'));
+    assert.ok(owned.length > 0, `${label} must load at least one file texture (found ${owned.length})`);
+
+    const freed = new Set();
+    for (const t of owned) {
+      const original = t.dispose.bind(t);
+      t.dispose = () => { freed.add(t); original(); };
+    }
+    booted.disposeScene(); // the scene's OWN dispose, before any sweeper runs
+    const missed = owned.filter((t) => !freed.has(t))
+      .map((t) => String(t.image && t.image.src || '').split('/').pop());
+    assert.equal(missed.length, 0,
+      `${label} loaded ${owned.length} file textures and its own dispose() freed `
+      + `${freed.size}. Never freed: ${missed.join(', ')}. A scene owns what it loads - `
+      + 'disposeDeep only reaches what is still on the graph when it runs.');
+    await booted.disposeDeep();
+  }
+}
+
+
 console.log(
   'player traps passed: pause restores input in every scene (no scene answers '
   + '"is input on?" from the flag pause clears), a reset survives a running story, '

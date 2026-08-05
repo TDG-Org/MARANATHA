@@ -608,8 +608,15 @@ console.log('Graphics quality and GPU power policy checks passed.');
   const fx = readFileSync(new URL('../src/engine/PostFX.js', import.meta.url), 'utf8');
 
   assert.match(gfx, /setColourGrade\s*\(/, 'Graphics must expose a colour-grade switch');
-  assert.match(gfx, /colourGrade\s*=\s*readKey\([^)]*GRADE_KEY[^)]*\)\s*!==\s*'off'/,
-    'the grade must persist, and default to ON (it is the tuned look)');
+  // Keyed to the GUARANTEE, not the call's shape. This used to require the
+  // readKey(...) call to contain no closing parenthesis, so giving the key its
+  // own validator — the fix for the grade never being read back AT ALL — broke
+  // a test whose intent it satisfied. That the setting genuinely survives a
+  // reload is now asserted BEHAVIOURALLY in test:traps, over real storage.
+  const gradeLoad = gfx.slice(gfx.indexOf('this.colourGrade ='), gfx.indexOf('this.colourGrade =') + 200);
+  assert.match(gradeLoad, /readKey\(/, 'the grade must be READ back from storage, not just written');
+  assert.match(gradeLoad, /GRADE_KEY/, 'the grade must be read from its own key');
+  assert.match(gradeLoad, /!==\s*'off'/, 'the grade must default to ON (it is the tuned look)');
   // Flipping it must notify as 'explicit', which is what makes PostFX re-compose
   // with no reload — the whole point is A/B-ing it against a live fps readout.
   const setter = gfx.slice(gfx.indexOf('setColourGrade'), gfx.indexOf('setColourGrade') + 600);

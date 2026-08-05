@@ -66,13 +66,23 @@ function defaultStorage() {
   try { return globalThis.localStorage; } catch { return null; }
 }
 
-function readKey(storage, key) {
+// THE VALIDATOR IS THE CALLER'S, because this reads FOUR different keys and
+// only two of them hold preset names. It used to test every value against
+// GRAPHICS_PRESETS, so `'on'`/`'off'` (the colour grade) and
+// `'saver'`/`'balanced'`/`'max'` (the frame-rate dial) could never pass — both
+// settings were written to storage on every click and then thrown away on every
+// load. A player who chose Saver for heat, or turned the grade off to buy
+// frames, silently got Balanced and Rich back the next time they opened the
+// game, forever, with no way to tell.
+function readKey(storage, key, isValid) {
   try {
     const value = storage?.getItem(key);
-    if (value && GRAPHICS_PRESETS[value]) return value;
+    if (value && (!isValid || isValid(value))) return value;
   } catch { /* Storage may be blocked. */ }
   return null;
 }
+
+const isPreset = (v) => !!GRAPHICS_PRESETS[v];
 
 function writeKey(storage, key, value) {
   try { storage?.setItem(key, value); } catch { /* Storage may be blocked. */ }
@@ -103,8 +113,8 @@ export class GraphicsSystem {
     cooldownFrames = AUTO_COOLDOWN_FRAMES,
   } = {}) {
     this.storage = storage === undefined ? defaultStorage() : storage;
-    const chosen = readKey(this.storage, KEY);
-    const remembered = readKey(this.storage, AUTO_KEY);
+    const chosen = readKey(this.storage, KEY, isPreset);
+    const remembered = readKey(this.storage, AUTO_KEY, isPreset);
     this.provenance = chosen ? 'explicit' : 'auto';
     const detected = capAutoStart(detectedPreset || autoDefault());
     // Hardware can change between visits (desktop save opened on a phone,
@@ -129,13 +139,13 @@ export class GraphicsSystem {
     // the compositor at SCREEN resolution, so dprCap cannot shrink it and the
     // fps counter cannot see it. On by default (it is the tuned look); the
     // player may turn it off, and Low has never used it at all.
-    this.colourGrade = readKey(this.storage, GRADE_KEY) !== 'off';
+    this.colourGrade = readKey(this.storage, GRADE_KEY, (v) => v === 'on' || v === 'off') !== 'off';
     // FRAME RATE IS A POWER DIAL, and it is the biggest one in the app: a frame
     // costs GPU work, compositor work and a wake-up, so halving the rate very
     // nearly halves the draw. 'balanced' is the default because nobody can tell
     // 72 from 144 in a slow painterly scene, and the pacer makes every option
     // land on a whole number of refreshes so none of them judder.
-    const savedRate = readKey(this.storage, RATE_KEY);
+    const savedRate = readKey(this.storage, RATE_KEY, (v) => !!FRAME_TARGETS[v]);
     this.frameRate = FRAME_TARGETS[savedRate] ? savedRate : 'balanced';
     this.subs = new Set();
   }
