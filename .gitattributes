@@ -1,0 +1,9 @@
+# The license is a legal document — its bytes must be the same for everyone.
+#
+# This machine has core.autocrlf=true, so without this rule git would rewrite
+# LICENSE to CRLF in the working copy on the next clone or checkout. The blob in
+# the repo would stay LF while the local file drifted, and a local Windows build
+# would then ship a dist/LICENSE that no longer matched the source it came from.
+# Nobody would ever see that happen. Pinned to LF so the file survives a round
+# trip through git unchanged, on every platform.
+LICENSE text eol=lf

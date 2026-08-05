@@ -37,6 +37,9 @@ AGENTS.md
 # Anti-loop experiment ledger — a workflow doc like CHECKLIST/checklists, so it
 # stays local-only too (the public repo is code only). Flagged to the user.
 TRIED.md
+# Agent tooling logbook — scratch working notes, same rule as .claude/.agents:
+# local only, and never one `git add -A` away from the public repo.
+.devfleet/
 
 # --- Nate's private control panel + drop zone (LOCAL ONLY) ---
 # Instructions/to-do for Nate now live at nate-drop/NATE.md beside the files.

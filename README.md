@@ -101,13 +101,16 @@ public/models/        rigged character GLBs (CC0 — see CREDITS.md)
 
 </div>
 
-<details>
-<summary><sub>© 2026</sub></summary>
+## 📜 License
 
-<sub>Copyright © 2026 Christian Nate McIlvenny. All rights reserved.</sub>
+MARANATHA is **source-available, not open source**: you're welcome to read the code, fork
+it, run it, modify your own private copy, and open issues and pull requests. Publishing,
+hosting, or redistributing it — including a renamed or modified version — selling it or
+using it inside anything you charge for, or using it as AI/ML training data, all need our
+written permission first. Third‑party libraries, models, textures, and audio keep their own
+licenses, which control for those pieces — see the credits for
+[models](public/models/CREDITS.md), [textures](public/textures/CREDITS.md), and
+[audio](public/audio/CREDITS.md).
 
-</details>
-
-Questions, or want permission to use something here? Open an issue on the repo.
-
-</details>
+Full terms: **[LICENSE](LICENSE)** · Copyright © 2026 Nate McIlvenny and Luke McIlvenny
+(TDG). All rights reserved. Licensing and partnership inquiries: [natemci.com](https://natemci.com).
