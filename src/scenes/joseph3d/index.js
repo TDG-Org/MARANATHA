@@ -121,6 +121,11 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
     color: 0xffffff,
     mottle: [0xeaf7c0, 0xd8b98a], // sun-bright tufts + warm dry patches
     map: grassTex,
+    // The supplied grass photo has almost no blue and tops out near half value,
+    // so multiplied by any light term it can only be dark olive. This puts the
+    // green back into the surface; MoodGrading rides its intensity on the
+    // mood's hemi, so it lifts the day and leaves the night alone.
+    emissive: 0x24451a,
     segX: 96, segZ: 30,
     pads: [
       { x: 0, z: 0, flatCore: 27, falloff: 42 },    // the camp
@@ -212,7 +217,7 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
   const dialogue = createDialogue({ signal, isPaused: isScenePaused });
   const nameTags = createNameTags();
   const guide = new Guidance(scene);
-  const grading = new MoodGrading({ sky, fog: scene.fog, keyLight, hemiLight, cinema, ridges: ridges.userData.materials });
+  const grading = new MoodGrading({ sky, fog: scene.fog, keyLight, hemiLight, cinema, ridges: ridges.userData.materials, groundMat: ground.material });
 
   // --- camera (authored, close) ---
   // base follow comes from CAMERA_TUNING (raised + a touch more zoom-out in D4);

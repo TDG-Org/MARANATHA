@@ -28,7 +28,7 @@ export const MOODS = {
   // readable, but let the landscape, ridges and sky fall away so the distant
   // meal fire is the one warm landmark. Earlier bright lavender air made the
   // flash-forward read as overcast day even though the sun was hidden.
-  pit: { skyTop: 0x1c2238, skyBottom: 0x444055, fog: 0x343544, fogNear: 32, key: 0xc9d2e7, keyI: 0.94, hemi: 0.46, hemiSky: 0x444a63, sun: [0, 12, 5], ridge: [0x4e5265, 0x414556, 0x303442], tint: '#111629', tintA: 0.07 },
+  pit: { groundLift: 0.06, skyTop: 0x1c2238, skyBottom: 0x444055, fog: 0x343544, fogNear: 32, key: 0xc9d2e7, keyI: 0.94, hemi: 0.46, hemiSky: 0x444a63, sun: [0, 12, 5], ridge: [0x4e5265, 0x414556, 0x303442], tint: '#111629', tintA: 0.07 },
   // D13 (Nate: "it shows night when the brothers are talking… then day… THEN
   // night"): DAYTIME TENSION. The envy scene, the telling and the close are
   // broad daylight in the story — `ominous` is a NIGHT palette and reading it
@@ -45,7 +45,7 @@ export const MOODS = {
   // ever wanted again.)
   dusk: { skyTop: 0x3c4499, skyBottom: 0xf4854e, fog: 0xc08a70, fogNear: 38, key: 0xffb877, keyI: 0.94, hemi: 0.36, hemiSky: 0xf4854e, sun: [-15, 4.5, 3], ridge: [0xc08578, 0xa66a72, 0x6f4560], tint: '#3a2f55', tintA: 0.09 },
   dream: { skyTop: 0x2b3a67, skyBottom: 0x9a8fd2, fog: 0x6f6ca4, fogNear: 34, key: 0xc8d4ff, keyI: 0.82, hemi: 0.4, hemiSky: 0x9a8fd2, sun: [7, 10, -7], ridge: [0x6a6fa6, 0x585d94, 0x3d426f], tint: '#1d2547', tintA: 0.1 },
-  night: { skyTop: 0x0b1026, skyBottom: 0x2b3a67, fog: 0x1b2340, fogNear: 30, key: 0x9fb6e0, keyI: 0.58, hemi: 0.28, hemiSky: 0x2b3a67, sun: [11, 7, -6], ridge: [0x333c66, 0x2a3258, 0x1c2340], tint: '#060a18', tintA: 0.12 },
+  night: { groundLift: 0.14, skyTop: 0x0b1026, skyBottom: 0x2b3a67, fog: 0x1b2340, fogNear: 30, key: 0x9fb6e0, keyI: 0.58, hemi: 0.28, hemiSky: 0x2b3a67, sun: [11, 7, -6], ridge: [0x333c66, 0x2a3258, 0x1c2340], tint: '#060a18', tintA: 0.12 },
 };
 
 export class MoodGrading {
@@ -61,6 +61,8 @@ export class MoodGrading {
     this._fromKey = new THREE.Color();
     this._toKey = new THREE.Color();
     this._fromHemiSky = new THREE.Color();
+    this._fromHemiGnd = new THREE.Color();
+    this._toHemiGnd = new THREE.Color();
     this._toHemiSky = new THREE.Color();
     this._fromSun = new THREE.Vector3();
     this._toSun = new THREE.Vector3();
@@ -88,6 +90,23 @@ export class MoodGrading {
     this._toKey.set(m.key);
     this._fromHemiSky.copy(r.hemiLight.color);
     this._toHemiSky.set(m.hemiSky ?? m.skyBottom);
+    // THE GROUND HALF OF THE SKY LIGHT MOVES TOO.
+    //
+    // Only the sky half was ever graded, so the bounce coming back UP off the
+    // land stayed a fixed daytime olive (0x4a5a34) through dusk, night, the pit
+    // and the dream — in the dark moods it ended up BRIGHTER than the sky half
+    // it is supposed to sit under, which is exactly backwards and is a large
+    // part of why the night scenes read muddy rather than moody.
+    //
+    // Derived from the mood's own fog rather than authored per row, so it can
+    // never drift out of step with the palette and no mood can forget it: fog
+    // is the colour of the air in that moment, and bounced light is that air
+    // hitting the ground.
+    // Optional: callers may hand in a light stub without a ground half.
+    if (r.hemiLight.groundColor) {
+      this._fromHemiGnd.copy(r.hemiLight.groundColor);
+      this._toHemiGnd.set(m.hemiGround ?? m.fog).multiplyScalar(0.46);
+    }
     this._fromSun.copy(r.keyLight.position);
     this._toSun.set(...(m.sun ?? [-9, 13, 6]));
     // the mountains tell the time too (one shared palette — lighting-mood)
@@ -121,6 +140,27 @@ export class MoodGrading {
     r.keyLight.intensity = tw.keyI0 + (tw.keyI1 - tw.keyI0) * k;
     r.hemiLight.intensity = tw.hemi0 + (tw.hemi1 - tw.hemi0) * k;
     r.hemiLight.color.lerpColors(this._fromHemiSky, this._toHemiSky, k);
+    r.hemiLight.groundColor?.lerpColors(this._fromHemiGnd, this._toHemiGnd, k);
+    // THE GRASS HAS NO GREEN LEFT TO GIVE. Nate: "this game needs more color,
+    // saturation, hues, feelings and vibe!" The ground photo's albedo tops out
+    // around half value with almost nothing in the blue channel, so once it is
+    // multiplied by a Lambert term it can only ever be a dark olive — no light
+    // rig can add chroma that is not in the texture. A small emissive puts the
+    // colour back INTO the surface, and riding it on the mood's own hemi
+    // intensity means it lifts the daylight field without making midnight grass
+    // glow.
+    if (r.groundMat) {
+      // Scaled by how bright the moment actually IS — hemi alone said 0.62 for
+      // the pit, whose hemi is high only because a night cistern needs sky
+      // fill, and a green tinge on the rocks around that hole is the last
+      // thing it needs. `groundLift` on a mood row overrides outright.
+      const hemi = tw.hemi0 + (tw.hemi1 - tw.hemi0) * k;
+      const key = tw.keyI0 + (tw.keyI1 - tw.keyI0) * k;
+      const authored = this.moods[this.current]?.groundLift;
+      r.groundMat.emissiveIntensity = authored !== undefined
+        ? authored
+        : Math.max(0, Math.min(1, hemi * key * 1.2));
+    }
     // the sun ARCS across the day (direction re-shades the whole camp)
     r.keyLight.position.lerpVectors(this._fromSun, this._toSun, k);
     if (r.ridges && this.moods[this.current]?.ridge) {

@@ -232,6 +232,7 @@ export function makeGround({
   color = 0x4c4066, seed = 77, width = 320, depth = 130,
   flatCore = 17, falloff = 46, z = -25, flattenWorldZ = 0,
   pads = null, segX = 64, segZ = 20, mottle = null, map = null,
+  emissive = null,
 } = {}) {
   const padList = pads ?? [{ x: 0, z: flattenWorldZ, flatCore, falloff }];
   const geo = new THREE.PlaneGeometry(width, depth, segX, segZ);
@@ -290,6 +291,14 @@ export function makeGround({
     ? { vertexColors: true, fog: true, color: map ? 0xffffff : color }
     : { color, fog: true };
   if (map) matOpts.map = map;
+  // Chroma the texture cannot supply. See MoodGrading._apply: the intensity
+  // rides the mood's hemi so this lifts a daylight field without making
+  // midnight grass glow. Zero by default — only a caller that knows its map is
+  // this dark should ask for it.
+  if (emissive) {
+    matOpts.emissive = new THREE.Color(emissive);
+    matOpts.emissiveIntensity = 0;
+  }
   const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial(matOpts));
   mesh.position.z = z;
   return mesh;

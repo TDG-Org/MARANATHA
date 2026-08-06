@@ -274,11 +274,19 @@ assert.match(
   /ground\.material\.color\.set\(name === 'pit' \? 0x46505c : 0xffffff\)/,
   'the shared grass landscape no longer recedes into night at the pit stage',
 );
-assert.match(
-  await read('../src/engine/MoodGrading.js'),
-  /pit:\s*\{\s*skyTop:\s*0x1c2238,[\s\S]*ridge:\s*\[0x4e5265,\s*0x414556,\s*0x303442\]/,
-  'the cold-open sky or ridges drifted back to the bright overcast-day palette',
-);
+{
+  // The GUARANTEE is that the pit row still carries the dark palette — not that
+  // skyTop happens to be the first key written on that line. Asserted as an
+  // adjacency, this broke the moment an unrelated field was added to the row,
+  // while never having checked anything about the colours it names.
+  const moodSource = await read('../src/engine/MoodGrading.js');
+  const pitRow = moodSource.match(/\n\s*pit:\s*\{[^}]*\}/);
+  assert.ok(pitRow, 'the pit mood row is gone');
+  assert.match(pitRow[0], /skyTop:\s*0x1c2238/,
+    'the cold-open sky drifted back to the bright overcast-day palette');
+  assert.match(pitRow[0], /ridge:\s*\[0x4e5265,\s*0x414556,\s*0x303442\]/,
+    'the cold-open ridges drifted back to the bright overcast-day palette');
+}
 {
   const heaveStart = coldOpenSource.indexOf('await ctx.motion.tween(1250');
   const heaveEnd = coldOpenSource.indexOf('P.setSkyLight(1)', heaveStart);
