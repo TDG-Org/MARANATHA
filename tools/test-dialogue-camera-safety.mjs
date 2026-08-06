@@ -114,6 +114,7 @@ const DESKTOP = 1440 / 900;
     })),
     { x: -2.6, z: -4.4, headHeight: 1.65 },
   ];
+  const solvedDistances = [];
   for (const aspect of [PORTRAIT, LANDSCAPE, DESKTOP]) {
     const plan = planGroupCamera({
       actors: closeActors,
@@ -125,7 +126,23 @@ const DESKTOP = 1440 / 900;
       aspect,
     });
     assert.ok(plan.compositionSafe, `telling close unsafe at aspect ${aspect}`);
+    // `compositionSafe` IS SATISFIABLE BY RETREATING. The solver widens until
+    // no head covers another, so a staging that cannot be framed simply gets
+    // backed away from until everyone is small enough not to overlap — and
+    // nothing bounded that. On a 390x844 phone this close solves to ~19u,
+    // which is six people at about a twentieth of the frame height at the
+    // moment the chapter lands.
+    //
+    // 24u is a RUNAWAY bound, not a quality target: it catches "the solver gave
+    // up and went to the horizon" and would not catch the current framing. The
+    // real number is printed below so it stays visible rather than implied.
+    solvedDistances.push({ aspect: aspect.toFixed(2), distance: plan.distance });
+    assert.ok(plan.distance <= 24,
+      `the close retreated to ${plan.distance.toFixed(1)}u to find a safe composition `
+      + `at aspect ${aspect.toFixed(2)} — that is the solver giving up, not a shot`);
   }
+  console.log(`  close solves to: ${solvedDistances.map((d) => `${d.aspect} -> ${d.distance.toFixed(1)}u`).join(', ')}`
+    + '  (compositionSafe can always be met by backing away; these are the real numbers)');
   console.log('Telling covered circle: safe across portrait, landscape, and desktop.');
 }
 

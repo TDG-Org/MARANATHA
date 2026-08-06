@@ -253,7 +253,13 @@ const groupShots = [
 //   coldOpen.js  the betrayal prowl — staged at the PIT, 60u west of the camp,
 //                which is a different place with its own world (and its own
 //                proof in test-dialogue-camera-safety).
-const GROUP_SHOTS_ELSEWHERE = 1;
+const GROUP_SHOTS_ELSEWHERE = 2;
+// Accounted for, not ignored:
+//   coldOpen.js   the betrayal prowl — staged at the PIT, 60u west, a different
+//                 place with its own world (proved in test-dialogue-camera-safety).
+//   index.js      the checkpoint-resume re-stage of the close — the SAME
+//                 composition telling.js authors, from the same exported marks,
+//                 so judging it here would score the identical frame twice.
 
 // COMPLETENESS TRIPWIRE. The two above are hand-listed because their actor sets
 // live inside beat closures. If a third group shot is ever authored, this fails
@@ -261,8 +267,16 @@ const GROUP_SHOTS_ELSEWHERE = 1;
 // slip through silently the way these two did.
 {
   let planned = 0;
-  for (const name of BEATS) {
-    const src = await readFile(new URL(`../src/scenes/joseph3d/beats/${name}.js`, import.meta.url), 'utf8');
+  // ...INCLUDING THE ONE OUTSIDE THE BEATS. The scan covered beats/*.js only, so
+  // the checkpoint-resume re-stage in the scene assembly — a real group camera,
+  // in a path a player reaches by resuming the last beat — was never counted and
+  // the tripwire reported full coverage anyway.
+  const GROUP_CAMERA_FILES = [
+    ...BEATS.map((name) => `beats/${name}.js`),
+    'index.js',
+  ];
+  for (const file of GROUP_CAMERA_FILES) {
+    const src = await readFile(new URL(`../src/scenes/joseph3d/${file}`, import.meta.url), 'utf8');
     planned += (src.match(/planGroupCamera\(/g) || []).length;
   }
   assert.equal(planned, groupShots.length + GROUP_SHOTS_ELSEWHERE,
