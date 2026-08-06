@@ -559,6 +559,14 @@ export function makeColdOpen(ctx, h) {
         ctx.joseph.turnToward(0.35, -0.8);
         ctx.joseph.setGrief(true);       // head bows deep; small sobbing hitches
         ctx.sound('sfx.boy_crying');     // Nate-supplied, optimized short mono sniffles
+        // TEARS. The grief pose bows his head and the sniffles carry the sound,
+        // but on a low-poly face at 2.5u there was nothing to SEE. Eight drops,
+        // staggered, falling from just under the eyes.
+        P.setTears?.(true, {
+          x: jRoot.position.x,
+          y: jRoot.position.y + ctx.joseph.headHeight * 0.82,
+          z: jRoot.position.z,
+        });
         // D11 (Nate): the pit is NIGHT-dark — the shrunken sky-disc above him
         // read as a rising sun from this camera; dim it to a faint memory.
         P.setSkyLight(0.16);
@@ -571,10 +579,41 @@ export function makeColdOpen(ctx, h) {
       { t: 'wait', ms: 1400 },
       { t: 'verse', verse: WEB.gen_37_24 },
       { t: 'verseHide' },
-      { t: 'wait', ms: 3300 }, // hold on the shaking shoulders — let it be sad
-      // SHOT 7 — slow fade to black → a PURE BLACK 2.5s hold → golden morning.
-      { t: 'fade', on: true, ms: 2200 },
-      { t: 'wait', ms: 2500 },
+      // `hold`, not `wait`: a plain wait runs its full length even after the
+      // player has skipped the narration, so the shot stayed locked for another
+      // 3.3s on a frame they had already asked to leave. Shortened too — the
+      // 1400ms before the verse already gives this shot its silence, and the
+      // beat was paying for the same pause twice.
+      { t: 'hold', ms: 1700 }, // hold on the shaking shoulders — let it be sad
+      // SHOT 7 — THE SURFACE (Nate: "one more camera shot, after showing joseph
+      // crying in the well, to another last shot of the camera now on the
+      // surface still watching the well (cant see joseph) but the camera is
+      // slowly panning away from the well").
+      //
+      // This is the chapter's real last image: a hole in the ground at night
+      // with a boy in it you can no longer see, and the camera leaving anyway.
+      // It also replaces most of what used to be a 7.6-second black screen.
+      { t: 'fade', on: true, ms: 900 },
+      { t: 'fn', fn: () => {
+        P.setTears?.(false);
+        // Back above ground: the shaft shots deliberately lowered the clip so
+        // the camera could go below the terrain, and this one must not.
+        ctx.camera.minGroundY = baseMinGroundY;
+        ctx.joseph.setGrief(true); // he is still weeping down there, unseen
+      } },
+      { t: 'cam', angle: Math.PI * 0.16, target: { x: P.PIT.x, y: 0, z: P.PIT.z }, distance: 5.6, height: 3.1, lookHeight: -0.5, duration: 1, awaitMs: false },
+      { t: 'fade', on: false, ms: 1200 },
+      // He is audible but invisible — the one cue that keeps the empty frame
+      // from reading as an establishing shot of some rocks.
+      { t: 'sound', key: 'sfx.boy_crying', gain: 0.42 },
+      // ...and the camera withdraws. Slow, and never back to him.
+      { t: 'cam', angle: Math.PI * 0.16, target: { x: P.PIT.x, y: 0, z: P.PIT.z }, distance: 17, height: 7.4, lookHeight: -0.15, duration: 7200, awaitMs: false },
+      { t: 'hold', ms: 6000 },
+      { t: 'fade', on: true, ms: 1600 },
+      // SHOT 8 — golden morning. The pure-black hold used to be 2.5s of nothing
+      // before a title card that also played over black; the card now carries
+      // the wait on its own.
+      { t: 'wait', ms: 700 },
       { t: 'fn', fn: () => {
         ctx.joseph.setGrief(false);
         P.group.visible = false;

@@ -240,8 +240,62 @@ export function buildPitStage(tex = {}) {
   mealGlow.visible = false; // raised (with opacity) by setMealGlow
   group.add(mealGlow);
 
+  // --- TEARS (Nate: "make small tear drops come out of joseph's eyes as
+  // particles to show crying") -------------------------------------------------
+  //
+  // The grief pose bows his head and the sniffles carry the sound, but at 2.5u
+  // on a low-poly face there is nothing to SEE. Eight drops is enough: they fall
+  // from just under the eyes, catch what little light reaches the bottom of a
+  // cistern, and stagger so they never read as a machine. One Points draw, no
+  // texture, no per-frame allocation — this plays in the darkest, quietest shot
+  // in the chapter and must not be the thing that makes it stutter.
+  const TEAR_N = 8;
+  const tearPos = new Float32Array(TEAR_N * 3);
+  const tearLife = new Float32Array(TEAR_N);   // seconds remaining, 0 = waiting
+  const tearWait = new Float32Array(TEAR_N);   // seconds until this one falls
+  const tearSeed = new Float32Array(TEAR_N);
+  for (let i = 0; i < TEAR_N; i += 1) {
+    tearWait[i] = 0.35 + rnd() * 2.6;
+    tearSeed[i] = rnd();
+  }
+  const tearGeo = new THREE.BufferGeometry();
+  const tearAttr = new THREE.BufferAttribute(tearPos, 3);
+  tearAttr.setUsage(THREE.DynamicDrawUsage);
+  tearGeo.setAttribute('position', tearAttr);
+  const tears = new THREE.Points(tearGeo, new THREE.PointsMaterial({
+    color: 0xdfe9ff,
+    size: 0.045,
+    sizeAttenuation: true,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    fog: false,
+  }));
+  tears.frustumCulled = false;
+  tears.visible = false;
+  group.add(tears);
+  const tearHead = new THREE.Vector3();
+  let tearsOn = false;
+
   return {
-    group, PIT, MEAL, coatProp, skyLight, shaftLight, campTents,
+    group, PIT, MEAL, coatProp, skyLight, shaftLight, campTents, tears,
+    /**
+     * Weep from a point in world space (the head), or stop.
+     * Called by the beat; the drops are then simulated by update().
+     */
+    setTears(on, head = null) {
+      tearsOn = !!on;
+      tears.visible = tearsOn;
+      if (head) tearHead.set(head.x, head.y, head.z);
+      if (!tearsOn) {
+        tears.material.opacity = 0;
+        for (let i = 0; i < TEAR_N; i += 1) {
+          tearLife[i] = 0;
+          tearWait[i] = 0.35 + tearSeed[i] * 2.6;
+        }
+      }
+    },
+    setTearOrigin(x, y, z) { tearHead.set(x, y, z); },
     // The stage owner drives this instead of hiding the light (see above).
     setShaft(k) { shaftLight.intensity = 1.05 * k; },
     // Visibility rides along: an opacity-0 additive sprite still costs a draw
@@ -249,10 +303,38 @@ export function buildPitStage(tex = {}) {
     setSkyLight(k) { skyLight.visible = k > 0; skyLight.material.opacity = 0.9 * k; },
     setMealGlow(k) { mealGlow.visible = k > 0; mealGlow.material.opacity = 0.6 * k; },
     shrinkSkyLight(k) { skyLight.scale.setScalar(8 - 6.5 * k); }, // k 0→1 closes over him
-    update() { /* static set — the beat animates the cast */ },
+    // The set itself is static — the beat animates the cast. The only thing
+    // simulated here is the weeping.
+    update(dt = 0) {
+      if (!tearsOn || !(dt > 0)) return;
+      // Fade in over the first moments so the first drop does not pop.
+      tears.material.opacity = Math.min(0.95, tears.material.opacity + dt * 1.6);
+      const FALL = 0.34;   // metres a drop travels before it is spent
+      for (let i = 0; i < TEAR_N; i += 1) {
+        if (tearLife[i] <= 0) {
+          tearWait[i] -= dt;
+          if (tearWait[i] > 0) { tearPos[i * 3 + 1] = -999; continue; } // parked below the world
+          tearLife[i] = 0.62 + tearSeed[i] * 0.3;
+          tearWait[i] = 1.7 + tearSeed[i] * 3.4; // the next one, whenever it comes
+        }
+        tearLife[i] -= dt;
+        const t = tearLife[i];
+        if (t <= 0) { tearPos[i * 3 + 1] = -999; continue; }
+        // k: 0 at the eye, 1 at the end of the fall. Squared, because a drop
+        // hangs at the lash and then goes.
+        const k = 1 - (t / (0.62 + tearSeed[i] * 0.3));
+        const side = tearSeed[i] > 0.5 ? 1 : -1;
+        tearPos[i * 3] = tearHead.x + side * 0.055;
+        tearPos[i * 3 + 1] = tearHead.y - 0.04 - FALL * k * k;
+        tearPos[i * 3 + 2] = tearHead.z + 0.07;
+      }
+      tearAttr.needsUpdate = true;
+    },
     dispose() {
       ringTex.dispose();
       glowTex.dispose();
+      tearGeo.dispose();
+      tears.material.dispose();
       shaftLight.parent?.remove(shaftLight); // it lives on the scene, not the group
       group.traverse((o) => { if (o.isInstancedMesh) o.dispose(); if (o.isMesh || o.isSprite) { o.geometry?.dispose?.(); o.material?.dispose?.(); } });
       group.parent?.remove(group);
