@@ -634,7 +634,12 @@ export function makeCampBeats(ctx, h) {
   async function dusk() {
     ctx.setInput(true);
     ctx.hud.setObjective('Sit with your brothers by the fire.', 'Walk to the fire, then press the prompt to sit.');
-    ctx.guide.setTargetXZ(0.6, -4.4);
+    // DUSK_JOSEPH_MARK, not a copy of its old value. The mark mirrored with the
+    // ring and this literal did not, so the glowing arrow — the one thing
+    // telling a first-time player where to go — pointed into the middle of the
+    // seated brothers, and one of them walks into the spot while you head for
+    // it.
+    ctx.guide.setTargetXZ(DUSK_JOSEPH_MARK.x, DUSK_JOSEPH_MARK.z);
     // (no music change — the D8 state machine holds the tension from the envy
     // scene; the calm dusk theme never sneaks back in between)
     ctx.grading.grade('dusk', 3200);
@@ -762,8 +767,10 @@ export function makeCampBeats(ctx, h) {
     // audio). Joseph, stung, rises to sleep alone.
     const jd = ctx.cast.judah, sm = ctx.cast.simeon;
     await seq([
+      // ...and its reverse stays on the SAME side of the axis, or the two
+      // shots swap the actors' screen sides and the exchange reads as a glitch.
       shot('judah', 'joseph', {
-        side: -0.5, dist: 3.8, height: 2.1, look: 1.15, ms: 1500,
+        side: 0.5, dist: 3.8, height: 2.1, look: 1.15, ms: 1500,
       }),
       { t: 'fn', fn: () => {
         // (the tension score is already running — the state machine carried it
@@ -808,8 +815,12 @@ export function makeCampBeats(ctx, h) {
       // D8: Joseph is visibly STUNG — he rises, and his head drops; the camera
       // stays with him a breath so the hurt is unmissable before the quest.
       { t: 'fn', fn: () => { ctx.joseph.play('idle'); ctx.joseph.setGrief(true, 0.55); ctx.hud.emote('Joseph is sad'); } },
+      // side FLIPPED with DUSK_RING for the same reason as the rebuke: this
+      // shot exists so the hurt is unmissable, and after the re-block it was
+      // pointing at the empty edge with the setting sun behind Joseph, turning
+      // the one frame that carries his face into a black cut-out.
       shot('joseph', 'judah', {
-        side: 0.5,
+        side: -0.5,
         dist: 3.8,
         height: 2.1,
         look: 1.15,

@@ -333,7 +333,12 @@ export function makeTellingBeats(ctx, h) {
         jac.char.turnToward(FIRE.x - jac.pos.x, FIRE.z - jac.pos.z);
         ctx.storyEvent?.('tell2_family');
       } },
-      shot('joseph', 'jacob', { side: 0.7, dist: 3.8, height: 2.15, look: 1.15 }),
+      // side FLIPPED with the ring. Jacob stands where he always did, but the
+      // brothers (and therefore the axis this shot is measured against) moved to
+      // the south arc, so +0.7 swung this shot dead north — out at the bare
+      // border and straight into the key — on the line the whole chapter has
+      // been building to. Both faces were silhouettes against nothing.
+      shot('joseph', 'jacob', { side: -0.7, dist: 3.8, height: 2.15, look: 1.15 }),
       { t: 'say', who: 'Joseph', text: 'Father, I also saw the sun, moon, and eleven stars bow to me.', color: J.Joseph },
       { t: 'dialogueHide' },
       { t: 'sound', key: 'stinger.hatred' },

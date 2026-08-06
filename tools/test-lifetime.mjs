@@ -115,6 +115,45 @@ for (const paused of [false, true]) {
   const skipped = await run('skipped');
   assert.ok(spoken >= 2500, `an unskipped closing line should hold its full ~2500ms, held ${spoken}`);
   assert.ok(skipped < 200, `a SKIPPED closing line still held ${skipped}ms of narration holds`);
+
+  // ...BUT A SKIP STOPS AT THE NEXT CUT.
+  //
+  // The flag used to live for the whole run, so one Skip on Genesis 37:24
+  // collapsed every hold that followed it — including one six steps and two
+  // fades later that was the BODY of the closing shot Nate asked for by name
+  // ("the camera is slowly panning away from the well"). The player got a
+  // fade-in immediately followed by a fade-out and would have reported the shot
+  // as missing. It still has to collapse several holds inside the SAME shot,
+  // so it cannot simply be spent on the first one: the boundary is the picture.
+  const acrossACut = async (status) => {
+    let waited = 0;
+    const seq = new Sequencer({
+      verseCard: { show: async () => ({ status }), hide() {} },
+      cinema: { fade: async () => {}, letterbox: async () => {}, title: async () => {} },
+      camera: { setDrift() {}, cinematicMoveTo: () => 0, cutTo: () => 0 },
+      hud: { setCutscene() {}, setLetterbox() {} },
+      sound() {},
+    });
+    const realWait = globalThis.setTimeout;
+    globalThis.setTimeout = (fn, ms = 0) => { waited += ms; return realWait(fn, 0); };
+    await seq.run([
+      { t: 'verse', verse: { text: 'x' } },
+      { t: 'verseHide' },
+      { t: 'hold', ms: 1700 },                                  // the verse's own pause
+      { t: 'cam', target: { x: 0, z: 0 }, duration: 1, awaitMs: false }, // a NEW shot
+      { t: 'hold', ms: 6000 },                                  // ...and its body
+    ]);
+    globalThis.setTimeout = realWait;
+    return waited;
+  };
+  const heldAcross = await acrossACut('done');
+  const skippedAcross = await acrossACut('skipped');
+  assert.ok(heldAcross >= 7600, `unskipped should hold both, held ${heldAcross}ms`);
+  assert.ok(skippedAcross >= 5900,
+    `a skip reached ACROSS a cut and deleted the shot that followed it — only `
+    + `${skippedAcross}ms of a 6000ms shot survived`);
+  assert.ok(skippedAcross < 6200,
+    `the verse's own pause did not collapse on skip (held ${skippedAcross}ms)`);
   assert.ok(skipped >= 90, 'a plain wait must survive a skip — only narration holds collapse');
 }
 

@@ -335,7 +335,15 @@ export function createDialogue({ signal = null, isPaused = null } = {}) {
         // Focus on the Back button: let its native activation run — Enter/
         // Space here would fire the OPPOSITE action (the same bug the tap
         // dead-zone fixed, surviving on the keyboard path).
-        if (footer.contains(document.activeElement)) return;
+        // BACK'S ZONE ONLY. Widened to the whole footer, this killed the
+        // keyboard the moment the player used the ▸ button they were just
+        // told to use: clicking it leaves it focused, so Backspace and ← —
+        // the documented re-read keys — silently stopped working for the rest
+        // of the chapter, with no visible cause. ▸ and Enter do the same
+        // thing, so letting the native activation take Enter/Space there is
+        // correct and costs nothing.
+        if (backZone.contains(document.activeElement)) return;
+        if (document.activeElement === hint && (e.key === 'Enter' || e.key === ' ')) return;
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); advance(); }
         else if (e.key === 'Backspace' || e.key === 'ArrowLeft') { e.preventDefault(); back(); }
       };

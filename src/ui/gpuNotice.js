@@ -154,6 +154,14 @@ export function maybeShowGpuNotice({ storage = globalThis.localStorage } = {}) {
 
   const cleanup = () => { root.remove(); if (live === cleanup) live = null; };
   live = cleanup;
+  // SHOWN IS THE EVENT, not "dismissed by a button". The latch was set only in
+  // close(), which runs from the two button handlers — so the player who does
+  // what people actually do with a corner toast (ignore it and carry on) had
+  // `live` cleared by the scene teardown and got a brand new panel on the next
+  // entry into the story, forever. That is the exact sentence this was supposed
+  // to answer: "i keep getting the pop up". Measured before this line: three
+  // re-entries, three fresh panels, no click anywhere.
+  quietedThisSession = true;
   return cleanup;
 }
 

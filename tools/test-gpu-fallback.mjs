@@ -222,10 +222,31 @@ assert.ok(fx._base.length > 0, 'on hardware the grade must be exactly as it was'
     setItem: (k, v) => store.set(k, String(v)),
   };
 
+  // ── THE PLAYER WHO PRESSES NOTHING ──────────────────────────────────────
+  // This case is first because it is the likely one: a corner toast that is
+  // deliberately click-through gets ignored, not answered. The guard below used
+  // to click "Not now" BEFORE simulating the teardown, so it only ever
+  // exercised the button path — one-sided in exactly the way it existed to
+  // prevent, and green with the bug fully present.
   resetGpuNotice();
   store.clear();
   setGpuCapabilityForTest({ software: true, renderer: 'Google SwiftShader' });
+  {
+    const leave = maybeShowGpuNotice({ storage });
+    assert.equal(count(), 1, 'a CPU-rasterized context must be reported once');
+    leave(); // the scene disposes; the player never touched the box
+    const mounted = count();
+    maybeShowGpuNotice({ storage });
+    maybeShowGpuNotice({ storage });
+    maybeShowGpuNotice({ storage });
+    assert.equal(count(), mounted,
+      'the notice came back on every scene entry for a player who simply ignored '
+      + 'it — which is what people do with a corner toast, and is the literal '
+      + 'complaint this latch exists to answer');
+  }
 
+  resetGpuNotice();
+  store.clear();
   const dismiss = maybeShowGpuNotice({ storage });
   assert.equal(count(), 1, 'a CPU-rasterized context must be reported once');
 

@@ -333,6 +333,36 @@ assert.deepEqual(
   + ' looks back across the camp; angles near +/-pi look out at open ground)',
 );
 
+// WHAT THIS FILE DOES NOT COVER, said out loud.
+//
+// A guard that advertises completeness it does not have is worse than one that
+// names its gap: an adversarial review of this very commit found TWO camera
+// regressions in `shot()` calls — the Jacob rebuke and the dusk "Joseph is
+// stung" — both introduced by the re-block this guard was written to validate,
+// and both invisible here. `shot()`/`twoShot()` frame LIVE actor positions, so
+// they have no target to score at parse time; the blunt angle law above cannot
+// see them either, because `side:` is relative to the speaker-listener axis
+// rather than to the world.
+//
+// Closing it properly means composing every dialogue shot from the real marks
+// at runtime. Until that exists, this line is the honest statement of scope.
+{
+  let dialogueShots = 0;
+  for (const name of BEATS) {
+    const src = await readFile(new URL(`../src/scenes/joseph3d/beats/${name}.js`, import.meta.url), 'utf8');
+    dialogueShots += (src.split('shot(').length - 1);
+  }
+  // A "gap statement" that reports zero is worse than none: it reads as
+  // "nothing is uncovered". The first version of this line did exactly that,
+  // because its regex had been mangled on the way into the file.
+  assert.ok(dialogueShots > 0,
+    'the uncovered-shot count came back zero — this line exists to state a real gap, '
+    + 'and a zero here means it is measuring nothing');
+  console.log(`camera backdrop: NOT covered — ${dialogueShots} shot()/twoShot() calls frame live `
+    + 'positions and are judged only for composition (test-dialogue-camera-safety), never for '
+    + 'what is behind the subject. Two regressions hid here in D29.');
+}
+
 console.log(
   `camera backdrop: PASS — ${results.length} authored camp shots judged against a floor of ${FLOOR} `
   + `(census ${content.length} camp points): `

@@ -157,7 +157,20 @@ export class Sequencer {
         case 'dialogueHide':
           c.dialogue.hide();
           break;
+        // A SKIP STOPS AT THE NEXT CUT.
+        //
+        // `lastVerseSkipped` used to live for the whole run, so one Skip on
+        // Genesis 37:24 collapsed every hold that followed — including one six
+        // steps and two fades later that was the BODY of the closing shot
+        // ("the camera is slowly panning away from the well"), leaving a
+        // fade-in immediately followed by a fade-out. But it must still collapse
+        // several holds inside the SAME shot, which is why it cannot simply be
+        // spent on the first one.
+        //
+        // The honest boundary is the picture: a skip shortens the pauses in the
+        // shot it happened in, and ends when the shot does.
         case 'cam':
+          this.lastVerseSkipped = false;
           // target may be a function — dialogue shots frame LIVE positions
           {
             const spec = typeof s.target === 'function' ? { ...s, target: s.target() } : s;
