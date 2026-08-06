@@ -202,6 +202,83 @@ assert.ok(fx._base.length > 0, 'on hardware the grade must be exactly as it was'
     'every DOM surface asks the one shared reduced-motion gate');
 }
 
+// --- THE NOTICE MUST NOT NAG ------------------------------------------------
+//
+// Nate: "i keep getting the pop up saying my browser is drawing this game with
+// cpu... even though i already went into my settings and turned on 'use
+// graphics acceleration when available'."
+//
+// app.js offers the notice on EVERY entry into a 3D scene, and the panel's own
+// latch is cleared by the scene's dispose. So "Not now" bought silence only
+// until the next navigation, and a player who moved between the map and the
+// story a few times saw the same advice again and again. Advice repeated after
+// it has been read and acted on is not advice, it is nagging.
+{
+  const { maybeShowGpuNotice, resetGpuNotice, GPU_NOTICE_KEY } = await import('../src/ui/gpuNotice.js');
+  const count = () => document.body.children.filter((el) => el.className === 'mr-gpu-notice').length;
+  const store = new Map();
+  const storage = {
+    getItem: (k) => (store.has(k) ? store.get(k) : null),
+    setItem: (k, v) => store.set(k, String(v)),
+  };
+
+  resetGpuNotice();
+  store.clear();
+  setGpuCapabilityForTest({ software: true, renderer: 'Google SwiftShader' });
+
+  const dismiss = maybeShowGpuNotice({ storage });
+  assert.equal(count(), 1, 'a CPU-rasterized context must be reported once');
+
+  // The player chooses "Not now" — the panel closes without remembering.
+  const panel = document.body.children.find((el) => el.className === 'mr-gpu-notice');
+  const row = panel.children[panel.children.length - 1];
+  const notNow = row.children[0];
+  assert.equal(notNow.textContent, 'Not now', 'the soft-dismiss button moved');
+  notNow.onclick();
+  assert.equal(store.has(GPU_NOTICE_KEY), false, '"Not now" must not write the forever flag');
+
+  // Now leave the scene. app.js keeps the returned cleanup and runs it in
+  // disposeCurrent, which clears the panel latch — and THAT is what let the
+  // notice come back, so a check that skips this step passes with the bug fully
+  // present. (It did: written without this line, the guard below was green with
+  // the session latch deleted.)
+  dismiss();
+
+  // Re-enter a 3D scene three times. Counted by PANELS MOUNTED, not by opacity:
+  // a fresh panel is born at opacity 0 and only fades up on the next animation
+  // frame, so an opacity test would report "nothing showing" for a notice that
+  // had in fact just been created again.
+  const afterLeaving = count();
+  maybeShowGpuNotice({ storage });
+  maybeShowGpuNotice({ storage });
+  maybeShowGpuNotice({ storage });
+  assert.equal(count(), afterLeaving,
+    'the GPU notice was mounted again after being dismissed — every scene entry '
+    + 're-offers it, so a soft dismiss must silence it for the whole session');
+
+  // The message has to answer the player who ALREADY turned the setting on.
+  resetGpuNotice();
+  store.clear();
+  const uaBefore = globalThis.navigator.userAgent;
+  Object.defineProperty(globalThis.navigator, 'userAgent', {
+    value: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126 Safari/537.36 Edg/126',
+    configurable: true,
+  });
+  const cleanup = maybeShowGpuNotice({ storage });
+  const shown = document.body.children.filter((el) => el.className === 'mr-gpu-notice').pop();
+  const words = shown.children.map((c) => c.textContent).join(' ');
+  assert.match(words, /edge:\/\/gpu/, 'Edge users must be pointed at the page that shows the truth');
+  assert.match(words, /WebGL/, '...and told which row on it to read');
+  assert.match(words, /restart/i, '...and told the setting needs a full browser restart');
+  assert.match(words, /Google SwiftShader/,
+    'the actual renderer string must be shown in full — it is the one piece of '
+    + 'evidence a player can act on or search for');
+  cleanup();
+  Object.defineProperty(globalThis.navigator, 'userAgent', { value: uaBefore, configurable: true });
+  resetGpuNotice();
+  setGpuCapabilityForTest({ software: false, renderer: '' });
+}
+
 console.log(
   `gpu fallback passed: ${SOFTWARE_STRINGS.length} software strings detected, `
   + `${HARDWARE_STRINGS.length} real GPUs untouched, silence treated as unknown, `

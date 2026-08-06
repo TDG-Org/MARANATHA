@@ -11,6 +11,8 @@ import { bootScene, undisposedFrom } from './harness/scene.mjs';
 import { getCheckpoint, resetProgress, saveGeneration, setCheckpoint } from '../src/systems/SaveSystem.js';
 import { createCheckpointPersistence } from '../src/scenes/joseph3d/checkpointEntry.js';
 
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 // ── 1. PAUSING MUST NOT DISABLE MOVEMENT FOREVER ────────────────────────────
 //
 // The pause menu restores input on resume by asking the SCENE what it wants:
@@ -391,9 +393,85 @@ import { createCheckpointPersistence } from '../src/scenes/joseph3d/checkpointEn
     window.location.hash = priorHash;
   }
 }
+// ── 6. A CONTROL THAT LOOKS CLICKABLE MUST BE CLICKABLE ─────────────────────
+//
+// Nate: "clicking the bottom dialog, i cannot click on the arrow on the bottom
+// right anymore for it to switch dialogs... if i click right on the text then
+// it works, but that shouldnt be the case."
+//
+// The dialogue box advances on click. A missed tap on the small ◀ Back button
+// used to fire the OPPOSITE action, so the whole FOOTER row was made a dead
+// zone — and the ▸ advance hint lives in that row. The one control on screen
+// whose entire job is "advance" became the only place in the box that could
+// not advance, while the body text (which promises nothing) worked fine.
+//
+// This guard asserts BOTH halves, because fixing one by breaking the other is
+// exactly how this bug was born.
+{
+  const { createDialogue } = await import('../src/ui/dialogue.js');
+  const dialogue = createDialogue({});
+  const box = document.body.children.find((el) => el.className === 'mr-dialogue');
+  assert.ok(box, 'dialogue box was never mounted');
+  const footer = box.children.find((el) => el.className === 'mr-dlg-footer');
+  assert.ok(footer, 'dialogue footer was never mounted');
+  const backZone = footer.children[0];
+  const backBtn = backZone.children[0];
+  const hint = footer.children[1];
+  assert.equal(backBtn.textContent, '◀ Back', 'the Back button moved');
+  assert.ok(/▸/.test(hint.textContent), 'the advance hint lost its arrow');
+
+  // Model a real click faithfully: the control's own listener runs first, then
+  // the event bubbles to the box unless that listener stopped it. Dispatching
+  // only on the box would never exercise Back's handler, and dispatching only
+  // on the control would never exercise the box's dead-zone test — the bug
+  // lives in the interaction between the two.
+  const clickOn = (target) => {
+    let stopped = false;
+    const event = { type: 'click', target, stopPropagation() { stopped = true; } };
+    target.dispatchEvent(event);
+    if (!stopped) box.dispatchEvent(event);
+  };
+
+  // LINE 1 — no history yet, so Back is hidden.
+  const first = dialogue.say('Joseph', 'A line long enough to still be typing.');
+  let firstDone = false;
+  first.then(() => { firstDone = true; });
+  await delay(30);
+  clickOn(hint); // completes the type-on
+  await delay(10);
+  clickOn(hint); // ...and resolves the line
+  await delay(30);
+  assert.equal(firstDone, true,
+    'the ▸ advance button did not advance the dialogue — it is inside the footer, '
+    + 'and a footer-wide dead zone makes the game\'s most obvious control inert');
+
+  // LINE 2 — history exists, so Back is showing and its zone must stay dead.
+  const second = dialogue.say('Judah', 'A second line, so Back is live.');
+  let secondDone = false;
+  second.then(() => { secondDone = true; });
+  await delay(30);
+  clickOn(hint);
+  await delay(10);
+  assert.notEqual(backBtn.style.visibility, 'hidden', 'Back must be offered on line 2');
+  clickOn(backBtn);
+  await delay(20);
+  assert.equal(secondDone, false,
+    'a click on ◀ Back advanced the line — a missed tap on Back must never fire '
+    + 'the opposite action');
+  // ...and the re-read is showing, with the arrow relabelled to walk forward.
+  assert.ok(/Forward/.test(hint.textContent), 'reading back did not relabel the arrow');
+  clickOn(hint); // forward to live
+  await delay(10);
+  clickOn(hint); // resolve
+  await delay(30);
+  assert.equal(secondDone, true, 'stepping forward out of the re-read never resolved the line');
+  dialogue.destroy();
+}
+
 console.log(
   'player traps passed: pause restores input in every scene (no scene answers '
   + '"is input on?" from the flag pause clears), a reset survives a running story, '
-  + 'nothing is parked under the persistent volume control, and the main story '
-  + 'gives every texture and geometry it owns back on dispose.',
+  + 'nothing is parked under the persistent volume control, the main story '
+  + 'gives every texture and geometry it owns back on dispose, and the dialogue '
+  + 'advance arrow actually advances while ◀ Back stays a dead zone.',
 );

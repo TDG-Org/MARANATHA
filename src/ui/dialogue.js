@@ -76,11 +76,40 @@ export function createDialogue({ signal = null, isPaused = null } = {}) {
   backBtn.onmouseenter = () => { backBtn.style.filter = 'brightness(1.15)'; };
   backBtn.onmouseleave = () => { backBtn.style.filter = 'none'; };
 
-  const hint = document.createElement('div');
-  hint.textContent = '▸';
-  hint.style.cssText = 'font-size:13px; opacity:0.5;';
+  // THE DEAD ZONE IS THE BACK BUTTON, NOT THE FOOTER.
+  //
+  // A missed tap on the small ◀ Back button used to fire the OPPOSITE action, so
+  // the whole footer row was made a dead zone for advance. But the ▸ hint lives
+  // in that same row — so the one thing on screen that LOOKS like the advance
+  // button became the only place in the entire box that could not advance.
+  // ("if i click right on the text then it works, but that shouldnt be the
+  // case.") A control that promises an action and refuses it is worse than no
+  // control at all (ui-clarity).
+  //
+  // So the dead zone is a padded wrapper around Back only, and ▸ is now a real
+  // button that advances. Both get honest hit areas instead of one swallowing
+  // the other.
+  const backZone = document.createElement('div');
+  backZone.style.cssText = 'display:flex; align-items:center; padding:4px 14px 4px 0;';
+  backZone.append(backBtn);
 
-  footer.append(backBtn, hint);
+  const hint = document.createElement('button');
+  hint.type = 'button';
+  hint.textContent = 'Next ▸';
+  hint.setAttribute('aria-label', 'Continue');
+  // 44px on a coarse pointer is the repo's own touch floor (responsive-ui).
+  const coarsePointer = globalThis.matchMedia?.('(pointer: coarse)')?.matches;
+  hint.style.cssText = [
+    'font:600 12px "Segoe UI",system-ui,sans-serif', 'letter-spacing:0.04em',
+    `min-height:${coarsePointer ? 44 : 30}px`, 'padding:6px 12px', 'border-radius:9px',
+    'cursor:pointer', 'color:#f5e6c4', 'background:rgba(242,184,128,0.10)',
+    'border:1px solid rgba(242,184,128,0.26)', 'opacity:0.78',
+    'transition:filter 140ms ease, opacity 140ms ease',
+  ].join(';');
+  hint.onmouseenter = () => { hint.style.filter = 'brightness(1.18)'; hint.style.opacity = '1'; };
+  hint.onmouseleave = () => { hint.style.filter = 'none'; hint.style.opacity = '0.78'; };
+
+  footer.append(backZone, hint);
   // Screen-reader path: each line lands ONCE as full text in a hidden polite
   // log (the typewriter's per-character writes would spam a reader).
   const srLog = document.createElement('div');
@@ -184,7 +213,9 @@ export function createDialogue({ signal = null, isPaused = null } = {}) {
     if (destroyed || signal?.aborted) return Promise.reject(signal?.aborted ? abortReason(signal) : makeAbortError('Dialogue destroyed'));
     choicesEl.style.display = 'none';
     choicesEl.textContent = '';
-    hint.style.display = 'block';
+    hint.style.display = 'inline-flex';
+    hint.style.alignItems = 'center';
+    hint.textContent = 'Next ▸'; // a new line always starts live, never mid-re-read
     history.push({ speaker, text, color });
     srLog.textContent = speaker ? `${speaker}: ${text}` : text;
     const liveIdx = history.length - 1;
@@ -257,8 +288,8 @@ export function createDialogue({ signal = null, isPaused = null } = {}) {
         if (!revealed) { reveal?.skip(); revealed = true; }
         if (viewIdx > 0) {
           viewIdx -= 1;
-          paint(history[viewIdx]);      // instant re-read, no typewriter
-          hint.textContent = '▸ ▸';     // subtle cue: you're reading back
+          paint(history[viewIdx]);        // instant re-read, no typewriter
+          hint.textContent = 'Forward ▸'; // you're reading back; this returns you
           updateBack();
         }
       };
@@ -269,7 +300,7 @@ export function createDialogue({ signal = null, isPaused = null } = {}) {
         if (viewIdx < liveIdx) {         // stepping forward through re-reads
           viewIdx += 1;
           paint(history[viewIdx]);
-          if (viewIdx === liveIdx) hint.textContent = '▸';
+          if (viewIdx === liveIdx) hint.textContent = 'Next ▸';
           updateBack();
           return;
         }
@@ -286,10 +317,15 @@ export function createDialogue({ signal = null, isPaused = null } = {}) {
         onKey = null;
         if (activeCancel === cancelThis) activeCancel = null;
       };
-      // The whole FOOTER is a dead zone for advance, not just the button's
-      // exact pixels — a missed tap on the small Back button fired the
-      // OPPOSITE action (advancing past the line the player wanted to re-read).
-      const onBoxClick = (e) => { if (footer.contains(e.target)) return; advance(); };
+      // Only the padded area around ◀ Back is a dead zone, so a missed tap on it
+      // still cannot fire the opposite action — and only while Back is actually
+      // showing, because a dead zone guarding an invisible button is just a hole
+      // in the box. Everything else advances, including the ▸ button, which is
+      // what a player aims at first.
+      const onBoxClick = (e) => {
+        if (backBtn.style.visibility !== 'hidden' && backZone.contains(e.target)) return;
+        advance();
+      };
       const onBackClick = (e) => { e.stopPropagation(); Audio.uiClick?.(); back(); };
       onKey = (e) => {
         // Ownership: an open modal or the pause stack owns the keys. Without
