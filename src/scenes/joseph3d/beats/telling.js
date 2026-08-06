@@ -208,7 +208,13 @@ export function makeTellingBeats(ctx, h) {
         const radius = Math.hypot(live.pos.x - FIRE.x, live.pos.z - FIRE.z);
         const height = live.pos.y;
         const lookHeight = live.look.y;
-        const T = 12500;
+        // 7.6s, not 12.5s. Genesis 37:5 is 6.1 seconds of narration and this
+        // orbit gated the beat until it finished, so 6,356ms of it played in
+        // measured silence between Joseph's dream and Judah's answer — the
+        // single longest dead patch in the chapter, sitting in its best scene.
+        // The arc is unchanged, so it simply moves at a readable 0.095 rad/s
+        // instead of a barely-perceptible 0.058.
+        const T = 7600;
         let elapsed = 0;
         // The driver settles the hold itself — one promise, zero poll timers.
         let holdDone;
@@ -281,12 +287,19 @@ export function makeTellingBeats(ctx, h) {
     });
 
     await seq([
+      // A PUSH-IN, not a re-cut. This used to be a bit-identical plan to the
+      // cut that had just happened — 1,600ms of dollying out 0.8u and back to
+      // the same frame — and it was authored at angle pi, the empty border and
+      // straight into the key light. It escaped the backdrop guard because
+      // groupShot() routes through helpers rather than calling planGroupCamera
+      // in a beat file, which is the exact gap that let the circle shots sit
+      // wrong through four rounds of playtesting.
       groupShot(['joseph', ...BROTHERS], {
-        angle: Math.PI,
-        distance: 5.7,
-        height: 2.7,
+        angle: TELLING_CIRCLE_ANGLE,
+        distance: 4.9,
+        height: 2.5,
         look: 1.2,
-        ms: 1600,
+        ms: 1200,
       }),
       { t: 'fn', fn: () => {
         ctx.storyEvent?.('tell2_brothers');
@@ -300,8 +313,10 @@ export function makeTellingBeats(ctx, h) {
       { t: 'verse', verse: WEB.gen_37_9 },
       { t: 'hold', ms: 1100 },
       { t: 'verseHide' },
+      // Widening back out for Jacob's arrival — on the camp side, not the
+      // border side.
       groupShot(['joseph', ...BROTHERS], {
-        angle: Math.PI,
+        angle: TELLING_CIRCLE_ANGLE,
         distance: 6.5,
         height: 3.05,
         look: 1.2,
@@ -360,7 +375,11 @@ export function makeTellingBeats(ctx, h) {
         look: 1.3,
         ms: 2200,
       }),
-      { t: 'grade', mood: 'tenseDay', ms: 2000 },
+      // ms 0: the scene is ALREADY graded tenseDay by the time close() runs, so
+      // this blocked two seconds on a tween with nothing to tween — right
+      // before the last line of the chapter. Kept rather than deleted because
+      // it is the beat's explicit statement of its own mood.
+      { t: 'grade', mood: 'tenseDay', ms: 0 },
       { t: 'fn', fn: () => { ctx.storyEvent?.('envy'); } },
       { t: 'verse', verse: WEB.gen_37_11 },
       // `hold`, not `wait`: these exist to give the closing line room, so Skip

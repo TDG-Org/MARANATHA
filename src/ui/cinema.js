@@ -75,10 +75,18 @@ export function createCinema({ isPaused = null, onFade = null, signal = null } =
       try {
         await hold(holdMs);
       } finally {
+        // The card comes IN over 1400ms because a title should arrive slowly.
+        // It has no reason to LEAVE that slowly, and the beat was paying for it
+        // twice: a fixed 900ms tail on top of every authored holdMs — which
+        // did not even cover the 1400ms fade, so the card was still ghosting
+        // over the next shot while the story waited. Seven cards, ~6.3 seconds
+        // of screen time no author could see in their own numbers.
+        title.style.transition = 'opacity 420ms ease, transform 420ms ease';
         title.style.opacity = '0';
         title.style.transform = 'translateY(6px)';
       }
-      await hold(900);
+      await hold(430);
+      title.style.transition = 'opacity 1400ms ease, transform 1400ms ease';
     },
 
     // Grading drives this; alpha is clamped to the whisper ceiling.

@@ -275,6 +275,50 @@ assert.deepEqual(
   + 'swing them until dot(look, sun) is at or below zero',
 );
 
+// ---- THE BLUNT LAW: no camp camera may be aimed at the border ---------------
+//
+// The scoring above needs a target to work with, and a target is exactly what a
+// live-positioned shot does not have at parse time. So `groupShot(...)` calls —
+// which route through helpers rather than calling planGroupCamera in a beat
+// file — were invisible to every check in this file, and TWO MORE shots at
+// angle pi were found sitting in tell() after the circle shots were fixed.
+//
+// This is coarse on purpose and needs no target: inside the camp beats, the
+// camera sits at target - (sin a, cos a) * d, so |angle| near pi always points
+// out at the north border. There is no composition in this camp that needs it.
+// The cold open is exempt — it plays 60u west at the pit, which is a different
+// place with a different world behind it.
+{
+  const CAMP_BEATS = ['camp', 'telling'];
+  const NEAR_PI = Math.PI * 0.75;
+  const offenders = [];
+  for (const name of CAMP_BEATS) {
+    const src = await readFile(new URL(`../src/scenes/joseph3d/beats/${name}.js`, import.meta.url), 'utf8');
+    const lines = src.split(/\r?\n/);
+    lines.forEach((line, i) => {
+      const m = line.match(/angle:\s*(-?)Math\.PI(?:\s*\*\s*(-?[\d.]+))?/);
+      if (!m) return;
+      const angle = (m[1] === '-' ? -1 : 1) * Math.PI * (m[2] === undefined ? 1 : Number(m[2]));
+      const wrapped = Math.abs(Math.atan2(Math.sin(angle), Math.cos(angle)));
+      if (wrapped < NEAR_PI) return;
+      // A CLOSE-UP HAS NO BACKDROP TO GET WRONG. The complaint is "showing so
+      // much of the backdrop", which only a wide shot can do; the bedside
+      // frame at 3.4u is a boy's face filling the screen and its angle is a
+      // staging choice, not a mistake. Anything from 4.5u out is showing the
+      // world behind the subject and has to answer for it.
+      const window = lines.slice(i, i + 7).join(' ');
+      const d = window.match(/distance:\s*([\d.]+)/);
+      const distance = d ? Number(d[1]) : 6;
+      if (distance < 4.5) return;
+      offenders.push(`${name}.js:${i + 1} angle ${(angle / Math.PI).toFixed(2)}pi at ${distance}u`);
+    });
+  }
+  assert.deepEqual(offenders, [],
+    'these camp cameras are aimed within a quarter-turn of due north, which in this '
+    + 'camp is the empty border and, in daylight, straight into the key light — '
+    + 'whatever helper they were authored through');
+}
+
 const results = [
   ...judged.map((s) => ({ ...s, score: backdropScore(s) })),
   ...moving,

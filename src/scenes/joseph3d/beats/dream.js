@@ -87,8 +87,12 @@ export function makeDreamBeat(ctx, h, { firstTell } = {}) {
     await seq([
       { t: 'letterbox', on: true },
       { t: 'fade', on: true, ms: 1 }, // ensure black on a checkpoint-resume too
-      { t: 'grade', mood: 'night', ms: 1400 },
-      { t: 'fn', fn: async () => { ctx.setMusic('music.dream_wonder'); ctx.sound('stinger.dream_enter'); await wait(500); } },
+      // ms 0: the screen is FULLY BLACK here, so a 1,400ms colour tween is
+      // 1,400ms of the player watching nothing change on a picture they cannot
+      // see. Behind black a grade should simply land. Same for the 500ms after
+      // the music swap — a crossfade does not need the story to wait for it.
+      { t: 'grade', mood: 'night', ms: 0 },
+      { t: 'fn', fn: () => { ctx.setMusic('music.dream_wonder'); ctx.sound('stinger.dream_enter'); } },
     ]);
     // slip into the dream field (behind the black). The campfire beat left the
     // camera HOLDING its authored ring shot — release the pose or the whole
