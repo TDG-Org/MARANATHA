@@ -252,6 +252,38 @@ function bladeGeometry() {
   return geo;
 }
 
+// NORMALS BENT TOWARDS THE SKY — the whole difference between grass and black
+// spikes, and it has to happen LAST.
+//
+// A blade is a near-vertical strip, so its true surface normal is nearly
+// HORIZONTAL. The sun here sits high, dot(N, L) is tiny, and a four-band toon
+// ramp resolves tiny to the darkest band: the first version of this geometry was
+// geometrically correct and rendered a field of black quills, measurably worse
+// than the cone it replaced. Real foliage shading solves it the same way — shade
+// a blade as part of the soft mass it belongs to, not as a flat card.
+//
+// It is applied AFTER every transform because BufferGeometry.scale() carries the
+// normals through the inverse-transpose of the matrix. A blade is scaled
+// (0.05, 0.35, 0.17) — wildly non-uniform — so a normal pointing at the sky is
+// divided by 0.05 in x and 0.35 in y and swings straight back to horizontal.
+// Bending them before the scale looked right in the source and changed nothing
+// on screen: the second frame I captured was as black as the first.
+function bendNormalsSkyward(geo, keep = 0.3, up = 0.85) {
+  // The repo's mergeGeometries does not carry a normal attribute through, so a
+  // merged tuft arrives without one and this read `undefined.count`.
+  if (!geo.getAttribute('normal')) geo.computeVertexNormals();
+  const n = geo.getAttribute('normal');
+  for (let i = 0; i < n.count; i += 1) {
+    const x = n.getX(i) * keep;
+    const y = n.getY(i) * keep + up;
+    const z = n.getZ(i) * keep;
+    const len = Math.hypot(x, y, z) || 1;
+    n.setXYZ(i, x / len, y / len, z / len);
+  }
+  n.needsUpdate = true;
+  return geo;
+}
+
 // A TUFT: five blades fanned around the root, each leaning and arcing its own
 // way. ~15 triangles, merged, so the whole meadow is still ONE draw call.
 function tuftGeometry(seed = 21) {
@@ -260,8 +292,11 @@ function tuftGeometry(seed = 21) {
   const N = 5;
   for (let i = 0; i < N; i += 1) {
     const g = bladeGeometry();
+    // 0.30-0.44 tall, not 0.75-1.20. The instance scale below multiplies this,
+    // and at the old numbers a tuft finished up to 2.5u high — taller than a
+    // sheep, and reading as reeds rather than a meadow.
     const width = 0.052 + rnd() * 0.028;
-    g.scale(width, 0.75 + rnd() * 0.45, width * 3.2);
+    g.scale(width, 0.30 + rnd() * 0.14, width * 3.2);
     g.rotateX(0.10 + rnd() * 0.26); // the lean; grass does not stand at attention
     g.rotateY((i / N) * Math.PI * 2 + (rnd() - 0.5) * 0.7);
     g.translate((rnd() - 0.5) * 0.05, 0, (rnd() - 0.5) * 0.05);
@@ -269,7 +304,7 @@ function tuftGeometry(seed = 21) {
   }
   const merged = mergeGeometries(parts);
   parts.forEach((p) => p.dispose());
-  return merged;
+  return bendNormalsSkyward(merged);
 }
 
 export function makeGrass(count = 90, span = 42, colliderWorld = null) {
@@ -277,9 +312,12 @@ export function makeGrass(count = 90, span = 42, colliderWorld = null) {
   // meadow, not a repeated sprite (world-density).
   const tuft = tuftGeometry();
   const rnd = mulberry32(77);
+  // Lifted, for the same reason the ground gained an emissive: a tuft standing
+  // edge-on to a high sun has very little light on it, so the albedo has to
+  // carry more of the colour than a flat-lying surface would.
   const greens = [
-    new THREE.Color(0x86a24f), new THREE.Color(0x6f8a3c),
-    new THREE.Color(0x94a856), new THREE.Color(0x5f7a38), new THREE.Color(0xa8a552),
+    new THREE.Color(0xa8c96a), new THREE.Color(0x8fb254),
+    new THREE.Color(0xb6cf76), new THREE.Color(0x7d9f47), new THREE.Color(0xc7c46b),
   ];
   // A blade is a thin strip with no inside: single-sided, half of every tuft
   // would vanish depending on where the camera stood (the same defect the coat
@@ -293,8 +331,10 @@ export function makeGrass(count = 90, span = 42, colliderWorld = null) {
     const x = (rnd() - 0.5) * span;
     const z = (rnd() - 0.5) * span;
     if (colliderWorld && colliderWorld.overlaps(x, z, 0.3)) continue;
-    const hgt = 0.55 + rnd() * 1.5;   // tuft height
-    const wid = 0.8 + rnd() * 0.7;
+    const hgt = 0.72 + rnd() * 0.62;  // tuft height
+    // Width DERIVED from height, never rolled independently: two free rolls
+    // could produce a 21.8:1 needle — a chest-high spike as thin as 8cm.
+    const wid = 0.86 + hgt * 0.3;
     // Rooted, not resting on the surface: the ground is gently undulating, so
     // a tuft placed at exactly y=0 floats clear of every dip and shows its
     // whole base — which is most of what "popping out of the ground" was.
