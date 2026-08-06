@@ -16,6 +16,8 @@ import {
   MAX_DIALOGUE_FOREGROUND,
   TELLING_AMBIENT_KEYS,
   TELLING_AMBIENT_SLOTS,
+  TELLING_RING_SEATS,
+  tellingRingXZ,
   makeHelpers,
   planDialogueCamera,
   planTwoShotCamera,
@@ -98,12 +100,14 @@ const DESKTOP = 1440 / 900;
   // Both tellings now begin only after the player presses the nearby sit
   // prompt. All actors are seated under black, so the camera proof owns only
   // the authored circle instead of a hidden pathfinder.
-  const ringAngles = [3.4, 4.15, 5.0, 5.75];
+  // IMPORTED, not copied. These four numbers used to live here as literals, so
+  // when the circle was re-blocked to the south arc this file kept composing the
+  // OLD seats against the NEW Joseph mark — a staging that exists nowhere in the
+  // game, asserted as if it were the shot.
   const closeActors = [
     { ...TELLING_JOSEPH_MARK, headHeight: 1.65 },
-    ...ringAngles.map((angle) => ({
-      x: Math.cos(angle) * 2.2,
-      z: -6 + Math.sin(angle) * 2.2,
+    ...TELLING_RING_SEATS.map(([, angle]) => ({
+      ...tellingRingXZ(angle),
       headHeight: 1.65,
     })),
     { x: -2.6, z: -4.4, headHeight: 1.65 },

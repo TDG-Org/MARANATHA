@@ -3,7 +3,10 @@ import { isAbortError } from '../../../core/async.js';
 import { planGroupCamera } from './helpers.js';
 
 export const DUSK_FIRE = Object.freeze({ x: 0, z: -6 });
-export const DUSK_JOSEPH_MARK = Object.freeze({ x: 0.6, z: -4.4 });
+// Swept the same way: backdrop ~251 with the dusk key on their faces, against
+// 79 and a dead border at pi. Exported so the backdrop guard reads the real one.
+export const DUSK_CIRCLE_ANGLE = Math.PI * 0.32;
+export const DUSK_JOSEPH_MARK = Object.freeze({ x: -0.6, z: -7.6 });
 export const HERD_DIRECTION_MARKS = Object.freeze([
   Object.freeze({ x: -0.7, z: -2.5 }),
   Object.freeze({ x: 1.9, z: -2.5 }),
@@ -34,11 +37,13 @@ export function planHerdDirectionCamera({
     aspect,
   });
 }
+// South arc, mirroring TELL_RING for the same reason: the camera belongs on
+// the side with the camp behind it. Measured at the old staging: backdrop 79.
 export const DUSK_RING = Object.freeze([
-  Object.freeze(['judah', 3.5]),
-  Object.freeze(['reuben', 4.2]),
-  Object.freeze(['simeon', 5.15]),
-  Object.freeze(['levi', 5.9]),
+  Object.freeze(['judah', 0.3584]),
+  Object.freeze(['reuben', 1.0584]),
+  Object.freeze(['simeon', 2.0084]),
+  Object.freeze(['levi', 2.7584]),
 ]);
 
 // SCENE 1 — Joseph, Genesis 37:1–11. The story is DATA + gates; this act's
@@ -690,7 +695,9 @@ export function makeCampBeats(ctx, h) {
               ];
               const plan = planGroupCamera({
                 actors,
-                angle: Math.PI,
+                // Swept the same way: 0.32pi measures backdrop ~251 with the
+                // dusk key on their faces, against 79 and a dead border at pi.
+                angle: DUSK_CIRCLE_ANGLE,
                 distance: 5.2,
                 height: 2.25,
                 look: 1.05,

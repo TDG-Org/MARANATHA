@@ -1,7 +1,15 @@
 import { WEB } from '../../../data/versesWEB.js';
 import { planGroupCamera } from './helpers.js';
 
-export const TELLING_JOSEPH_MARK = Object.freeze({ x: 0.9, z: -4.1 });
+// Joseph stands on the camera's side of the fire, three-quarter back to us,
+// so the shot reads as "we are watching them hear this" (mirrored with the
+// ring — see TELL_RING in helpers.js).
+// The circle shot's angle, EXPORTED so tools/test-camera-backdrop judges the
+// real number instead of a copy of it. Chosen by sweeping every angle against
+// the camp census and the mood's sun vector: backdrop 266 (floor 165) and
+// dot(look, sun) -0.81, against 83 and +0.62 at the pi it used to be.
+export const TELLING_CIRCLE_ANGLE = Math.PI * 0.12;
+export const TELLING_JOSEPH_MARK = Object.freeze({ x: -0.9, z: -7.9 });
 // Where Joseph ends the chapter, standing apart from the family.
 export const TELLING_LONE_MARK = Object.freeze({ x: -4.6, z: -2.0 });
 
@@ -147,7 +155,12 @@ export function makeTellingBeats(ctx, h) {
     ];
     const plan = planGroupCamera({
       actors,
-      angle: Math.PI,
+      // 0.12pi, chosen by SWEEPING every angle against the camp census and the
+      // mood's sun vector, not by taste: backdrop 266 (the peak; floor is 165)
+      // and dot(look, sun) -0.81, so the faces are lit and the whole camp —
+      // including the nine staged spectators, which the old shot had its back
+      // to — falls behind them.
+      angle: TELLING_CIRCLE_ANGLE,
       distance: 5.7,
       height: 2.7,
       look: 1.2,

@@ -74,6 +74,24 @@ export const TELLING_AMBIENT_KEYS = Object.freeze([
 // A collision-audited spectator arc 11u north of the fire. It keeps ambient
 // life visible in the camp without letting a random wander cross the 6.4u
 // dialogue-camera orbit or Joseph's face.
+// THE FIRE CIRCLE'S SEATS — exported because tools/test-dialogue-camera-safety
+// duplicated these four numbers, and a duplicated constant is a guard that
+// silently stops guarding: the seats were re-blocked to the south arc and the
+// test kept composing the OLD circle against the NEW Joseph mark, which is a
+// staging that exists nowhere in the game.
+export const TELLING_RING_RADIUS = 2.2;
+export const TELLING_RING_SEATS = Object.freeze([
+  Object.freeze(['judah', 0.2584]),
+  Object.freeze(['reuben', 1.0084]),
+  Object.freeze(['simeon', 1.8584]),
+  Object.freeze(['levi', 2.6084]),
+]);
+export const TELLING_FIRE = Object.freeze({ x: 0, z: -6 });
+export const tellingRingXZ = (a) => ({
+  x: TELLING_FIRE.x + Math.cos(a) * TELLING_RING_RADIUS,
+  z: TELLING_FIRE.z + Math.sin(a) * TELLING_RING_RADIUS,
+});
+
 export const TELLING_AMBIENT_SLOTS = Object.freeze([
   Object.freeze({ x: 10.66, z: -3.28 }),
   Object.freeze({ x: 9.2, z: 0.03 }),
@@ -682,8 +700,15 @@ export function makeHelpers(ctx) {
   // Joseph and the camera. The brothers face him ACROSS the flames; nobody
   // ever stands in his sitting/talking space or between him and the lens.
   const FIRE = { x: 0, z: -6 };
-  const TELL_RING = [['judah', 3.4], ['reuben', 4.15], ['simeon', 5.0], ['levi', 5.75]];
-  const ringXZ = (a) => ({ x: FIRE.x + Math.cos(a) * 2.2, z: FIRE.z + Math.sin(a) * 2.2 });
+  // SEATED ON THE SOUTH ARC, facing north across the fire — so the camera
+  // that watches them stands NORTH and looks back over the whole lived-in
+  // camp. The seats used to be on the north arc, which forced the camera to
+  // the south side looking out at the empty border: measured backdrop 83
+  // against this project's floor of 165, with dot(look, sun) +0.62 (straight
+  // into the key, so every face was a silhouette). Both halves of
+  // "the back of the camp... opposite side of the sun", in one shot.
+  const TELL_RING = TELLING_RING_SEATS;
+  const ringXZ = tellingRingXZ;
   const placeCameraSpectator = (npc, slot, focus = FIRE) => {
     npc.target = null;
     npc.stuckT = 0;

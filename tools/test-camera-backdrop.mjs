@@ -22,12 +22,19 @@ import { readFile } from 'node:fs/promises';
 import * as THREE from 'three';
 import { ColliderWorld } from '../src/engine/collision.js';
 import { buildCamp } from '../src/scenes/joseph3d/props.js';
-import { TELLING_AMBIENT_SLOTS, COAT_ENVY_SPECTATOR_SLOTS } from '../src/scenes/joseph3d/beats/helpers.js';
+import { TELLING_AMBIENT_SLOTS, COAT_ENVY_SPECTATOR_SLOTS, TELLING_FIRE } from '../src/scenes/joseph3d/beats/helpers.js';
+import {
+  DUSK_CIRCLE_ANGLE,
+  HERD_DIRECTION_MARKS,
+  HERD_DIRECTION_JOSEPH_MARK,
+} from '../src/scenes/joseph3d/beats/camp.js';
+import { MOODS } from '../src/engine/MoodGrading.js';
 import {
   TELLING_JOSEPH_MARK,
   TELLING_LONE_MARK,
   TELLING_WALKOFF_CAMERA,
   TELLING_FINAL_CAMERA,
+  TELLING_CIRCLE_ANGLE,
 } from '../src/scenes/joseph3d/beats/telling.js';
 
 // The camp builders need this much of a canvas for their procedural glows.
@@ -183,7 +190,96 @@ const moving = [
   },
 ];
 
-const results = [...judged.map((s) => ({ ...s, score: backdropScore(s) })), ...moving];
+// ---- the GROUP-PLANNED shots, which the parser cannot see either -------------
+//
+// This guard read only literal `{ t: 'cam' }` steps. Every shot built by
+// planGroupCamera was invisible to it — and that is where the worst offender in
+// the whole chapter was sitting: BOTH tellings and the dusk fire circle were
+// authored at angle pi, which measures backdrop 83 and 79 against this floor of
+// 165, for about twenty seconds each, at the emotional centre of the chapter.
+// Nate reported it for the fourth time. A guard that cannot see the shot cannot
+// be said to be guarding it.
+const circleShot = (angle, distance, height, look) => ({
+  angle,
+  distance,
+  height,
+  lookHeight: look,
+  target: { x: TELLING_FIRE.x, z: TELLING_FIRE.z },
+});
+const herdCentroid = {
+  x: (HERD_DIRECTION_JOSEPH_MARK.x + HERD_DIRECTION_MARKS[0].x + HERD_DIRECTION_MARKS[1].x) / 3,
+  z: (HERD_DIRECTION_JOSEPH_MARK.z + HERD_DIRECTION_MARKS[0].z + HERD_DIRECTION_MARKS[1].z) / 3,
+};
+const groupShots = [
+  {
+    beat: 'telling', line: 'gatherCircle planGroupCamera',
+    ...circleShot(TELLING_CIRCLE_ANGLE, 5.7, 2.7, 1.2),
+  },
+  {
+    beat: 'camp', line: 'dusk fire planGroupCamera',
+    ...circleShot(DUSK_CIRCLE_ANGLE, 5.2, 2.25, 1.05),
+  },
+  {
+    beat: 'camp', line: 'planHerdDirectionCamera',
+    angle: 0, distance: 5.4, height: 2.25, lookHeight: 1.15, target: herdCentroid,
+  },
+];
+// Judged elsewhere, on purpose, and named so the tripwire below stays exact:
+//   coldOpen.js  the betrayal prowl — staged at the PIT, 60u west of the camp,
+//                which is a different place with its own world (and its own
+//                proof in test-dialogue-camera-safety).
+const GROUP_SHOTS_ELSEWHERE = 1;
+
+// COMPLETENESS TRIPWIRE. The two above are hand-listed because their actor sets
+// live inside beat closures. If a third group shot is ever authored, this fails
+// and forces whoever wrote it to bring it under the law rather than letting it
+// slip through silently the way these two did.
+{
+  let planned = 0;
+  for (const name of BEATS) {
+    const src = await readFile(new URL(`../src/scenes/joseph3d/beats/${name}.js`, import.meta.url), 'utf8');
+    planned += (src.match(/planGroupCamera\(/g) || []).length;
+  }
+  assert.equal(planned, groupShots.length + GROUP_SHOTS_ELSEWHERE,
+    `${planned} planGroupCamera shots exist but ${groupShots.length + GROUP_SHOTS_ELSEWHERE} are accounted for here — `
+    + 'add the new one to groupShots with its real target/distance/height, or this law '
+    + 'is only enforced on the shots someone remembered to list');
+}
+
+// ---- and no camp shot may stare into the key light --------------------------
+//
+// The other half of the same sentence: "opposite side of the sun, and it looks
+// horrible". A camera looking along the sun direction puts every face in
+// silhouette. dot(look, sun) is exactly that, and at the reported angle it
+// measured +0.62 — the camera was pointed at the light.
+const sunOf = (mood) => {
+  const s = MOODS[mood].sun;
+  return new THREE.Vector3(s[0], s[1], s[2]).normalize();
+};
+const lookDot = ({ angle, target, distance, height, lookHeight }, sun) => {
+  const eye = new THREE.Vector3(
+    target.x - Math.sin(angle) * distance,
+    height,
+    target.z - Math.cos(angle) * distance,
+  );
+  return new THREE.Vector3(target.x, lookHeight, target.z).sub(eye).normalize().dot(sun);
+};
+const INTO_THE_SUN = 0.35;
+const glare = groupShots
+  .map((s, i) => ({ s, dot: lookDot(s, sunOf(i === 0 ? 'tenseDay' : 'dusk')) }))
+  .filter(({ dot }) => dot > INTO_THE_SUN);
+assert.deepEqual(
+  glare.map(({ s, dot }) => `${s.beat}.js ${s.line} -> dot(look,sun) ${dot.toFixed(2)}`),
+  [],
+  'these shots look INTO the key light, so every face in them is a silhouette — '
+  + 'swing them until dot(look, sun) is at or below zero',
+);
+
+const results = [
+  ...judged.map((s) => ({ ...s, score: backdropScore(s) })),
+  ...moving,
+  ...groupShots.map((s) => ({ ...s, score: backdropScore(s) })),
+];
 const empty = results.filter((r) => r.score < FLOOR);
 assert.deepEqual(
   empty.map((r) => `${r.beat}.js:${r.line} angle ${r.angle} -> backdrop ${r.score}`),
