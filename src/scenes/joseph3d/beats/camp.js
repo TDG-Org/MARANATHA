@@ -185,11 +185,25 @@ export function makeCampBeats(ctx, h) {
             );
             firstBrother.char.turnToward(j.x - firstBrother.pos.x, j.z - firstBrother.pos.z);
             firstBrother.char.play('talk');
-            await ctx.dialogue.say('One brother', 'Joseph — the flock is spreading into the camp.', { color: brotherColor });
+            // NAMED. Genesis 37:2 says Joseph "was a boy with the sons of
+            // Bilhah and Zilpah" — Bilhah's sons are Dan and Naphtali. Two
+            // characters called "One brother" and "Another brother" are not
+            // people, and the player cannot care about a label.
+            await ctx.dialogue.say('Dan', 'Joseph — the flock is spreading into the camp.', { color: brotherColor });
             firstBrother.char.play('idle');
             secondBrother.char.turnToward(j.x - secondBrother.pos.x, j.z - secondBrother.pos.z);
             secondBrother.char.play('talk');
-            await ctx.dialogue.say('Another brother', 'Circle behind the strays, little brother. Bring them through the gate.', { color: brotherColor });
+            await ctx.dialogue.say('Naphtali', 'Circle behind the strays, little brother. Bring them through the gate.', { color: brotherColor });
+            // WHY there are strays at all — and therefore what Joseph's "evil
+            // report" (Gen 37:2) is actually about. The verse states the report
+            // and never its contents, so this stays at the mildest reading that
+            // explains it: the gate was left, and they would rather it were not
+            // mentioned. Negligence, not cruelty — Gen 37:4 has not licensed
+            // their hatred yet, and it must not arrive early.
+            secondBrother.char.play('idle');
+            firstBrother.char.play('talk');
+            await ctx.dialogue.say('Dan', 'And say nothing to father about the gate. It was left open. It happens.', { color: brotherColor });
+            firstBrother.char.play('idle');
             await wait(700);
             // Restore the live camp at the exact pre-dialogue positions under
             // the same short veil. No actor snaps and no quest path is moved.
@@ -542,12 +556,33 @@ export function makeCampBeats(ctx, h) {
       // D11 (Nate): raised further — heads were still clipping the lens here
       shot('judah', 'reuben', { side: 0.45, dist: 3.1, height: 2.15, look: 1.15 }),
       { t: 'anim', get char() { return ctx.cast.judah.char; }, state: 'talk' },
-      { t: 'say', who: 'Judah', text: 'A special tunic for Joseph. Father loves him more than all of us.', color: J.Judah },
+      // Judah SEES it — he does not report knowledge he could not have. Gen
+      // 37:4 turns on exactly that: "when his brothers SAW that their father
+      // loved him more than all his brothers".
+      { t: 'say', who: 'Judah', text: 'Look at him. Look what our father has put on his shoulders.', color: J.Judah },
       { t: 'anim', get char() { return ctx.cast.judah.char; }, state: 'idle' },
       shot('reuben', 'judah', { side: -0.42, dist: 3.1, height: 2.15, look: 1.15 }),
       { t: 'anim', get char() { return ctx.cast.reuben.char; }, state: 'talk' },
-      { t: 'say', who: 'Reuben', text: 'Not one kind word is left in me for that boy.', color: J.Reuben },
+      // ONE WANT AND ONE WOUND EACH, all of them from Genesis, because four
+      // brothers sharing a single bitter voice is four fewer people.
+      //   Reuben — the firstborn who lost his standing (Gen 35:22, 49:3-4).
+      //   Simeon — carries Gen 37:4 itself; the line was Reuben's, and Reuben
+      //     is the one brother Scripture later makes protective (37:21-22).
+      //   Levi — with Simeon, answered an insult with violence (Gen 34:25-31,
+      //     49:5-7). He had no line at all in the whole chapter.
+      { t: 'say', who: 'Reuben', text: 'I am the firstborn of this house. And it is the boy who wears the colours.', color: J.Reuben },
       { t: 'anim', get char() { return ctx.cast.reuben.char; }, state: 'idle' },
+      // Every new speaker gets his own frame. A line delivered on the previous
+      // shot is a static hold with a voice over it — which is the dead-air
+      // failure mode, arriving through the script rather than the timeline.
+      shot('simeon', 'judah', { side: 0.38, dist: 3.2, height: 2.15, look: 1.15 }),
+      { t: 'anim', get char() { return ctx.cast.simeon.char; }, state: 'talk' },
+      { t: 'say', who: 'Simeon', text: 'Not one kind word is left in me for that boy.', color: J.Simeon },
+      { t: 'anim', get char() { return ctx.cast.simeon.char; }, state: 'idle' },
+      shot('levi', 'simeon', { side: -0.36, dist: 3.2, height: 2.15, look: 1.15 }),
+      { t: 'anim', get char() { return ctx.cast.levi.char; }, state: 'talk' },
+      { t: 'say', who: 'Levi', text: 'Let him wear it out with the flock, then. We will see how long the colours last.', color: J.Levi },
+      { t: 'anim', get char() { return ctx.cast.levi.char; }, state: 'idle' },
       // envy hardens into a low, scornful laugh between them (D8: quiet — it
       // sits UNDER the scene, never on top of it)
       { t: 'sound', key: 'sfx.men_laughing', gain: 0.42 },
@@ -738,7 +773,10 @@ export function makeCampBeats(ctx, h) {
       } },
       // D7 logic fix: no one can call him "dreamer" yet — the dreams come
       // later THIS NIGHT. The jeer mocks what they can see: the coat.
-      { t: 'say', who: 'Judah', text: 'There he sits in the tunic father made especially for him.', color: J.Judah },
+      // Judah's second line used to restate his first. He is the brother who
+      // will shortly ask "What profit is it if we kill our brother?" (Gen
+      // 37:26-27) — so when he speaks again, he is already counting.
+      { t: 'say', who: 'Judah', text: 'One day that coat will belong to somebody. It will not be him.', color: J.Judah },
       { t: 'fn', fn: () => {
         jd.char.play('kneel');
         ctx.joseph.turnToward(

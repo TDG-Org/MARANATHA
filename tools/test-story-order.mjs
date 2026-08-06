@@ -601,7 +601,11 @@ assert.match(
   const hideTent = campSource.indexOf('T.group.visible = false', outsideBlack);
   const showCamp = campSource.indexOf("ctx.setStage?.('camp')", hideTent);
   const settle = campSource.indexOf("{ t: 'wait', ms:", showCamp);
-  const judah = campSource.indexOf("who: 'Judah', text: 'A special tunic", showCamp);
+  // Anchored on the SPEAKER, not on the sentence he happens to say. Keyed to
+  // the line's text, this guard broke the moment the line was rewritten —
+  // while what it actually protects (stage visibility lands before the reveal)
+  // had not moved at all.
+  const judah = campSource.indexOf("who: 'Judah'", showCamp);
   assert.ok(
     outsideBlack >= 0 && hideTent > outsideBlack && showCamp > hideTent && judah > showCamp,
     'Judah envy shot reveals before the exterior camp owns stage visibility',
