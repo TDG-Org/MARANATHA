@@ -153,7 +153,15 @@ export class Character3D {
     if (this.capeMesh) {
       this.capeMesh.material = this.colors.coat && this.colors.coat.length
         ? this._coatMaterial(this.colors.coat)
-        : this._toon(this.colors.coat?.[0] ?? this.colors.robe);
+        : this._toon(this.colors.coat?.[0] ?? this.colors.robe, { side: THREE.DoubleSide });
+      // CLOTH IS THIN, AND CULLING DOES NOT KNOW THAT.
+      // "the tunic on the other side, is fully translucent, bug, fix!"
+      // The cape is a single-layer surface with no inside, so the default
+      // FrontSide culled every back face and the camera looked straight
+      // through the coat whenever it swung, lifted, or was seen from the far
+      // side — which is most of the gift beat and all of the walk-away. One
+      // extra mesh drawn without culling is the whole cost.
+      this.capeMesh.material.side = THREE.DoubleSide;
     }
     if (this.staffMesh) this.staffMesh.material = this._toon(0x6b4a2c);
 
@@ -341,7 +349,10 @@ export class Character3D {
     tex.wrapS = THREE.RepeatWrapping;
     tex.wrapT = THREE.RepeatWrapping;
     this._coatTex = tex;
-    return this._toon(0xffffff, { map: tex });
+    // DoubleSide: a cape has no inside face, so FrontSide made the coat vanish
+    // from the far side. The lining reading as the same woven cloth is right
+    // for a garment like this — and infinitely better than transparent.
+    return this._toon(0xffffff, { map: tex, side: THREE.DoubleSide });
   }
 
   // Show/hide the coat (Joseph's gift beat). No-op when the rig has no cape.
@@ -385,9 +396,11 @@ export class Character3D {
     this._capsuleCoat = [];
     if (this.colors.coat && this.colors.coat.length) {
       this.colors.coat.forEach((c, i) => {
+        // openEnded, so it is a thin sleeve with no inside — the same
+        // see-through-from-the-far-side defect the cape had.
         const geo = new THREE.CylinderGeometry(0.315, 0.315, 0.13, 14, 1, true);
         this._ownedGeo.push(geo);
-        const band = new THREE.Mesh(geo, this._toon(c));
+        const band = new THREE.Mesh(geo, this._toon(c, { side: THREE.DoubleSide }));
         band.position.y = 1.12 - i * 0.14;
         band.visible = false; // coat equips via setCoat(true)
         this.rig.add(band);

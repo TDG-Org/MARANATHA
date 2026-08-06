@@ -158,6 +158,49 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   const before = booted.census();
   assert.ok(before.textures > 0, `the live story must own textures (got ${before.textures})`);
 
+  // A GARMENT HAS NO INSIDE, AND BACKFACE CULLING DOES NOT KNOW THAT.
+  //
+  // Nate: "the tunic on the other side, is fully translucent, bug, fix!"
+  //
+  // The coat is a single-layer cape mesh. With the default FrontSide every
+  // back face is culled, so the camera looks straight through the cloth
+  // whenever it swings, lifts, or is seen from the far side — which covers
+  // most of the gift beat and all of the walk-away. It never throws and never
+  // shows up in a draw count; it just quietly renders a hole where the most
+  // important object in the chapter should be.
+  {
+    const THREE = await import('three');
+    const joseph = booted.instance.debug.joseph;
+
+    // RUNTIME half — the capsule fallback, which is what this harness builds.
+    // Node has no GLB rigs (every mesh in the booted scene is unnamed), so the
+    // real cape cannot be reached from here and saying otherwise would be a
+    // guard that proves nothing. The capsule coat is open-ended cylinders,
+    // which have exactly the same no-inside problem.
+    const bands = joseph?._capsuleCoat || [];
+    assert.ok(bands.length > 0, 'the capsule fallback built no coat to check');
+    for (const band of bands) {
+      assert.equal(band.material?.side, THREE.DoubleSide,
+        'a capsule coat band is single-sided — an open-ended sleeve rendered '
+        + 'FrontSide disappears when seen from its far side');
+    }
+
+    // SOURCE half — the GLB cape, which only exists in a browser. Named as a
+    // source check so nobody later mistakes it for an executed one.
+    const charSource = readFileSync(new URL('../src/engine/Character3D.js', import.meta.url), 'utf8');
+    const capeBlock = charSource.match(/if \(this\.capeMesh\) \{[\s\S]*?\n {4}\}/);
+    assert.ok(capeBlock, 'the cape material block moved — this guard cannot see it any more');
+    assert.match(capeBlock[0], /side\s*=\s*THREE\.DoubleSide/,
+      'the GLB cape is drawn single-sided again — a one-layer garment rendered '
+      + 'FrontSide is invisible from its far side, which reads to a player as the '
+      + 'coat being transparent');
+    assert.match(charSource, /return this\._toon\(0xffffff, \{ map: tex, side: THREE\.DoubleSide \}\)/,
+      'the painted coat material dropped its double-sided flag');
+
+    console.log(`  garments: ${bands.length} capsule coat bands double-sided (runtime), `
+      + 'GLB cape double-sided (source — Node has no rigs)');
+  }
+
   // Snapshot while ALIVE, then judge that snapshot. A census taken after
   // teardown walks an empty graph, so "undisposed === 0" passes vacuously —
   // and a detached-but-never-disposed object is exactly the leak shape.
