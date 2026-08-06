@@ -792,6 +792,11 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
     await safely('pose driver', () => director.setPoseDriver(null));
     await safely('camera', () => director.release(1));
     await safely('cutscene hud', () => hud.setCutscene?.(false));
+    // The Home button now hides with the bars, and the HUD tracks that flag
+    // separately from cinema's — so a recovery that lowered the bars without
+    // telling the HUD left the one control that gets the player out invisible
+    // AND inert. Exactly the stranding this whole path exists to prevent.
+    await safely('letterbox flag', () => hud.setLetterbox?.(false));
     await safely('letterbox', () => cinema.letterbox(false));
     await safely('reveal', () => cinema.fade(false, 400));
     await safely('input', () => setInput(true));

@@ -183,7 +183,12 @@ export class Sequencer {
             if (s.awaitMs !== false) await wait(moveMs ?? s.duration ?? 1400);
           }
           break;
+        // A DIP TO BLACK IS A CUT. Most cuts in this project are authored as a
+        // short fade rather than a `cam` step, so scoping the skip flag to
+        // `cam` alone still let one Skip reach across a covered transition into
+        // the next shot's holds.
         case 'fade':
+          if (s.on) this.lastVerseSkipped = false;
           await awaitWork(() => c.cinema.fade(s.on !== false, s.ms ?? 600, s.pulse !== false));
           break;
         case 'camRelease':
