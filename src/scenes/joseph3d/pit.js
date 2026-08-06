@@ -262,7 +262,23 @@ export function buildPitStage(tex = {}) {
   const tearAttr = new THREE.BufferAttribute(tearPos, 3);
   tearAttr.setUsage(THREE.DynamicDrawUsage);
   tearGeo.setAttribute('position', tearAttr);
+  // A round, soft drop. A PointsMaterial with no map draws an OPAQUE SQUARE —
+  // eight little tiles on a boy's face, which is not what a tear looks like.
+  const tearTex = (() => {
+    const c = document.createElement('canvas');
+    c.width = 32; c.height = 32;
+    const g = c.getContext('2d');
+    const grad = g.createRadialGradient(16, 16, 0, 16, 16, 16);
+    grad.addColorStop(0, 'rgba(255,255,255,0.95)');
+    grad.addColorStop(0.55, 'rgba(214,232,255,0.7)');
+    grad.addColorStop(1, 'rgba(214,232,255,0)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 32, 32);
+    return new THREE.CanvasTexture(c);
+  })();
   const tears = new THREE.Points(tearGeo, new THREE.PointsMaterial({
+    map: tearTex,
+    alphaTest: 0.02,
     color: 0xdfe9ff,
     size: 0.045,
     sizeAttenuation: true,
@@ -346,6 +362,7 @@ export function buildPitStage(tex = {}) {
       ringTex.dispose();
       glowTex.dispose();
       tearGeo.dispose();
+      tearTex.dispose();
       tears.material.dispose();
       shaftLight.parent?.remove(shaftLight); // it lives on the scene, not the group
       group.traverse((o) => { if (o.isInstancedMesh) o.dispose(); if (o.isMesh || o.isSprite) { o.geometry?.dispose?.(); o.material?.dispose?.(); } });

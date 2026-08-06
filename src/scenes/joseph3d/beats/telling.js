@@ -333,10 +333,15 @@ export function makeTellingBeats(ctx, h) {
       }),
       { t: 'fn', fn: async () => {
         ctx.npcs.freeze(jac, false);
-        await ctx.npcs.sendTo(jac, -2.6, -4.4, { speed: 1.4 });
-        jac.char.setPosition(-2.6, -4.4);
-        jac.pos.x = -2.6;
-        jac.pos.z = -4.4;
+        // THE LIVE PLACEMENT. The mirrored mark was applied in the
+        // `if (withJacob)` branch above — which both call sites pass `false`,
+        // so it never ran and Jacob still walked to the pre-mirror spot, 0.85u
+        // inside Levi, for the whole of Genesis 37:9-11. A fix in a branch
+        // nothing calls is not a fix.
+        await ctx.npcs.sendTo(jac, JACOB_TELL_MARK.x, JACOB_TELL_MARK.z, { speed: 1.4 });
+        jac.char.setPosition(JACOB_TELL_MARK.x, JACOB_TELL_MARK.z);
+        jac.pos.x = JACOB_TELL_MARK.x;
+        jac.pos.z = JACOB_TELL_MARK.z;
         ctx.npcs.freeze(jac, true);
         jac.char.turnToward(FIRE.x - jac.pos.x, FIRE.z - jac.pos.z);
         ctx.storyEvent?.('tell2_family');

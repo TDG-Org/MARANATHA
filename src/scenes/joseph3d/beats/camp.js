@@ -551,6 +551,26 @@ export function makeCampBeats(ctx, h) {
         ctx.setMusic('music.ominous_turn');
         ctx.npcs.freeze(ctx.cast.judah, true);
         ctx.npcs.freeze(ctx.cast.reuben, true);
+        // SIMEON AND LEVI HAVE LINES HERE NOW, so they have to be STANDING
+        // here. They were left wherever the ambient wander had drifted them —
+        // measured 13u and 24u from the men they answer — so their two new cuts
+        // framed a speaker alone on empty ground at the far edge of the camp.
+        // Giving a character a line without giving him a mark is half a scene.
+        const jr = ctx.cast.judah.pos;
+        const rb = ctx.cast.reuben.pos;
+        const mid = { x: (jr.x + rb.x) / 2, z: (jr.z + rb.z) / 2 };
+        [['simeon', -1.15, 0.55], ['levi', 1.15, 0.75]].forEach(([who, dx, dz]) => {
+          const npc = ctx.cast[who];
+          if (!npc) return;
+          const x = mid.x + dx;
+          const z = mid.z + dz;
+          npc.target = null;
+          npc.pos.x = x; npc.pos.z = z;
+          if (npc.circle) { npc.circle.x = x; npc.circle.z = z; }
+          npc.char.setPosition(x, z);
+          npc.char.turnToward(mid.x - x, mid.z - z);
+          ctx.npcs.freeze(npc, true);
+        });
       } },
       { t: 'fade', on: false, ms: 420 },
       // D11 (Nate): raised further — heads were still clipping the lens here
@@ -601,6 +621,9 @@ export function makeCampBeats(ctx, h) {
       { t: 'fn', fn: () => {
         ctx.npcs.freeze(ctx.cast.judah, false);
         ctx.npcs.freeze(ctx.cast.reuben, false);
+        // ...and everyone staged for the scene goes back to living in it.
+        ctx.npcs.freeze(ctx.cast.simeon, false);
+        ctx.npcs.freeze(ctx.cast.levi, false);
         releaseCoatEnvySpectators();
       } },
       // Joseph steps back out into the gold, wearing the coat. D8 state

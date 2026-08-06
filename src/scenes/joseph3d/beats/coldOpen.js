@@ -562,9 +562,13 @@ export function makeColdOpen(ctx, h) {
         // TEARS. The grief pose bows his head and the sniffles carry the sound,
         // but on a low-poly face at 2.5u there was nothing to SEE. Eight drops,
         // staggered, falling from just under the eyes.
-        P.setTears?.(true, {
+        // THE EYES, not a guess. headHeight is measured to the top of a
+        // STANDING rig, and he is kneeling with his head bowed — 0.82 of it put
+        // the drops 0.63m above his hair. Ask the rig where its head bone
+        // actually is; fall back to a seated fraction only if there is none.
+        P.setTears?.(true, ctx.joseph.eyePosition?.() ?? {
           x: jRoot.position.x,
-          y: jRoot.position.y + ctx.joseph.headHeight * 0.82,
+          y: jRoot.position.y + ctx.joseph.headHeight * 0.46,
           z: jRoot.position.z,
         });
         // D11 (Nate): the pit is NIGHT-dark — the shrunken sky-disc above him

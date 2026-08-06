@@ -355,6 +355,26 @@ export class Character3D {
     return this._toon(0xffffff, { map: tex, side: THREE.DoubleSide });
   }
 
+  /**
+   * Where this character's EYES are, in world space, right now — bowed head,
+   * kneeling pose, animation and all. Returns null when the rig has no head
+   * bone (the capsule fallback), so callers can choose their own guess.
+   *
+   * `headHeight` is measured to the top of a STANDING rig and is the wrong
+   * thing to offset from mid-pose: 0.82 of it put the pit tears 0.63m above a
+   * kneeling boy's hair, and slightly behind him, because it is a height rather
+   * than a position.
+   */
+  eyePosition(out = new THREE.Vector3()) {
+    if (!this._headBone) return null;
+    this._headBone.getWorldPosition(out);
+    // The bone sits inside the skull; the eyes are on its front face.
+    const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.facing.getWorldQuaternion(new THREE.Quaternion()));
+    out.addScaledVector(forward, 0.09);
+    out.y -= 0.02;
+    return out;
+  }
+
   // Show/hide the coat (Joseph's gift beat). No-op when the rig has no cape.
   setCoat(on) {
     if (this.capeMesh) this.capeMesh.visible = !!on;
