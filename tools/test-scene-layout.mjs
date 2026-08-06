@@ -138,3 +138,53 @@ const highestPitTerrain = testPitFloorClearance();
 console.log('scene layout: PASS');
 console.log(`  camp colliders/decorations: 0 overlaps`);
 console.log(`  highest terrain below cistern floor: ${highestPitTerrain.toFixed(3)}`);
+
+// ── AUTHORED ACTOR MARKS MUST NOT BE INSIDE THE SET ─────────────────────────
+//
+// Every prop registers a collider, and the player is pushed out of them — but a
+// cutscene mark is written by hand and bypasses ColliderWorld entirely
+// (`char.setPosition(x, z)`), so an actor placed on a mark can stand inside a
+// crate, a tent or the fire. Nothing checked this: when the fire circle was
+// re-blocked to the south arc, two of the new seats landed in props and the
+// only thing that would have caught it was somebody noticing on screen.
+{
+  const { ColliderWorld } = await import('../src/engine/collision.js');
+  const { buildCamp } = await import('../src/scenes/joseph3d/props.js');
+  const {
+    TELLING_RING_SEATS, tellingRingXZ,
+  } = await import('../src/scenes/joseph3d/beats/helpers.js');
+  const { TELLING_JOSEPH_MARK, JACOB_TELL_MARK } = await import('../src/scenes/joseph3d/beats/telling.js');
+  const {
+    DUSK_FIRE, DUSK_RING, DUSK_JOSEPH_MARK,
+    HERD_DIRECTION_MARKS, HERD_DIRECTION_JOSEPH_MARK,
+  } = await import('../src/scenes/joseph3d/beats/camp.js');
+
+  const world = new ColliderWorld();
+  buildCamp(world);
+
+  const marks = [
+    ['telling Joseph', TELLING_JOSEPH_MARK],
+    ['telling Jacob', JACOB_TELL_MARK],
+    ['dusk Joseph', DUSK_JOSEPH_MARK],
+    ['herd Joseph', HERD_DIRECTION_JOSEPH_MARK],
+    ...TELLING_RING_SEATS.map(([who, a]) => [`telling seat ${who}`, tellingRingXZ(a)]),
+    ...DUSK_RING.map(([who, a]) => [`dusk seat ${who}`, {
+      x: DUSK_FIRE.x + Math.cos(a) * 1.8,
+      z: DUSK_FIRE.z + Math.sin(a) * 1.8,
+    }]),
+    ...HERD_DIRECTION_MARKS.map((m, i) => [`herd brother ${i}`, m]),
+  ];
+
+  // A standing actor is about a 0.4u capsule; anything closer than that to a
+  // solid is visibly intersecting it.
+  const BODY = 0.4;
+  const inside = marks.filter(([, m]) => world.overlaps(m.x, m.z, BODY));
+  assert.deepEqual(
+    inside.map(([name, m]) => `${name} at (${m.x.toFixed(2)}, ${m.z.toFixed(2)})`),
+    [],
+    'these authored cutscene marks put an actor inside the set — hand placement '
+    + 'bypasses ColliderWorld, so nothing pushes them back out and they simply '
+    + 'stand in the prop',
+  );
+  console.log(`  authored marks: ${marks.length} checked, none inside a prop`);
+}

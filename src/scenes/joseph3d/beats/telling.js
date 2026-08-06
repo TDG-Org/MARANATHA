@@ -11,7 +11,7 @@ import { planGroupCamera } from './helpers.js';
 export const TELLING_CIRCLE_ANGLE = Math.PI * 0.12;
 // Jacob presides from the camera's side, opposite the seated brothers, clear of
 // every seat on the ring.
-export const JACOB_TELL_MARK = Object.freeze({ x: 2.6, z: -7.6 });
+export const JACOB_TELL_MARK = Object.freeze({ x: 2.85, z: -7.63 });
 export const TELLING_JOSEPH_MARK = Object.freeze({ x: -0.9, z: -7.9 });
 // Where Joseph ends the chapter, standing apart from the family.
 export const TELLING_LONE_MARK = Object.freeze({ x: -4.6, z: -2.0 });

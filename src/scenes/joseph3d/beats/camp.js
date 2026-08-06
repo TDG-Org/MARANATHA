@@ -41,7 +41,7 @@ export function planHerdDirectionCamera({
 // the side with the camp behind it. Measured at the old staging: backdrop 79.
 export const DUSK_RING = Object.freeze([
   Object.freeze(['judah', 0.3584]),
-  Object.freeze(['reuben', 1.0584]),
+  Object.freeze(['reuben', 1.15]), // 1.0584 sat him inside a prop (see the mark guard in test:layout)
   Object.freeze(['simeon', 2.0084]),
   Object.freeze(['levi', 2.7584]),
 ]);
@@ -793,7 +793,7 @@ export function makeCampBeats(ctx, h) {
       // ...and its reverse stays on the SAME side of the axis, or the two
       // shots swap the actors' screen sides and the exchange reads as a glitch.
       shot('judah', 'joseph', {
-        side: 0.5, dist: 3.8, height: 2.1, look: 1.15, ms: 1500,
+        side: -0.5, dist: 3.8, height: 2.1, look: 1.15, ms: 1500,
       }),
       { t: 'fn', fn: () => {
         // (the tension score is already running — the state machine carried it
@@ -838,12 +838,27 @@ export function makeCampBeats(ctx, h) {
       // D8: Joseph is visibly STUNG — he rises, and his head drops; the camera
       // stays with him a breath so the hurt is unmissable before the quest.
       { t: 'fn', fn: () => { ctx.joseph.play('idle'); ctx.joseph.setGrief(true, 0.55); ctx.hud.emote('Joseph is sad'); } },
-      // side FLIPPED with DUSK_RING for the same reason as the rebuke: this
-      // shot exists so the hurt is unmissable, and after the re-block it was
-      // pointing at the empty edge with the setting sun behind Joseph, turning
-      // the one frame that carries his face into a black cut-out.
+      // MEASURED BOTH WAYS, and there is no side that wins on both axes. Scored
+      // against the same census and sun the backdrop guard uses:
+      //
+      //     side  -0.8   backdrop  18   dot(look,sun) -0.25
+      //     side  -0.5   backdrop  29   dot(look,sun)  0.02
+      //     side  +0.5   backdrop  94   dot(look,sun)  0.76
+      //     side  +0.8   backdrop 119   dot(look,sun)  0.85
+      //
+      // Every well-lit side is aimed at open ground (floor is 80) and every
+      // side with camp behind it looks toward the setting sun. I flipped this
+      // to -0.5 to fix the glare and traded it straight into the emptiest frame
+      // in the camp — the same mistake, in the other direction.
+      //
+      // So it goes back to +0.5 and the light is solved where it actually lives:
+      // this is DUSK, the sun is on the horizon, and there is a fire two metres
+      // away with a practical point light on it. Shooting toward a sunset with
+      // the fire as key is the shot; an empty field is not. (The trapped-shot
+      // rule stands: when no angle clears, re-block. The blocking here is a
+      // seated ring the beat cannot move without losing the fire.)
       shot('joseph', 'judah', {
-        side: -0.5,
+        side: 0.5,
         dist: 3.8,
         height: 2.1,
         look: 1.15,
