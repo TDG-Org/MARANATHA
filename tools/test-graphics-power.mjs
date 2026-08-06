@@ -3,7 +3,9 @@ import { readFileSync } from 'node:fs';
 import {
   GRAPHICS_PRESETS,
   GraphicsSystem,
+  MAX_PIXEL_RATIO,
   particleCapacity,
+  targetPixelRatio,
 } from '../src/systems/Graphics.js';
 import { AdaptiveQuality, RateGovernor } from '../src/core/quality.js';
 import { createFramePacer } from '../src/core/framePacer.js';
@@ -27,8 +29,7 @@ class RendererFake {
 
 function wire(graphics, quality, dpr = 2) {
   return graphics.subscribe((state, change) => {
-    const base = Math.min(dpr, state.dprCap);
-    quality.setBase(base, { raise: change?.source === 'explicit' });
+    quality.setBase(targetPixelRatio(dpr, state), { raise: change?.source === 'explicit' });
   });
 }
 
@@ -477,8 +478,16 @@ for (const hz of [60, 85, 90, 120, 140, 144, 165, 240]) {
   assert.equal(quality.ratio, 1);
   quality.setBase(2, { raise: false });
   assert.equal(quality.ratio, 1);
+  // Aimed at the GUARANTEE, not at one spelling of it: the resize path must
+  // recompute the base from the LIVE preset and must never raise. Written as a
+  // verbatim source match it failed the moment the arithmetic moved into
+  // Graphics.targetPixelRatio — a green test can only be worth its noise if it
+  // breaks on behaviour rather than on formatting.
   const appSource = readFileSync(new URL('../src/core/app.js', import.meta.url), 'utf8');
-  assert.match(appSource, /quality\.setBase\(Math\.min\(dpr\(\), Graphics\.dprCap\), \{ raise: false \}\)/);
+  const resizeCall = appSource.match(/quality\.setBase\(([^;]*?),\s*\{\s*raise:\s*false\s*\}\)/);
+  assert.ok(resizeCall, 'the resize path must re-base the pixel ratio without raising it');
+  assert.match(resizeCall[1], /Graphics/,
+    'the resize path must read the live preset, not a value captured at boot');
 }
 
 // Regression for the original inversion: if adaptive DPR already reached 1,
@@ -750,4 +759,70 @@ console.log('Graphics quality and GPU power policy checks passed.');
     assert.ok(fps <= hz + 0.01, `${hz}Hz was asked for ${fps.toFixed(1)}fps, more than it can serve`);
   }
   console.log('frame rate: the dial works on mobile/Low, and slow displays still get whole refreshes');
+}
+
+// A QUALITY SETTING THAT CHANGES NOTHING IS NOT A QUALITY SETTING.
+//
+// Nate: "low graphics and high, i honestly cannot tell a single difference, i
+// think this is bad and needs to be fixed!"
+//
+// He was reporting a real thing. Pixel count is the dominant lever, and it was
+// derived as min(devicePixelRatio, dprCap) — a CEILING, which on an ordinary
+// desktop monitor (devicePixelRatio 1, measured on his) clamped Low, Medium and
+// High to exactly 1.0. Three buttons, one image. The setting only ever
+// separated on a retina laptop or a phone, which is precisely where a player is
+// least likely to go looking for it.
+{
+  // The display he actually plays on.
+  const ONE_X = 1;
+  const ratios = {};
+  for (const name of ['low', 'medium', 'high']) {
+    const graphics = new GraphicsSystem({ storage: new MemoryStorage(), detectedPreset: 'medium' });
+    graphics.set(name);
+    ratios[name] = targetPixelRatio(ONE_X, graphics);
+  }
+  assert.ok(ratios.low < ratios.medium && ratios.medium < ratios.high,
+    `on a 1x display the presets must render different numbers of pixels — got `
+    + `low=${ratios.low} medium=${ratios.medium} high=${ratios.high}`);
+  // Not merely different: different enough to SEE. A 20% linear step is ~44%
+  // of the pixels, which reads immediately on text edges and thin geometry.
+  assert.ok(ratios.medium / ratios.low >= 1.2, 'Low is not visibly softer than Medium');
+  assert.ok(ratios.high / ratios.medium >= 1.2, 'High is not visibly sharper than Medium');
+
+  // The ceiling still holds where it was always needed: a phone must never be
+  // asked for 3x, and supersampling must never be allowed to square away a
+  // retina laptop's frame budget.
+  for (const dpr of [2, 3, 4]) {
+    for (const name of ['low', 'medium', 'high']) {
+      const graphics = new GraphicsSystem({ storage: new MemoryStorage(), detectedPreset: 'medium' });
+      graphics.set(name);
+      const ratio = targetPixelRatio(dpr, graphics);
+      assert.ok(ratio <= MAX_PIXEL_RATIO + 1e-9,
+        `${name} at dpr ${dpr} asked for ${ratio}, above the hard ceiling`);
+      assert.ok(ratio <= GRAPHICS_PRESETS[name].dprCap + 1e-9,
+        `${name} at dpr ${dpr} broke its own cap`);
+    }
+  }
+  // Garbage in must not produce a zero-pixel buffer.
+  for (const bad of [0, -1, NaN, undefined, Infinity]) {
+    const ratio = targetPixelRatio(bad, { preset: GRAPHICS_PRESETS.medium });
+    assert.ok(Number.isFinite(ratio) && ratio > 0, `devicePixelRatio ${bad} produced ${ratio}`);
+  }
+
+  // And the change must LAND without a reload: pressing a preset has to push a
+  // new ratio through to the renderer, not merely record a preference.
+  const renderer = new RendererFake();
+  const graphics = new GraphicsSystem({ storage: new MemoryStorage(), detectedPreset: 'medium' });
+  const quality = new AdaptiveQuality(renderer, { basePixelRatio: targetPixelRatio(ONE_X, graphics) });
+  wire(graphics, quality, ONE_X);
+  const before = renderer.ratios.length;
+  graphics.set('high');
+  assert.ok(renderer.ratios.length > before,
+    'choosing High never reached the renderer — the preset would only appear after a reload');
+  assert.equal(quality.ratio, ratios.high, 'High did not deliver its full pixel ratio');
+  graphics.set('low');
+  assert.equal(quality.ratio, ratios.low, 'Low did not shed pixels immediately');
+
+  console.log(`graphics presets separate on a 1x display: low ${ratios.low} · medium `
+    + `${ratios.medium} · high ${ratios.high}, applied live with no reload`);
 }

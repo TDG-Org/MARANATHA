@@ -4,7 +4,7 @@ import { detectSoftwareRenderer, GPU } from './gpuCapability.js';
 import { createVeil } from '../ui/veil.js';
 import { createLoader } from '../ui/loader.js';
 import { Settings } from '../systems/Settings.js';
-import { Graphics } from '../systems/Graphics.js';
+import { Graphics, MAX_PIXEL_RATIO, targetPixelRatio } from '../systems/Graphics.js';
 import { PostFX } from '../engine/PostFX.js';
 import { makeAbortError } from './async.js';
 import { waitWithDeadline, waitWhileProgressing } from './deadline.js';
@@ -36,7 +36,7 @@ export function createApp(container) {
   let enginePromise = null;
   Graphics.subscribe((graphics, change) => {
     if (!quality) return; // pre-engine: nothing rendering, nothing to cap
-    const base = Math.min(dpr(), graphics.dprCap);
+    const base = targetPixelRatio(dpr(), graphics);
     // Automatic demotion may only lower the current DPR. A player explicitly
     // choosing a preset may restore that preset's complete DPR ceiling.
     quality.setBase(base, { raise: change?.source === 'explicit' });
@@ -89,7 +89,7 @@ export function createApp(container) {
     // spend the session measuring a software rasterizer and blaming the scene.
     const gpu = detectSoftwareRenderer(renderer);
     quality = new AdaptiveQuality(renderer, {
-      basePixelRatio: Math.min(dpr(), Graphics.dprCap),
+      basePixelRatio: targetPixelRatio(dpr(), Graphics),
       // Pixels are the only lever that scales with a software rasterizer's real
       // cost, and the normal floor of 1.0 is unreachable-by-design on a DPR-1
       // display: base becomes 1, min becomes 1, and frame() then early-returns
@@ -149,8 +149,8 @@ export function createApp(container) {
     // A window moved to a lower-DPR display (or browser zoomed out) must shed
     // its old oversized buffer immediately. Native-DPR increases stay sticky
     // down until the player explicitly reselects a preset.
-    quality.setBase(Math.min(dpr(), Graphics.dprCap), { raise: false });
-    const ratio = Math.min(2, quality.ratio);
+    quality.setBase(targetPixelRatio(dpr(), Graphics), { raise: false });
+    const ratio = Math.min(MAX_PIXEL_RATIO, quality.ratio);
     const sizeChanged = w !== sizedW || h !== sizedH;
     const ratioChanged = renderer.getPixelRatio() !== ratio;
     if (!sizeChanged && !ratioChanged) return; // duplicate event, nothing to apply

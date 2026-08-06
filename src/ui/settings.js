@@ -123,7 +123,7 @@ export function openSettings({ onReset } = {}) {
     // or the player has taken over.
     gfxHint.textContent = Graphics.autoDetected
       ? `auto — set to ${Graphics.preset.label} for this device`
-      : 'your choice · fully applies after a reload';
+      : 'your choice · applied now';
   };
   Object.keys(GRAPHICS_PRESETS).forEach((key) => {
     const b = document.createElement('button');
@@ -138,7 +138,18 @@ export function openSettings({ onReset } = {}) {
     gfxBtns[key] = b;
     gfxRow.append(b);
   });
-  gfxWrap.append(gfxHead, gfxRow);
+  // "why do i have to reload for it to apply, the user shouldnt have to do
+  // that". He shouldn't, and now he doesn't: resolution, particle density,
+  // character shadows, fog distance and texture filtering all move the moment
+  // a preset is pressed. Two flags genuinely cannot — MSAA and which GPU the
+  // canvas asks for are fixed when the WebGL context is created — so say
+  // exactly that, in small print, instead of a blanket "fully applies after a
+  // reload" that made the whole setting look broken.
+  const gfxNote = document.createElement('div');
+  gfxNote.style.cssText = 'margin-top:7px; font-size:11px; line-height:1.45; opacity:0.5;';
+  gfxNote.textContent = 'Changes apply straight away. Edge smoothing, and which chip a '
+    + 'two-GPU laptop uses, settle on the next launch.';
+  gfxWrap.append(gfxHead, gfxRow, gfxNote);
   panel.append(gfxWrap);
   paintGfx();
 

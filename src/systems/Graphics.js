@@ -35,14 +35,62 @@ const PROMOTE_AVG_RATIO = 7 / FRAME_BUDGET_MS;   // 0.42 of the budget
 const PROMOTE_SLOW_RATIO_MS = 12 / FRAME_BUDGET_MS; // 0.72 of the budget
 const PROMOTE_SLOW_RATIO = 0.02;
 
+// WHY renderScale EXISTS, AND WHY Low AND High USED TO LOOK IDENTICAL.
+//
+// Nate: "low graphics and high, i honestly cannot tell a single difference, i
+// think this is bad and needs to be fixed!"
+//
+// He was right, and on his machine the preset was doing literally nothing. The
+// dominant lever is pixel count, and it was computed as min(devicePixelRatio,
+// dprCap). An ordinary desktop monitor reports devicePixelRatio 1 (measured on
+// his: 1), so:
+//
+//     Low     min(1, 1.0) = 1
+//     Medium  min(1, 1.5) = 1
+//     High    min(1, 2.0) = 1     <- the same buffer, three times over
+//
+// A cap can only ever take pixels away, so on any 1x display all three presets
+// rendered the identical image and the whole setting was decoration. It only
+// ever separated on a retina laptop or a phone.
+//
+// renderScale is a MULTIPLIER instead of a ceiling, so the presets separate on
+// every display: Low renders below native and is genuinely cheaper, High
+// supersamples above it (which on low-poly geometry is the best edge quality
+// available to us). dprCap stays as the absolute ceiling so a 3x phone still
+// never renders 9x the pixels for detail nobody can see.
+//
+//     display   Low          Medium       High
+//     1x        0.72         1.00         1.40
+//     2x        1.00 (cap)   1.50 (cap)   2.00 (cap)
+//     3x phone  1.00 (cap)   1.50 (cap)   2.00 (cap)
+//
+// And unlike the two context-creation flags (MSAA, GPU preference) this applies
+// the instant the button is pressed — no reload, which is the other half of the
+// same complaint.
 export const GRAPHICS_PRESETS = {
-  low: { label: 'Low', dprCap: 1, particleScale: 0.4, contactShadow: false, fogFar: 200, anisotropy: 1 },
+  low: { label: 'Low', renderScale: 0.72, dprCap: 1, particleScale: 0.4, contactShadow: false, fogFar: 200, anisotropy: 1 },
   // The pooled character shadows cost one change-gated draw for the whole
   // cast, so Medium can keep this grounding cue without restoring the old
   // 15-draw fan-out. Only Low removes it.
-  medium: { label: 'Medium', dprCap: 1.5, particleScale: 1.0, contactShadow: true, fogFar: 250, anisotropy: 4 },
-  high: { label: 'High', dprCap: 2, particleScale: 1.6, contactShadow: true, fogFar: 300, anisotropy: 4 },
+  medium: { label: 'Medium', renderScale: 1.0, dprCap: 1.5, particleScale: 1.0, contactShadow: true, fogFar: 250, anisotropy: 4 },
+  high: { label: 'High', renderScale: 1.4, dprCap: 2, particleScale: 1.6, contactShadow: true, fogFar: 300, anisotropy: 4 },
 };
+
+// The absolute ceiling on the drawing buffer, whatever preset and display are
+// in play. Supersampling is quadratic, so this is the line that keeps High from
+// asking a retina laptop for four times the pixels.
+export const MAX_PIXEL_RATIO = 2;
+
+/**
+ * The drawing-buffer ratio a display should render at under a given preset.
+ * The ONE place this arithmetic lives — it was previously inlined at three
+ * call sites, which is how a cap could masquerade as a quality setting.
+ */
+export function targetPixelRatio(devicePixelRatio, graphics = Graphics) {
+  const dpr = Number.isFinite(devicePixelRatio) && devicePixelRatio > 0 ? devicePixelRatio : 1;
+  const preset = graphics?.preset || GRAPHICS_PRESETS.medium;
+  return Math.min(dpr * (preset.renderScale ?? 1), preset.dprCap, MAX_PIXEL_RATIO);
+}
 
 const MAX_PARTICLE_SCALE = Math.max(
   ...Object.values(GRAPHICS_PRESETS).map((preset) => preset.particleScale),
@@ -167,6 +215,7 @@ export class GraphicsSystem {
   get autoDetected() { return this.provenance === 'auto'; }
   get isExplicit() { return this.provenance === 'explicit'; }
   get preset() { return GRAPHICS_PRESETS[this.name]; }
+  get renderScale() { return this.preset.renderScale ?? 1; }
   get dprCap() { return this.preset.dprCap; }
   get particleScale() { return this.preset.particleScale; }
   get contactShadow() { return this.preset.contactShadow; }
