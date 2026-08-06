@@ -76,7 +76,13 @@ export class PlayerController3D {
     signal?.addEventListener('abort', this._onAbort, { once: true });
   }
 
-  setEnabled(on) { this.enabled = on; if (!on) this._clearInput(); }
+  // The touch stick belongs to whoever owns movement: it goes away with it,
+  // rather than staying on screen answering a finger nothing is listening to.
+  setEnabled(on) {
+    this.enabled = on;
+    if (!on) this._clearInput();
+    this.joystick.setEnabled?.(!!on);
+  }
 
   // Put the body somewhere, properly. Writing character.position directly leaves
   // the controller's own vertical state behind, and the next frame quietly drags

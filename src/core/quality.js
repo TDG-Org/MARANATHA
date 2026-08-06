@@ -257,12 +257,26 @@ export class DebugHud {
       // Driver strings are long and bracket-heavy: keep the useful middle.
       if (raw) this._gpuName = String(raw).replace(/^ANGLE \(|\)$/g, '').slice(0, 58);
     } catch { /* the extension is optional; the HUD survives without it */ }
+    // A SECOND SOURCE THE APP ALREADY HAS.
+    //
+    // Some browsers withhold WEBGL_debug_renderer_info but still answer
+    // gl.RENDERER, and detectSoftwareRenderer already tried both and stored the
+    // winner. Reading only the extension here meant the one line whose entire
+    // job is telling a slow FRAME from a slow CHIP printed "(unknown)" while
+    // the name sat in a global two modules away.
+    if (this._gpuName === '(unknown)' && GPU.renderer) {
+      this._gpuName = String(GPU.renderer).replace(/^ANGLE \(|\)$/g, '').slice(0, 58);
+    }
     // ...and a name is not enough, because the failure mode that cost the most
     // time to find reads as an ordinary slow frame: hardware acceleration
     // switched OFF in the browser, every pixel rasterized on the CPU, `script`
     // and `submit` both reporting ~5ms beside an 83ms frame because the real
     // work happens after submit returns. Say it in words, on the HUD.
-    if (GPU.software) this._gpuName = `⚠ SOFTWARE (no GPU) — ${this._gpuName}`;
+    // "no GPU" was the wrong three words. It reads as a verdict on the
+    // COMPUTER — Nate asked "is it my actual computer that's gone bad?" — when
+    // what it means is that this browser is not using the graphics card it has.
+    // Name the thing that is true.
+    if (GPU.software) this._gpuName = `⚠ BROWSER IS USING THE CPU — ${this._gpuName}`;
     return this._gpuName;
   }
 

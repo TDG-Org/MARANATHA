@@ -346,13 +346,21 @@ export function createApp(container) {
       // acceleration off, and the boot chunk is the menu's whole download
       // budget (startup-efficiency), so this must not sit in it.
       if (GPU.software && !current?.instance?.flat) {
+        // WHICH screen asked. The import is async, so a player who bounced
+        // straight back to the map could have the advice land on the DOM menu —
+        // the one screen the check above exists to exclude — where it is both
+        // wrong and unreachable by the scene teardown that owns its cleanup.
+        const askedBy = current.key;
         import('../ui/gpuNotice.js')
           // KEEP the cleanup. Discarding it left the notice on document.body
           // for the rest of the session: it painted over the navigation veil
           // (same z-index, appended later) and then sat on the DOM story map —
           // the very screen the guard above exists to exclude — while its
           // internal latch stopped it ever appearing again.
-          .then((m) => { dismissGpuNotice = m.maybeShowGpuNotice(); })
+          .then((m) => {
+            if (current?.key !== askedBy || current?.instance?.flat) return;
+            dismissGpuNotice = m.maybeShowGpuNotice();
+          })
           .catch(() => { /* the game is playable without the advice */ });
       }
       // The menu is up and idle: pull the engine down NOW so the player's

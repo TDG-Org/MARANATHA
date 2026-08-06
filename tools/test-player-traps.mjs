@@ -511,6 +511,78 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   dialogue.destroy();
 }
 
+// ── 7. A THROWN BEAT MUST NOT TAKE THE GAME AWAY ────────────────────────────
+//
+// runStory's catch used to log and stop. Whatever the beat was doing when it
+// threw simply stayed: letterbox down, screen mid-fade (usually fully black),
+// camera locked in an authored pose, and input off — because every beat turns
+// input off on the way IN and back on on the way OUT. Nothing watches for this
+// and there is no timeout, so the player sat looking at a black rectangle with
+// a working pause menu and nothing else. Only a reload escaped.
+{
+  const { buildJoseph3D } = await import('../src/scenes/joseph3d/index.js');
+  const booted = await bootScene(buildJoseph3D);
+  const instance = booted.instance ?? booted;
+  const ctx = instance.debug.ctx;
+  const controller = instance.debug.controller;
+  const recover = instance.debug.recoverFromStoryFailure;
+  assert.equal(typeof recover, 'function', 'the story failure recovery is not reachable');
+
+  // WIRING, checked at source, because the runtime half below drives the
+  // recovery directly through the debug seam and therefore cannot see whether
+  // anything CALLS it. Proven necessary: deleting the call from the catch left
+  // every runtime assertion below still green.
+  {
+    // Anchored on the story-failure LOG, not on `} catch (e) {` — the module has
+    // more than one of those, and matching the first one audited the render
+    // pre-warm's catch instead, which passed with the softlock fully restored.
+    // Newlines normalised: a bounded source window is a different length under
+    // CRLF, and this repo has been bitten by exactly that.
+    const src = readFileSync(new URL('../src/scenes/joseph3d/index.js', import.meta.url), 'utf8')
+      .replace(/\r\n/g, '\n');
+    const at = src.indexOf("console.error('[joseph3d] story error'");
+    assert.ok(at > 0, 'runStory no longer reports a story failure at all');
+    const end = src.indexOf('\n  }', at);
+    assert.ok(end > at, 'could not find the end of runStory');
+    assert.match(src.slice(at, end), /recoverFromStoryFailure\(\)/,
+      'a thrown beat is logged and abandoned — the scene keeps the letterbox down, '
+      + 'the camera locked and input off, with no way back but a page reload');
+  }
+
+  // Put the scene into exactly the state a mid-cutscene throw leaves behind.
+  const navigations = [];
+  ctx.app.navigate = async (key, params) => { navigations.push({ key, params }); };
+  ctx.setInput(false);
+  ctx.hud.setCutscene?.(true);
+  await ctx.cinema.letterbox(true);
+  ctx.camera.setPoseDriver(() => ({ pos: [0, 3, 0], look: [0, 1, 0] }));
+  assert.equal(controller.enabled, false, 'precondition: a cutscene has input off');
+
+  await recover();
+
+  assert.equal(controller.enabled, true,
+    'a thrown beat left the player unable to move — recovery must hand input back');
+  assert.equal(ctx.camera._poseDriver, null,
+    'a thrown beat left the camera locked to a cutscene pose driver');
+  assert.deepEqual(navigations.map((n) => n.key), ['home'],
+    'a thrown beat must put the player somewhere they can act, not leave them in '
+    + 'a camp with no story left to run');
+  assert.equal(navigations[0].params?.loadError?.key, 'joseph',
+    'the recovery navigation does not say what failed');
+
+  // ...and it must survive its own steps failing, since it only ever runs
+  // BECAUSE something already threw.
+  ctx.setInput(false);
+  const brokenCinema = ctx.cinema.letterbox;
+  ctx.cinema.letterbox = () => { throw new Error('injected letterbox failure'); };
+  await recover();
+  assert.equal(controller.enabled, true,
+    'one failing recovery step aborted the rest of the recovery');
+  ctx.cinema.letterbox = brokenCinema;
+
+  await booted.disposeDeep();
+}
+
 console.log(
   'player traps passed: pause restores input in every scene (no scene answers '
   + '"is input on?" from the flag pause clears), a reset survives a running story, '

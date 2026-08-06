@@ -180,6 +180,17 @@ export function createStoryHud({ onHome, signal = null, isPaused = null } = {}) 
   };
   const applyVisible = () => {
     setRenderedVisible(Boolean(current && !inCutscene && !letterboxOn));
+    // THE HOME BUTTON HAS TO GO WHERE THE BANNER GOES.
+    //
+    // It is fixed at top-left on z-index 40; the cinema letterbox bar is opaque
+    // and sits above it, so during every cutscene the button was painted over —
+    // invisible, and still clickable, and still a Tab stop. A stray click on a
+    // black bar quit the chapter. It is also exactly the wrong offer to make
+    // mid-scene: the bars exist to give the shot a clean frame, and the pause
+    // gear (which deliberately lives above the bars) is already the way out.
+    const hidden = inCutscene || letterboxOn;
+    home.style.visibility = hidden ? 'hidden' : '';
+    home.inert = hidden;
   };
   function setCutscene(on) {
     inCutscene = !!on;

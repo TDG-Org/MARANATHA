@@ -96,7 +96,17 @@ export function openSettings({ onReset } = {}) {
       (v) => Settings.set('voice', v),
       // On release, speak a short sample so the level is verifiable — the real
       // baked narrator voice (audio/vo/ui/voice-test.mp3), not TTS.
-      () => Narrator.speak('The Lord was with Joseph.', 'ui/voice-test'),
+      //
+      // ...but NEVER over a line the story is reading. Narrator.speak() opens a
+      // new session, which supersedes whatever is being spoken — so nudging this
+      // slider during a verse killed the scripture mid-sentence AND resolved the
+      // beat's awaited promise, stepping the sequencer past it. Settings is
+      // reachable at every moment of the story, so this was one drag away at any
+      // time. A sample that would talk over the story simply does not play.
+      () => {
+        if (Narrator.activeLine) return;
+        Narrator.speak('The Lord was with Joseph.', 'ui/voice-test');
+      },
     ),
   );
 

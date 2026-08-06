@@ -1,4 +1,5 @@
 import { detectTier } from '../core/quality.js';
+import { GPU } from '../core/gpuCapability.js';
 
 // Graphics Quality: Low / Medium / High is the player's beauty-versus-power
 // dial. Presets cap pixel ratio, scale particles, and toggle scene extras.
@@ -309,7 +310,17 @@ export class GraphicsSystem {
     const previous = this.name;
     this.name = next;
     this._cooldown = this.cooldownFrames;
-    writeKey(this.storage, AUTO_KEY, next);
+    // DEMOTE, BUT DO NOT REMEMBER, WHEN THE CAUSE IS NOT THE MACHINE.
+    //
+    // AUTO_KEY is a note about the DEVICE, and the constructor treats it as
+    // one — a remembered result is a ceiling on every future visit. But a
+    // CPU-rasterized context is a browser SETTING: every frame runs ~83ms
+    // against a 16.7ms budget, so a single session with hardware acceleration
+    // switched off wrote 'low' into the save. The player then fixes the
+    // browser, and the game still boots them into Low, on an RTX 3090, with no
+    // way to tell why. Shedding quality NOW is right; carving it into the save
+    // is not.
+    if (!GPU.software) writeKey(this.storage, AUTO_KEY, next);
     this._notify({ source: 'auto', previous, name: next });
   }
 

@@ -82,7 +82,10 @@ assert.doesNotMatch(
   /setMusic\(/,
   'pit crying starts a second music bed instead of keeping dark ambience',
 );
-assert.match(sceneSource, /grassTex = loadTiled\([^;]+THREE\.MirroredRepeatWrapping\)/,
+// Aimed at the ARGUMENT, not at the argument being last: this asserted a
+// closing parenthesis immediately after the wrap mode, so adding a fallback
+// colour to loadTiled broke it without changing anything it was guarding.
+assert.match(sceneSource, /grassTex = loadTiled\([^;]*THREE\.MirroredRepeatWrapping/,
   'Scene 1 grass no longer uses seam-safe mirrored wrapping');
 assert.match(sceneSource, /grassTex = loadTiled\('textures\/grass\.jpg', 76, 34,/,
   'Scene 1 grass facets are no longer using the finer approved tiling');
@@ -400,7 +403,11 @@ assert.match(
 );
 assert.match(
   sceneSource,
-  /const textureReadiness = \[\][\s\S]*loadOwnedTexture\(url,[\s\S]*textureReadiness\.push\(whenReady\)[\s\S]*await Promise\.all\(textureReadiness\)[\s\S]*new THREE\.WebGLRenderTarget\(32, 32,[\s\S]*renderer\.compile\(scene, warmCamera\)[\s\S]*renderer\.render\(scene, warmCamera\)[\s\S]*finally \{[\s\S]*renderer\.setRenderTarget\(priorTarget\)[\s\S]*warmTarget\.dispose\(\)[\s\S]*dream\.group\.visible = wasDream/,
+  // `push(whenReady` rather than `push(whenReady)`: a decorative image must be
+  // allowed to settle to a flat colour instead of rejecting the whole scene,
+  // and that wrapper is a `.catch` on the same promise. The guarantee being
+  // held here is that the loading gate still waits for them.
+  /const textureReadiness = \[\][\s\S]*loadOwnedTexture\(url,[\s\S]*textureReadiness\.push\(whenReady[\s\S]*await Promise\.all\(textureReadiness\)[\s\S]*new THREE\.WebGLRenderTarget\(32, 32,[\s\S]*renderer\.compile\(scene, warmCamera\)[\s\S]*renderer\.render\(scene, warmCamera\)[\s\S]*finally \{[\s\S]*renderer\.setRenderTarget\(priorTarget\)[\s\S]*warmTarget\.dispose\(\)[\s\S]*dream\.group\.visible = wasDream/,
   'texture readiness or prewarm visibility restoration is not owned by the loading gate',
 );
 assert.match(textureLoaderSource, /const image = new Image\(\)/,

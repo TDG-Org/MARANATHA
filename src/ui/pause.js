@@ -214,6 +214,14 @@ export function createPauseMenu({ app, isInputOn, setInput, onSettings, onHome }
     close,
     destroy() {
       if (frozen) freeze(false, { restoreInput: false });
+      // Whatever show() switched off must come back on EVERY exit path, not
+      // only the one that goes through close(). `inert` is set on live body
+      // siblings — the canvas, the HUD, the volume control — so a teardown
+      // that skipped this (a navigation that rejects, a scene disposed while
+      // paused) would leave the whole page unclickable and untabbable with no
+      // menu left to reopen and undo it.
+      inerted.forEach((el) => { el.inert = false; });
+      inerted.length = 0;
       window.removeEventListener('keydown', onKey, true);
       window.removeEventListener('pointerdown', onPointer, true);
       btn.remove();

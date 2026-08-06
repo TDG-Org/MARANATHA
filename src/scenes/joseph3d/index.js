@@ -61,7 +61,29 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
   // readiness waits for all three images to decode. This prevents a cold-load
   // reveal from popping the ground/path textures in on the first visible frame.
   const textureReadiness = [];
-  const loadTiled = (url, rx, ry, wrap = THREE.RepeatWrapping) => {
+  // A DECORATIVE IMAGE MUST NOT BE ABLE TO END THE CHAPTER.
+  //
+  // These four are ground cover, rock, path dirt and the cistern brick. Their
+  // readiness promises were pushed into the HARD gate, so one 404 — a bad
+  // deploy, a flaky connection, an ad-blocker rule — rejected scene readiness
+  // and the whole story became unplayable, with the loading screen bouncing
+  // back to the map. That is a catastrophic response to a missing texture.
+  //
+  // On failure the texture is repainted as a single flat pixel of a sensible
+  // colour, which fixes EVERY material sampling it at once without threading a
+  // material reference through the scene: an unloaded texture otherwise samples
+  // as black, which is worse than a plain green field. Lifetime aborts still
+  // propagate — leaving the scene is not a texture failure.
+  const paintFlatFallback = (texture, hex) => {
+    const c = document.createElement('canvas');
+    c.width = 1; c.height = 1;
+    const g = c.getContext('2d');
+    g.fillStyle = `#${(hex >>> 0).toString(16).padStart(6, '0')}`;
+    g.fillRect(0, 0, 1, 1);
+    texture.image = c;
+    texture.needsUpdate = true;
+  };
+  const loadTiled = (url, rx, ry, wrap = THREE.RepeatWrapping, fallbackColor = 0x8a8375) => {
     const { texture: t, whenReady } = loadOwnedTexture(url, {
       signal,
       configure: (texture) => {
@@ -71,17 +93,22 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
         texture.anisotropy = Graphics.anisotropy;
       },
     });
-    textureReadiness.push(whenReady);
+    textureReadiness.push(whenReady.catch((error) => {
+      if (signal?.aborted || error?.name === 'AbortError') throw error;
+      console.warn(`[joseph3d] ${url} did not load — falling back to a flat colour`, error);
+      paintFlatFallback(t, fallbackColor);
+      return false;
+    }));
     return t;
   };
   // Finer tiling keeps the supplied polygon grass from reading as a few giant
   // facets across the landscape. UV repeats cost no extra draw or texture RAM.
-  const grassTex = loadTiled('textures/grass.jpg', 76, 34, THREE.MirroredRepeatWrapping);
-  const rockTex = loadTiled('textures/rock.jpg', 1, 1);
-  const dirtTex = loadTiled('textures/dirt.jpg', 2, 2);
+  const grassTex = loadTiled('textures/grass.jpg', 76, 34, THREE.MirroredRepeatWrapping, 0x6f8a45);
+  const rockTex = loadTiled('textures/rock.jpg', 1, 1, THREE.RepeatWrapping, 0x8a807a);
+  const dirtTex = loadTiled('textures/dirt.jpg', 2, 2, THREE.RepeatWrapping, 0x7d5f41);
   // Nate's brick, for the inside of the cistern. Mirrored so the courses meet
   // themselves at the seam as the wall curves right round the camera.
-  const brickTex = loadTiled('textures/brick.jpg', 6, 2, THREE.MirroredRepeatWrapping);
+  const brickTex = loadTiled('textures/brick.jpg', 6, 2, THREE.MirroredRepeatWrapping, 0x6b5f52);
   const worldTextures = { grass: grassTex, rock: rockTex, dirt: dirtTex, brick: brickTex };
   // Every story STAGE carves its own flat pad (level-layout law 1): the camp,
   // the dream field, the pit, and Jacob's tent interior. D4: the ground is a
@@ -731,8 +758,45 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
       if (disposed || signal?.aborted) return;
       storyDone = true;
     } catch (e) {
-      if (!isAbortError(e)) console.error('[joseph3d] story error', e);
+      if (isAbortError(e)) return;
+      console.error('[joseph3d] story error', e);
+      // A THROWN BEAT USED TO END THE GAME, SILENTLY.
+      //
+      // This catch logged and stopped. Whatever the beat was doing when it
+      // threw stayed exactly as it was: the letterbox down, the screen mid-fade
+      // (often fully black), the camera locked in an authored pose, and player
+      // input off — because every beat turns input off on the way IN and back on
+      // on the way OUT. There is no loop watching for this and no timeout, so
+      // the player sat looking at a black rectangle with a working pause menu
+      // and nothing else, forever. Only a page reload escaped it.
+      //
+      // Nothing about a story failure justifies taking the game away. Hand the
+      // frame back first, then get them somewhere they can act.
+      await recoverFromStoryFailure();
     }
+  }
+
+  // Put the screen, the camera and the controls back into a state a player can
+  // use. Every step is individually guarded: this runs BECAUSE something already
+  // threw, so it must not be able to throw again on the way out.
+  async function recoverFromStoryFailure() {
+    const safely = async (what, fn) => {
+      try { await fn(); } catch (error) { console.error(`[joseph3d] recovery step "${what}" failed`, error); }
+    };
+    if (disposed || signal?.aborted) return;
+    await safely('pose driver', () => director.setPoseDriver(null));
+    await safely('camera', () => director.release(1));
+    await safely('cutscene hud', () => hud.setCutscene?.(false));
+    await safely('letterbox', () => cinema.letterbox(false));
+    await safely('reveal', () => cinema.fade(false, 400));
+    await safely('input', () => setInput(true));
+    if (disposed || signal?.aborted) return;
+    // The checkpoint for the failed beat is already written, so the story map's
+    // Continue lands back here. Home is somewhere they can choose again —
+    // staying in a camp with no objective and no story left to run is not.
+    await safely('navigate home', () => app.navigate('home', {
+      loadError: { key: 'joseph', phase: 'story' },
+    }));
   }
 
   // --- per-frame ---
@@ -929,6 +993,10 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
       get contactShadows() { return contactShadows; },
       get activeStage() { return activeStage; },
       stageStats, storyEvents,
+      // The softlock recovery, exposed so a guard can drive it. Without a seam
+      // the only way to test it is to make a real beat throw mid-run, which is
+      // exactly the kind of check that ends up asserting nothing.
+      recoverFromStoryFailure,
     },
   };
 }

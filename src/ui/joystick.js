@@ -45,7 +45,17 @@ export class Joystick {
     window.addEventListener('resize', this._remeasure);
     window.addEventListener('orientationchange', this._remeasure);
     let id = null;
+    // A CONTROL THAT ANSWERS AND DOES NOTHING IS WORSE THAN ONE THAT IS GONE.
+    //
+    // The stick kept tracking the finger through every cutscene, every gated
+    // moment and every dialogue — the thumb followed, `active` went true, and
+    // the controller (disabled) ignored all of it. On a phone that reads as the
+    // game having frozen: the one control you can see is moving and the boy is
+    // not. It also sat under the dialogue box, so half the taps meant for
+    // "next" grabbed a stick that was not listening.
+    this._enabled = true;
     const set = (ev) => {
+      if (!this._enabled) return;
       if (!box) measure();
       let dx = ev.clientX - (box.left + box.width / 2);
       let dy = ev.clientY - (box.top + box.height / 2);
@@ -71,6 +81,21 @@ export class Joystick {
     this._onBlur = () => { id = null; this.reset(); };
     window.addEventListener('blur', this._onBlur);
     this._thumb = thumb;
+  }
+
+  /**
+   * Show/hide the stick with the controller that owns it. Hidden means gone:
+   * no paint, no pointers, and nothing under the dialogue box to mis-tap.
+   */
+  setEnabled(on) {
+    const next = !!on;
+    if (next === this._enabled) return;
+    this._enabled = next;
+    this.reset();
+    if (this.base) {
+      this.base.style.visibility = next ? '' : 'hidden';
+      this.base.style.pointerEvents = next ? '' : 'none';
+    }
   }
 
   // Zero the stick (input hardening — also called by the controller on
