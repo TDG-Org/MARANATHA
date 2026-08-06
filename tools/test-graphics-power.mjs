@@ -51,15 +51,53 @@ function slowFrames(graphics, count) {
   const homeSource = readFileSync(new URL('../src/screens/home/index.js', import.meta.url), 'utf8');
   assert.match(homeSource, /update\(\) \{\}/,
     'the flat home regained per-frame JS work');
-  // Exactly one rAF is allowed: the single-shot reveal that flips `is-in` after
-  // the first paint. Anything more is a private animation loop running outside
-  // the governor, which is how a "free" menu quietly costs a core.
-  assert.equal(
-    (homeSource.match(/requestAnimationFrame/g) || []).length, 1,
-    'the home gained a private rAF loop outside the frame governor',
-  );
+  // WHAT THIS RULE ACTUALLY MEANS: the flat menu may never run a private
+  // animation LOOP outside the frame governor. It was written as "exactly one
+  // requestAnimationFrame appears in the file", which is a proxy — and the
+  // proxy forbade the correct fix for a real defect. Coalescing a 1000Hz
+  // pointer stream into one style write per frame is a one-shot per burst and
+  // is strictly LESS work than writing on every raw event; banning it would
+  // have kept the drag jittery to satisfy a string count.
+  //
+  // So: no rAF callback may schedule another frame (that, and only that, is a
+  // loop), and anything scheduled must be cancellable on teardown.
   assert.match(homeSource, /requestAnimationFrame\(reveal\)/,
-    'the home’s one allowed rAF is no longer the single-shot reveal');
+    'the home lost the single-shot reveal that flips `is-in` after first paint');
+  assert.match(homeSource, /cancelAnimationFrame/,
+    'the home schedules frames it never cancels — one can outlive the screen');
+  {
+    // Brace-matched, not regex-bounded: a `[\s\S]*?` terminated by "newline
+    // then }" runs straight past a single-line arrow body and swallows the rest
+    // of the module, which reports a loop in code that has none.
+    const braceBody = (src, from) => {
+      const open = src.indexOf('{', from);
+      if (open < 0) return '';
+      let depth = 0;
+      for (let i = open; i < src.length; i += 1) {
+        if (src[i] === '{') depth += 1;
+        else if (src[i] === '}') { depth -= 1; if (depth === 0) return src.slice(open + 1, i); }
+      }
+      return '';
+    };
+    const bodies = [];
+    for (const m of homeSource.matchAll(/requestAnimationFrame\(\s*\(\)\s*=>/g)) {
+      bodies.push(braceBody(homeSource, m.index + m[0].length));
+    }
+    for (const m of homeSource.matchAll(/requestAnimationFrame\((\w+)\)/g)) {
+      const decl = homeSource.search(new RegExp(`(?:const|let|function)\\s+${m[1]}\\b`));
+      if (decl >= 0) bodies.push(braceBody(homeSource, decl));
+    }
+    assert.ok(bodies.length > 0, 'no animation-frame callback bodies were found to audit');
+    for (const body of bodies) {
+      assert.doesNotMatch(body, /requestAnimationFrame/,
+        'the home schedules an animation frame from inside an animation-frame '
+        + 'callback — that is a self-perpetuating loop running outside the governor');
+    }
+    assert.equal(
+      (homeSource.match(/requestAnimationFrame/g) || []).length <= 3, true,
+      'the home accumulated animation-frame call sites; each one needs a reason',
+    );
+  }
 
   // Every home keyframe must animate ONLY transform/opacity. Those are the two
   // properties the compositor animates by itself; anything else (the design's

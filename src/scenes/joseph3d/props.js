@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { mulberry32, canvasTexture, toonMat, mergeGeometries, dyeGeometry } from '../../engine/world.js';
+import { grassCapacity } from '../../systems/Graphics.js';
 
 // The camp PROP KIT (world-density skill): small makers + a layout assembler.
 // Everything repeated is instanced; every prop registers its colliders and
@@ -213,17 +214,79 @@ export function makePaths(spots, dirtTex = null) {
   return { mesh: group, colliders: [] };
 }
 
+// ONE BLADE: four rings narrowing to a tip, arcing forward as it rises.
+//
+// The tuft used to be `ConeGeometry(0.055, 0.5, 3)` — a cone with THREE radial
+// segments, which is a triangular spike and nothing else. Nate: "the grass
+// popping out, could use a little more work to look better, and not sharp
+// triangles randomly popping out of the ground." A three-sided cone standing
+// dead upright IS a sharp triangle; there was no other shape it could read as.
+//
+// A blade needs three things a cone cannot give: a TAPER (wide at the root,
+// nothing at the tip), a BEND (grass falls under its own weight — a straight
+// vertical is what makes a spike look like a spike), and a soft silhouette from
+// every angle, which only comes from several blades leaning different ways.
+function bladeGeometry() {
+  const RINGS = [
+    { y: 0.00, w: 0.50, z: 0.00 },
+    { y: 0.34, w: 0.38, z: 0.05 },
+    { y: 0.68, w: 0.22, z: 0.17 },
+    { y: 1.00, w: 0.00, z: 0.38 }, // the tip, closed to a point
+  ];
+  const pos = [];
+  const idx = [];
+  RINGS.forEach((r, i) => {
+    pos.push(-r.w, r.y, r.z, r.w, r.y, r.z);
+    if (i === 0) return;
+    const a = (i - 1) * 2;
+    const b = i * 2;
+    // The tip ring has zero width, so its two vertices coincide: emitting a
+    // quad there submits one triangle with no area, per blade, forever.
+    if (r.w === 0) idx.push(a, b, a + 1);
+    else idx.push(a, b, b + 1, a, b + 1, a + 1);
+  });
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+// A TUFT: five blades fanned around the root, each leaning and arcing its own
+// way. ~15 triangles, merged, so the whole meadow is still ONE draw call.
+function tuftGeometry(seed = 21) {
+  const rnd = mulberry32(seed);
+  const parts = [];
+  const N = 5;
+  for (let i = 0; i < N; i += 1) {
+    const g = bladeGeometry();
+    const width = 0.052 + rnd() * 0.028;
+    g.scale(width, 0.75 + rnd() * 0.45, width * 3.2);
+    g.rotateX(0.10 + rnd() * 0.26); // the lean; grass does not stand at attention
+    g.rotateY((i / N) * Math.PI * 2 + (rnd() - 0.5) * 0.7);
+    g.translate((rnd() - 0.5) * 0.05, 0, (rnd() - 0.5) * 0.05);
+    parts.push(g);
+  }
+  const merged = mergeGeometries(parts);
+  parts.forEach((p) => p.dispose());
+  return merged;
+}
+
 export function makeGrass(count = 90, span = 42, colliderWorld = null) {
-  // A tuft = a few blades; per-instance GREEN shade + height variation so the
-  // ground reads as a living meadow, not a repeated sprite (world-density).
-  const blade = new THREE.ConeGeometry(0.055, 0.5, 3);
-  blade.translate(0, 0.25, 0);
+  // Per-instance GREEN shade + height variation so the ground reads as a living
+  // meadow, not a repeated sprite (world-density).
+  const tuft = tuftGeometry();
   const rnd = mulberry32(77);
   const greens = [
     new THREE.Color(0x86a24f), new THREE.Color(0x6f8a3c),
     new THREE.Color(0x94a856), new THREE.Color(0x5f7a38), new THREE.Color(0xa8a552),
   ];
-  const mesh = new THREE.InstancedMesh(blade, toonMat(0xffffff), count); // white → tinted per-instance
+  // A blade is a thin strip with no inside: single-sided, half of every tuft
+  // would vanish depending on where the camera stood (the same defect the coat
+  // had). Grass is also the one prop the player walks THROUGH the middle of.
+  const mesh = new THREE.InstancedMesh(
+    tuft, toonMat(0xffffff, { side: THREE.DoubleSide }), count,
+  ); // white → tinted per-instance
   const d = new THREE.Object3D();
   let placed = 0, guard = 0;
   while (placed < count && guard++ < count * 8) {
@@ -232,9 +295,12 @@ export function makeGrass(count = 90, span = 42, colliderWorld = null) {
     if (colliderWorld && colliderWorld.overlaps(x, z, 0.3)) continue;
     const hgt = 0.55 + rnd() * 1.5;   // tuft height
     const wid = 0.8 + rnd() * 0.7;
-    d.position.set(x, 0, z);
+    // Rooted, not resting on the surface: the ground is gently undulating, so
+    // a tuft placed at exactly y=0 floats clear of every dip and shows its
+    // whole base — which is most of what "popping out of the ground" was.
+    d.position.set(x, -0.07, z);
     d.scale.set(wid, hgt, wid);
-    d.rotation.y = rnd() * Math.PI * 2;
+    d.rotation.set((rnd() - 0.5) * 0.2, rnd() * Math.PI * 2, (rnd() - 0.5) * 0.2);
     d.updateMatrix();
     mesh.setMatrixAt(placed, d.matrix);
     mesh.setColorAt(placed, greens[(rnd() * greens.length) | 0]);
@@ -243,7 +309,17 @@ export function makeGrass(count = 90, span = 42, colliderWorld = null) {
   mesh.count = placed;
   mesh.instanceMatrix.needsUpdate = true;
   if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-  return { mesh, colliders: [] };
+  // Density is a live quality lever: the buffer is filled once at the richest
+  // preset and only the drawn PREFIX changes, so Low↔High is a visible change
+  // in how lush the ground is with no rebuild and no extra draw call.
+  return {
+    mesh,
+    colliders: [],
+    // `fraction` is 0..1 of what was ALLOCATED (see Graphics.grassFraction).
+    setDensity(fraction) {
+      mesh.count = Math.max(8, Math.min(placed, Math.round(placed * fraction)));
+    },
+  };
 }
 
 // NATURAL BORDERS (level-layout law 5): the play space is enclosed by things
@@ -614,7 +690,9 @@ export function buildCamp(colliderWorld, tex = {}) {
     // come out). Two visible rocks close both mouths; nothing enters again.
     { x: 17.7, z: 7.5, scale: 1.3 }, { x: 17.7, z: 15.0, scale: 1.3 },
   ], colliderWorld, tex.rock));
-  addAll(makeGrass(180, 42, colliderWorld));
+  // Allocated at the richest preset; only the drawn prefix moves with quality.
+  const grass = makeGrass(grassCapacity(180), 42, colliderWorld);
+  addAll(grass);
 
-  return { group, fireEmitters, sway, pen, cameraBlockers, decorations };
+  return { group, fireEmitters, sway, pen, cameraBlockers, decorations, grass };
 }

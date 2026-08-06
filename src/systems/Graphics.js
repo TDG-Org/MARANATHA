@@ -68,12 +68,12 @@ const PROMOTE_SLOW_RATIO = 0.02;
 // the instant the button is pressed — no reload, which is the other half of the
 // same complaint.
 export const GRAPHICS_PRESETS = {
-  low: { label: 'Low', renderScale: 0.72, dprCap: 1, particleScale: 0.4, contactShadow: false, fogFar: 200, anisotropy: 1 },
+  low: { label: 'Low', renderScale: 0.72, dprCap: 1, particleScale: 0.4, grassScale: 0.45, contactShadow: false, fogFar: 200, anisotropy: 1 },
   // The pooled character shadows cost one change-gated draw for the whole
   // cast, so Medium can keep this grounding cue without restoring the old
   // 15-draw fan-out. Only Low removes it.
-  medium: { label: 'Medium', renderScale: 1.0, dprCap: 1.5, particleScale: 1.0, contactShadow: true, fogFar: 250, anisotropy: 4 },
-  high: { label: 'High', renderScale: 1.4, dprCap: 2, particleScale: 1.6, contactShadow: true, fogFar: 300, anisotropy: 4 },
+  medium: { label: 'Medium', renderScale: 1.0, dprCap: 1.5, particleScale: 1.0, grassScale: 1.0, contactShadow: true, fogFar: 250, anisotropy: 4 },
+  high: { label: 'High', renderScale: 1.4, dprCap: 2, particleScale: 1.6, grassScale: 1.5, contactShadow: true, fogFar: 300, anisotropy: 4 },
 };
 
 // The absolute ceiling on the drawing buffer, whatever preset and display are
@@ -95,6 +95,24 @@ export function targetPixelRatio(devicePixelRatio, graphics = Graphics) {
 const MAX_PARTICLE_SCALE = Math.max(
   ...Object.values(GRAPHICS_PRESETS).map((preset) => preset.particleScale),
 );
+const MAX_GRASS_SCALE = Math.max(
+  ...Object.values(GRAPHICS_PRESETS).map((preset) => preset.grassScale ?? 1),
+);
+
+/** Instances to ALLOCATE for ground cover, so density can move without a rebuild. */
+export function grassCapacity(base) {
+  return Math.max(8, Math.round(base * MAX_GRASS_SCALE));
+}
+
+/**
+ * The FRACTION of that allocation a preset should draw. Expressed against the
+ * capacity, not the design count — asking for "1.5x" of a buffer that was
+ * already sized at 1.5x silently clamps, which made Medium and High draw an
+ * identical 270 tufts.
+ */
+export function grassFraction(graphics = Graphics) {
+  return (graphics?.grassScale ?? 1) / MAX_GRASS_SCALE;
+}
 
 // Live settings may move both down and up. Allocate each tiny pooled backing
 // buffer once at the largest authored preset, then vary only its active prefix.
@@ -218,6 +236,7 @@ export class GraphicsSystem {
   get renderScale() { return this.preset.renderScale ?? 1; }
   get dprCap() { return this.preset.dprCap; }
   get particleScale() { return this.preset.particleScale; }
+  get grassScale() { return this.preset.grassScale ?? 1; }
   get contactShadow() { return this.preset.contactShadow; }
   get fogFar() { return this.preset.fogFar; }
   get anisotropy() { return this.preset.anisotropy; }

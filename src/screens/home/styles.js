@@ -72,7 +72,9 @@ export const UI_CSS = `
 .mr-stage [data-band="0"] { overflow: visible; }
 
 /* ---- the road, and the only place a drag may grab ---- */
-[data-roadwrap] { cursor: grab; touch-action: pan-y; }
+/* pan-y alone silently took pinch-zoom away from the map — the one surface a
+   low-vision player most wants to enlarge. Horizontal is still ours to drive. */
+[data-roadwrap] { cursor: grab; touch-action: pan-y pinch-zoom; }
 [data-roadwrap].is-grabbing { cursor: grabbing; }
 
 /* ---- chapter stops ---- */

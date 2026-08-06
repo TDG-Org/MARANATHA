@@ -12,7 +12,7 @@ import { MoodGrading, MOODS } from '../../engine/MoodGrading.js';
 import { Sequencer } from '../../engine/Sequencer.js';
 import { makeSmoke, makeEmbers, makeFireflies } from '../../engine/particles.js';
 import { CharacterFactory } from '../../engine/CharacterFactory.js';
-import { Graphics, particleCapacity } from '../../systems/Graphics.js';
+import { Graphics, grassFraction, particleCapacity } from '../../systems/Graphics.js';
 import { createCinema } from '../../ui/cinema.js';
 import { createVerseCard } from '../../ui/verseCard.js';
 import { createDialogue } from '../../ui/dialogue.js';
@@ -447,6 +447,10 @@ export function buildJoseph3D({ scene, camera, renderer, app, signal = null }) {
     embers.setActiveCount?.(graphics.particles(16));
     fireflies.setActiveCount?.(graphics.particles(26));
     dream.setParticleScale?.(graphics.particleScale);
+    // Ground cover is the most VISIBLE of the live levers — the difference
+    // between Low and High reads instantly as how lush the meadow is, which is
+    // what a quality setting is supposed to look like.
+    camp.grass?.setDensity?.(grassFraction(graphics));
     syncContactShadows(graphics);
   };
   const unsubscribeGraphics = Graphics.subscribe((graphics) => applyLiveGraphics(graphics));

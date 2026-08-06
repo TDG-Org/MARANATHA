@@ -330,24 +330,63 @@ export function buildHome({ app, params = {} }) {
   const lumEls = ['[data-lum]', '[data-lumglow]', '[data-lumring]', '[data-moonlight]']
     .map((sel) => stage.querySelector(sel))
     .filter(Boolean);
+
+  // ONE STYLE WRITE PER FRAME, NOT ONE PER EVENT.
+  //
+  // Nate: "when i drag and move to see more nodes and stories, it's still a bit
+  // gittery".
+  //
+  // A gaming mouse reports at 500-1000Hz and a trackpad fires a pointermove per
+  // touch sample, so on a 60Hz screen this rewrote the transform of the road,
+  // every parallax band and the four sun/moon elements up to sixteen times for
+  // a single frame the player could see. Fifteen of those were thrown away, and
+  // the one that survived was whichever event happened to land last — so the
+  // step between frames was uneven even though the hand was moving smoothly.
+  // That unevenness IS the jitter; it is not a cost problem, it is a sampling
+  // problem, and coalescing to the frame fixes both.
+  //
+  // Deliberately a one-shot per burst, never self-rescheduling: nothing here
+  // may become a private animation loop behind the frame governor.
+  let cameraFrame = 0;
+  const scheduleCamera = () => {
+    if (cameraFrame) return;
+    cameraFrame = requestAnimationFrame(() => {
+      cameraFrame = 0;
+      applyCamera(false);
+    });
+  };
   let lastTransition = null;
   let lastAtGate = null;
+  // WHOLE PIXELS, BUT WHOSE?
+  //
+  // Every moving layer used to be rounded to a whole STAGE pixel. The stage is
+  // then scaled to cover the viewport, so a stage pixel is not a screen pixel —
+  // and a parallax band moving at factor 0.2 only changed position once every
+  // five stage pixels of drag, which on screen is a background that lurches
+  // instead of gliding. Rounding to whole DEVICE pixels keeps the crispness the
+  // rule was written for and removes the stepping entirely.
+  let devicePx = 1;
+  const snap = (v) => Math.round(v * devicePx) / devicePx;
+
   function applyCamera(animate) {
+    // An eased focus move must not be stomped by a queued drag write a frame
+    // later — that write sets transition:none and the glide never plays.
+    if (cameraFrame) { cancelAnimationFrame(cameraFrame); cameraFrame = 0; }
     const transition = animate ? 'transform 680ms cubic-bezier(.22,.72,.2,1)' : 'none';
-    const x = Math.round(offset);
+    const x = offset;
     if (transition !== lastTransition) {
       lastTransition = transition;
       road.style.transition = transition;
       for (const layer of parallax) layer.el.style.transition = transition;
       for (const el of lumEls) el.style.transition = transition;
     }
-    road.style.transform = `translate3d(${x}px,0,0)`;
+    road.style.transform = `translate3d(${snap(x)}px,0,0)`;
     for (const layer of parallax) {
-      layer.el.style.transform = `translate3d(${Math.round(x * layer.factor)}px,0,0)`;
+      layer.el.style.transform = `translate3d(${snap(x * layer.factor)}px,0,0)`;
     }
     // The sun/moon travels with the farthest band so the hilltop crosses stay
     // silhouetted against it, and never slides under the story panel.
-    const dx = Math.max(Math.round(x * 0.05), Math.min(0, 540 - palette.lum.x));
+    const dx = Math.max(snap(x * 0.05), Math.min(0, 540 - palette.lum.x));
     for (const el of lumEls) {
       el.style.transform = `translate(-50%,-50%) translate3d(${dx}px,0,0)`;
     }
@@ -493,6 +532,10 @@ export function buildHome({ app, params = {} }) {
     }
     band.style.height = `${bandH}px`;
     scale = Math.max(bandH / DESIGN_H, vw / DESIGN_W);
+    // How many stage units make one physical pixel — recomputed here rather
+    // than read per frame, since neither the scale nor the display can change
+    // without a layout pass reaching this line.
+    devicePx = Math.max(1, scale * (window.devicePixelRatio || 1));
     visibleW = vw / scale;
     // Cover: centre what overflows horizontally, but bias the vertical crop
     // upward so the road keeps its distance from the era ribbon.
@@ -555,18 +598,19 @@ export function buildHome({ app, params = {} }) {
     const dx = (e.clientX - dragFrom) / scale;
     dragDist = Math.max(dragDist, Math.abs(dx));
     offset = clampOffset(dragBase + dx);
-    applyCamera(false);
+    scheduleCamera();
   };
   const onPointerUp = (e) => {
     if (!dragging) return;
     dragging = false;
     roadWrap.classList.remove('is-grabbing');
     roadWrap.releasePointerCapture?.(e.pointerId);
+    applyCamera(false); // land exactly where the hand let go, not a frame behind
   };
   const onWheel = (e) => {
     e.preventDefault();
     offset = clampOffset(offset - (e.deltaY + e.deltaX) * 1.4);
-    applyCamera(false);
+    scheduleCamera();
   };
 
   roadWrap.addEventListener('pointerdown', onPointerDown);
@@ -736,6 +780,8 @@ export function buildHome({ app, params = {} }) {
     disposed = true;
     closePanel?.();
     clearTimeout(revealTimer);
+    // A drag frame queued on the way out would run against a torn-down screen.
+    if (cameraFrame) { cancelAnimationFrame(cameraFrame); cameraFrame = 0; }
     window.removeEventListener('pointerdown', startBeds);
     window.removeEventListener('keydown', onKeyDown);
     document.removeEventListener('visibilitychange', syncMotion);
