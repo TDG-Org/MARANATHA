@@ -69,12 +69,12 @@ const PROMOTE_SLOW_RATIO = 0.02;
 // the instant the button is pressed — no reload, which is the other half of the
 // same complaint.
 export const GRAPHICS_PRESETS = {
-  low: { label: 'Low', renderScale: 0.72, dprCap: 1, particleScale: 0.4, grassScale: 0.45, contactShadow: false, fogFar: 200, anisotropy: 1 },
+  low: { label: 'Low', renderScale: 0.72, softwareScale: 0.5, dprCap: 1, particleScale: 0.4, grassScale: 0.45, contactShadow: false, fogFar: 200, anisotropy: 1 },
   // The pooled character shadows cost one change-gated draw for the whole
   // cast, so Medium can keep this grounding cue without restoring the old
   // 15-draw fan-out. Only Low removes it.
-  medium: { label: 'Medium', renderScale: 1.0, dprCap: 1.5, particleScale: 1.0, grassScale: 1.0, contactShadow: true, fogFar: 250, anisotropy: 4 },
-  high: { label: 'High', renderScale: 1.4, dprCap: 2, particleScale: 1.6, grassScale: 1.5, contactShadow: true, fogFar: 300, anisotropy: 4 },
+  medium: { label: 'Medium', renderScale: 1.0, softwareScale: 0.65, dprCap: 1.5, particleScale: 1.0, grassScale: 1.0, contactShadow: true, fogFar: 250, anisotropy: 4 },
+  high: { label: 'High', renderScale: 1.4, softwareScale: 0.9, dprCap: 2, particleScale: 1.6, grassScale: 1.5, contactShadow: true, fogFar: 300, anisotropy: 4 },
 };
 
 // The absolute ceiling on the drawing buffer, whatever preset and display are
@@ -90,7 +90,16 @@ export const MAX_PIXEL_RATIO = 2;
 export function targetPixelRatio(devicePixelRatio, graphics = Graphics) {
   const dpr = Number.isFinite(devicePixelRatio) && devicePixelRatio > 0 ? devicePixelRatio : 1;
   const preset = graphics?.preset || GRAPHICS_PRESETS.medium;
-  return Math.min(dpr * (preset.renderScale ?? 1), preset.dprCap, MAX_PIXEL_RATIO);
+  // A CPU-RASTERIZED CONTEXT STILL NEEDS THREE DIFFERENT PRESETS.
+  //
+  // The capability ceiling pinned Low, Medium and High to one ratio, so on the
+  // machine that FILED the "I cannot tell Low from High" complaint the setting
+  // stayed decorative — the one lever that would be unmissable was the one that
+  // machine was excluded from. These are all far below the hardware ladder and
+  // all cheaper than the old flat cap's neighbours, so a player who deliberately
+  // picks Low still gets the fastest thing the game can draw.
+  const scale = GPU.software ? (preset.softwareScale ?? 0.65) : (preset.renderScale ?? 1);
+  return Math.min(dpr * scale, preset.dprCap, MAX_PIXEL_RATIO);
 }
 
 const MAX_PARTICLE_SCALE = Math.max(
@@ -270,7 +279,13 @@ export class GraphicsSystem {
 
     // Clicking the currently selected preset is still an explicit request:
     // if adaptive quality shed DPR, this lets the player restore its full cap.
-    this._notify({ source: 'explicit', previous, name });
+    //
+    // `presetChanged` distinguishes THIS from the frame-rate and colour-grade
+    // buttons, which also notify 'explicit'. That mattered once already: a
+    // capability ceiling meant for a CPU-rasterized context was being lifted
+    // just by opening Settings and touching either of those. Only a deliberate
+    // quality choice may move a capability ceiling.
+    this._notify({ source: 'explicit', presetChanged: true, previous, name });
   }
 
   // Only FULL-RATE samples belong here (core/app.js excludes intentional eco

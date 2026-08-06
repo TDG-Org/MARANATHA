@@ -305,8 +305,20 @@ export function buildPitStage(tex = {}) {
     shrinkSkyLight(k) { skyLight.scale.setScalar(8 - 6.5 * k); }, // k 0→1 closes over him
     // The set itself is static — the beat animates the cast. The only thing
     // simulated here is the weeping.
-    update(dt = 0) {
-      if (!tearsOn || !(dt > 0)) return;
+    update(dtMs = 0) {
+      if (!tearsOn || !(dtMs > 0)) return;
+      // MILLISECONDS IN, SECONDS OUT. Every caller in this scene passes the
+      // frame pacer's dt, which is ~16.7 MILLISECONDS (framePacer clamps it at
+      // 100, which is itself the proof) — and the tear lives below are authored
+      // in seconds. Read as seconds, frame one drove every drop's remaining
+      // life to about -15.8 and parked it a kilometre under the world, so the
+      // whole effect drew eight invisible vertices, every frame, forever.
+      //
+      // I "verified" it by calling update(1/60) — feeding the probe the unit the
+      // code wanted instead of the unit the game sends. It reported 706 visible
+      // samples. The guard below pumps a REALISTIC ms dt for exactly that
+      // reason; a probe that supplies seconds passes today and proves nothing.
+      const dt = dtMs / 1000;
       // Fade in over the first moments so the first drop does not pop.
       tears.material.opacity = Math.min(0.95, tears.material.opacity + dt * 1.6);
       const FALL = 0.34;   // metres a drop travels before it is spent

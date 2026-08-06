@@ -861,6 +861,52 @@ console.log('Graphics quality and GPU power policy checks passed.');
   graphics.set('low');
   assert.equal(quality.ratio, ratios.low, 'Low did not shed pixels immediately');
 
+  // ...AND ON THE MACHINE THAT FILED THE COMPLAINT.
+  //
+  // The software capability ceiling pinned all three presets to one ratio, so on
+  // a CPU-rasterized context — which is what the reporter's own detector said he
+  // was on — Low, Medium and High still rendered the identical image. The one
+  // lever that would be unmissable was the one his machine was excluded from.
+  {
+    const { setGpuCapabilityForTest } = await import('../src/core/gpuCapability.js');
+    setGpuCapabilityForTest({ software: true, renderer: 'llvmpipe' });
+    try {
+      const soft = {};
+      const rendererSw = new RendererFake();
+      const gfx = new GraphicsSystem({ storage: new MemoryStorage() });
+      const qualitySw = new AdaptiveQuality(rendererSw, {
+        basePixelRatio: targetPixelRatio(ONE_X, gfx),
+        floor: 0.5,
+        startAt: 0.65, // exactly what core/app.js passes on a software context
+      });
+      gfx.subscribe((state, change) => qualitySw.setBase(targetPixelRatio(ONE_X, state), {
+        raise: change?.source === 'explicit',
+        repin: change?.presetChanged === true,
+      }));
+      for (const name of ['low', 'medium', 'high']) {
+        gfx.set(name);
+        soft[name] = qualitySw.ratio;
+      }
+      assert.ok(soft.low < soft.medium && soft.medium < soft.high,
+        `on a CPU-rasterized context the presets still collapse to one image — `
+        + `low=${soft.low} medium=${soft.medium} high=${soft.high}`);
+      assert.ok(soft.high <= 0.95,
+        `the software ladder must stay far below the hardware one (high=${soft.high})`);
+      // ...and the OTHER explicit buttons must still not lift the ceiling.
+      gfx.set('low');
+      const pinned = qualitySw.ratio;
+      gfx.setFrameRate('max');
+      gfx.setColourGrade(!gfx.colourGrade);
+      assert.equal(qualitySw.ratio, pinned,
+        'the frame-rate or colour-grade button moved a capability ceiling — only a '
+        + 'deliberate preset press may do that');
+      console.log(`graphics presets separate on SOFTWARE too: low ${soft.low} · medium `
+        + `${soft.medium} · high ${soft.high}`);
+    } finally {
+      setGpuCapabilityForTest({ software: false, renderer: '' });
+    }
+  }
+
   console.log(`graphics presets separate on a 1x display: low ${ratios.low} · medium `
     + `${ratios.medium} · high ${ratios.high}, applied live with no reload`);
 }

@@ -583,6 +583,47 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   await booted.disposeDeep();
 }
 
+// ── 8. A TIME UNIT MISMATCH IS INVISIBLE UNTIL IT IS NOT ────────────────────
+//
+// Nate asked for tears by name. They were built, they looked right in the diff,
+// and they drew NOTHING: the simulation is authored in seconds and every caller
+// in this scene passes the frame pacer's dt, which is ~16.7 MILLISECONDS. Frame
+// one drove each drop's remaining life to about -15.8 and parked it a kilometre
+// below the world, forever.
+//
+// It survived my own check because I pumped it with 1/60 — handing the probe
+// the unit the code wanted instead of the unit the game sends. So this guard
+// pumps a REALISTIC millisecond dt, and a version written the other way passes
+// today while proving nothing.
+{
+  const { buildPitStage } = await import('../src/scenes/joseph3d/pit.js');
+  const pit = buildPitStage({});
+  const head = { x: -62, y: 1.35, z: 6 };
+  pit.setTears(true, head);
+  const pos = pit.tears.geometry.getAttribute('position');
+  let visibleFrames = 0;
+  let nearHead = 0;
+  for (let i = 0; i < 600; i += 1) {
+    pit.update(16.7); // exactly what src/core/framePacer.js hands the scene
+    for (let k = 0; k < pos.count; k += 1) {
+      const y = pos.getY(k);
+      if (y <= -100) continue;
+      visibleFrames += 1;
+      // ...and falling from the eyes, not floating somewhere else entirely.
+      if (Math.hypot(pos.getX(k) - head.x, y - head.y, pos.getZ(k) - head.z) < 0.6) nearHead += 1;
+      break;
+    }
+  }
+  assert.ok(visibleFrames > 200,
+    `the tears drew nothing at the frame rate the game actually runs at `
+    + `(${visibleFrames}/600 frames had a drop above the world) — the simulation is `
+    + 'in seconds and the caller passes milliseconds');
+  assert.ok(nearHead > 150,
+    `tears rendered but not at the eyes (${nearHead} of ${visibleFrames} within 0.6u of the head)`);
+  console.log(`  tears: visible on ${visibleFrames}/600 real-dt frames, ${nearHead} of them at the eyes`);
+  pit.dispose();
+}
+
 console.log(
   'player traps passed: pause restores input in every scene (no scene answers '
   + '"is input on?" from the flag pause clears), a reset survives a running story, '

@@ -92,9 +92,19 @@ export class AdaptiveQuality {
   // Automatic preset changes update the ceiling but can never increase the
   // current drawing-buffer ratio. `raise` is reserved for an explicit player
   // selection, which may restore that preset's full base.
-  setBase(basePixelRatio, { raise = false } = {}) {
+  setBase(basePixelRatio, { raise = false, repin = false } = {}) {
     if (!Number.isFinite(basePixelRatio) || basePixelRatio <= 0) return;
     this.base = basePixelRatio;
+    // A DELIBERATE QUALITY CHOICE MAY MOVE THE CAPABILITY CEILING.
+    //
+    // The ceiling exists so a CPU-rasterized context cannot be handed a 12fps
+    // game by a stray Settings click — but pinned flat it also made Low, Medium
+    // and High render one identical image on exactly the machine that reported
+    // "i honestly cannot tell a single difference". The preset now asks for a
+    // software-scaled ratio of its own (0.50 / 0.65 / 0.90), and only a real
+    // preset press — never the frame-rate or colour-grade buttons, which also
+    // notify 'explicit' — re-pins the ceiling to it.
+    if (repin && this.hasCap) this.cap = Math.max(this.hardFloor, basePixelRatio);
     // Without a declared capability ceiling the cap simply tracks the base, or
     // a later display/zoom change would be clamped by a stale number.
     if (!this.hasCap) this.cap = this.base;

@@ -38,8 +38,14 @@ export function createApp(container) {
     if (!quality) return; // pre-engine: nothing rendering, nothing to cap
     const base = targetPixelRatio(dpr(), graphics);
     // Automatic demotion may only lower the current DPR. A player explicitly
-    // choosing a preset may restore that preset's complete DPR ceiling.
-    quality.setBase(base, { raise: change?.source === 'explicit' });
+    // choosing a preset may restore that preset's complete DPR ceiling — and,
+    // only for a real preset press, move a software capability ceiling to that
+    // preset's own software-scaled ratio, so the three presets stay visibly
+    // different on a CPU-rasterized context instead of collapsing into one.
+    quality.setBase(base, {
+      raise: change?.source === 'explicit',
+      repin: change?.presetChanged === true,
+    });
   });
   // Guard the aspect: a tab booted in the background can report 0×0 —
   // 0/0 = NaN would poison the projection matrix until the next resize.
