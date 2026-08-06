@@ -62,7 +62,15 @@ camp.group.updateMatrixWorld(true);
 const content = [];
 const scratchM = new THREE.Matrix4();
 const scratchV = new THREE.Vector3();
+// GRASS IS NOT CAMP. Ground cover is spread evenly over the whole map, so every
+// tuft counted as a point of "lived-in camp" adds roughly the same amount to
+// EVERY shot — including the ones aimed at nothing. It was 270 of 613 points,
+// 45% of the evidence, compressing the very difference this test exists to
+// measure. Excluded, and the floor re-derived against the excluded census
+// below rather than left at a number calibrated with it in.
+const grassMesh = camp.grass?.mesh ?? null;
 camp.group.traverse((o) => {
+  if (o === grassMesh) return;
   if (o.isInstancedMesh) {
     for (let i = 0; i < o.count; i++) {
       o.getMatrixAt(i, scratchM);
@@ -152,10 +160,24 @@ const IN_CAMP = (t) => Math.abs(t.x) < 26 && Math.abs(t.z) < 26;
 // the reported bug through, which is worth stating plainly: a guard that does
 // not fail on the case that prompted it is decoration.
 //
-// 165 fails the reported angle and passes every corrected one. The margin above
-// it is thin (180 vs 165), so if a legitimately tighter shot ever lands here,
-// widen the census or weight by screen area rather than quietly lowering this.
-const FLOOR = 165;
+// RE-DERIVED (D29) after grass was removed from the census. Ground cover was
+// 270 of 613 points and is spread evenly over the map, so it added roughly the
+// same amount to every shot — including the ones aimed at nothing — and
+// compressed the exact difference this test measures.
+//
+// Measured on the excluded census, same shots, nothing else changed:
+//     the reported bad angle (telling circle at pi) ...  31
+//     lowest passing shot (cold-open morning pan) ..... 109
+//     the rest ......................... 115 · 157 · 157 · 160 · 183 · 189
+//
+// 80 fails the reported bug by 49 and passes the tightest legitimate shot by
+// 29. If a genuinely tighter shot ever lands here, widen the census or weight
+// by screen area — do not quietly lower this.
+//
+// The two env hooks exist ONLY for re-deriving this number: set the floor to 0
+// to print every score, and skip the glare law (which correctly refuses to let
+// a known-bad angle get as far as being scored). Neither is read in normal runs.
+const FLOOR = Number(process.env.MR_BACKDROP_FLOOR || 80);
 
 const judged = shots.filter((s) => IN_CAMP(s.target));
 assert.ok(judged.length >= 1, `no in-camp authored shots were found to judge (${shots.length} parsed)`);
@@ -212,15 +234,18 @@ const herdCentroid = {
 };
 const groupShots = [
   {
-    beat: 'telling', line: 'gatherCircle planGroupCamera',
+    beat: 'telling', line: 'gatherCircle planGroupCamera', mood: 'tenseDay',
     ...circleShot(TELLING_CIRCLE_ANGLE, 5.7, 2.7, 1.2),
   },
   {
-    beat: 'camp', line: 'dusk fire planGroupCamera',
+    beat: 'camp', line: 'dusk fire planGroupCamera', mood: 'dusk',
     ...circleShot(DUSK_CIRCLE_ANGLE, 5.2, 2.25, 1.05),
   },
   {
-    beat: 'camp', line: 'planHerdDirectionCamera',
+    // The herd beat plays in the morning gold, NOT the dusk this used to be
+    // scored against — the mood was picked by the shot's index in this array,
+    // which is a fact about the list rather than about the shot.
+    beat: 'camp', line: 'planHerdDirectionCamera', mood: 'goldenHour',
     angle: 0, distance: 5.4, height: 2.25, lookHeight: 1.15, target: herdCentroid,
   },
 ];
@@ -265,8 +290,11 @@ const lookDot = ({ angle, target, distance, height, lookHeight }, sun) => {
   return new THREE.Vector3(target.x, lookHeight, target.z).sub(eye).normalize().dot(sun);
 };
 const INTO_THE_SUN = 0.35;
-const glare = groupShots
-  .map((s, i) => ({ s, dot: lookDot(s, sunOf(i === 0 ? 'tenseDay' : 'dusk')) }))
+// Calibration escape hatch: when deriving the backdrop floor we need the score
+// of a known-BAD angle, and the glare law (correctly) refuses to get that far.
+const SKIP_GLARE = process.env.MR_SKIP_GLARE === '1';
+const glare = SKIP_GLARE ? [] : groupShots
+  .map((s) => ({ s, dot: lookDot(s, sunOf(s.mood)) }))
   .filter(({ dot }) => dot > INTO_THE_SUN);
 assert.deepEqual(
   glare.map(({ s, dot }) => `${s.beat}.js ${s.line} -> dot(look,sun) ${dot.toFixed(2)}`),

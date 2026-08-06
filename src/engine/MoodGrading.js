@@ -123,6 +123,10 @@ export class MoodGrading {
         fogNear0: r.fog.near, fogNear1: m.fogNear,
         keyI0: r.keyLight.intensity, keyI1: m.keyI,
         hemi0: r.hemiLight.intensity, hemi1: m.hemi,
+        groundLift0: r.groundMat ? r.groundMat.emissiveIntensity : 0,
+        groundLift1: m.groundLift !== undefined
+          ? m.groundLift
+          : Math.max(0, Math.min(1, m.hemi * m.keyI * 1.2)),
       };
       if (ms <= 0) this._apply(1);
     });
@@ -156,10 +160,13 @@ export class MoodGrading {
       // thing it needs. `groundLift` on a mood row overrides outright.
       const hemi = tw.hemi0 + (tw.hemi1 - tw.hemi0) * k;
       const key = tw.keyI0 + (tw.keyI1 - tw.keyI0) * k;
-      const authored = this.moods[this.current]?.groundLift;
-      r.groundMat.emissiveIntensity = authored !== undefined
-        ? authored
-        : Math.max(0, Math.min(1, hemi * key * 1.2));
+      // Tweened, not snapped. Read straight from the mood, an authored value
+      // jumped to its target on frame 0 of a timed transition — so every fade
+      // into or out of the pit and the night popped the ground a step before
+      // the rest of the palette moved with it.
+      const target = tw.groundLift1;
+      const from = tw.groundLift0;
+      r.groundMat.emissiveIntensity = from + (target - from) * k;
     }
     // the sun ARCS across the day (direction re-shades the whole camp)
     r.keyLight.position.lerpVectors(this._fromSun, this._toSun, k);

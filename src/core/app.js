@@ -46,6 +46,16 @@ export function createApp(container) {
       raise: change?.source === 'explicit',
       repin: change?.presetChanged === true,
     });
+    // A NEW DRAWING BUFFER IS AN EMPTY ONE. Changing the pixel ratio
+    // reallocates it, and while the game is PAUSED the loop is stopped — so
+    // nothing ever draws into it and the player is left staring at a blank
+    // canvas behind the pause menu until they hit Resume. Settings is opened
+    // from the pause menu more than from anywhere else. onResize already
+    // repaints for exactly this reason; mirror it.
+    if (paused && current && !busy) {
+      paint();
+      pausedPainted = true;
+    }
   });
   // Guard the aspect: a tab booted in the background can report 0×0 —
   // 0/0 = NaN would poison the projection matrix until the next resize.

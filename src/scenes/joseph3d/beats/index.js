@@ -2,7 +2,7 @@ import { makeHelpers } from './helpers.js';
 import { makeColdOpen } from './coldOpen.js';
 import { makeCampBeats } from './camp.js';
 import { makeDreamBeat } from './dream.js';
-import { makeTellingBeats } from './telling.js';
+import { makeTellingBeats, TELLING_JOSEPH_MARK, JACOB_TELL_MARK } from './telling.js';
 
 // SCENE 1 — the story as a BEAT STATE MACHINE (game-architecture rule 2).
 // Eight beats in order; the player acts every 15–20s; displayed verses are
@@ -38,7 +38,18 @@ export function createBeats(ctx) {
     c.setStage?.('camp');
     c.hud.clearObjective?.();
     c.guide.setTarget(null);
-    const spawns = { 1: [2, 12.5], 2: [1, 1.5], 3: [-8.2, -4.6], 4: [-7.5, -4], 5: [1.4, -4.6], 6: [-6, -3], 7: [0.9, -4.1] };
+    // Beat 7's spawn READS the mark rather than copying its old value. When the
+    // fire circle was mirrored to the south arc, this literal (and Jacob's
+    // below) stayed on the pre-mirror side — so a checkpoint resume into the
+    // close staged Joseph and his father on one side of the fire and the four
+    // brothers on the other. planGroupCamera then found no audience-safe
+    // composition, the beat threw, and the story-failure recovery did its job
+    // and put the player back on the map. A player resuming the last beat of
+    // the chapter simply could not play it.
+    const spawns = {
+      1: [2, 12.5], 2: [1, 1.5], 3: [-8.2, -4.6], 4: [-7.5, -4], 5: [1.4, -4.6], 6: [-6, -3],
+      7: [TELLING_JOSEPH_MARK.x, TELLING_JOSEPH_MARK.z],
+    };
     const s = spawns[n] || [0, 12];
     c.joseph.setPosition(s[0], s[1]);
     c.camera.setTarget(c.joseph.position);
@@ -56,9 +67,10 @@ export function createBeats(ctx) {
         npc.char.play('kneel');
       });
       const jc = c.cast.jacob;
-      jc.char.setPosition(-2.6, -4.4); jc.pos.x = -2.6; jc.pos.z = -4.4;
+      jc.char.setPosition(JACOB_TELL_MARK.x, JACOB_TELL_MARK.z);
+      jc.pos.x = JACOB_TELL_MARK.x; jc.pos.z = JACOB_TELL_MARK.z;
       c.npcs.freeze(jc, true);
-      jc.char.turnToward(FIRE.x + 2.6, FIRE.z + 4.4);
+      jc.char.turnToward(FIRE.x - JACOB_TELL_MARK.x, FIRE.z - JACOB_TELL_MARK.z);
     }
     // Beat 5 owns both dream/day transitions and the first telling; beats 6–7
     // resume in the camp for the second telling and close.
