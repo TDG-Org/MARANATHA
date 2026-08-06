@@ -674,7 +674,7 @@ export function makeCampBeats(ctx, h) {
     await gate(() => new Promise((resolve) => {
       ctx.interactables.addPrompt({
         id: 'sit-fire', label: 'Sit by the fire',
-        x: 0.6, z: -4.4, r: 2.6, lift: 0.7,
+        x: DUSK_JOSEPH_MARK.x, z: DUSK_JOSEPH_MARK.z, r: 2.6, lift: 0.7,
         when: () => !sat,
         onInteract: advanceOnError(async () => {
           if (sat) return;

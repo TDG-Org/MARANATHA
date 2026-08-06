@@ -9,6 +9,9 @@ import { planGroupCamera } from './helpers.js';
 // the camp census and the mood's sun vector: backdrop 266 (floor 165) and
 // dot(look, sun) -0.81, against 83 and +0.62 at the pi it used to be.
 export const TELLING_CIRCLE_ANGLE = Math.PI * 0.12;
+// Jacob presides from the camera's side, opposite the seated brothers, clear of
+// every seat on the ring.
+export const JACOB_TELL_MARK = Object.freeze({ x: 2.6, z: -7.6 });
 export const TELLING_JOSEPH_MARK = Object.freeze({ x: -0.9, z: -7.9 });
 // Where Joseph ends the chapter, standing apart from the family.
 export const TELLING_LONE_MARK = Object.freeze({ x: -4.6, z: -2.0 });
@@ -132,7 +135,12 @@ export function makeTellingBeats(ctx, h) {
     }
 
     if (withJacob) {
-      jac.char.setPosition(-2.6, -4.4); jac.pos.x = -2.6; jac.pos.z = -4.4;
+      // MIRRORED WITH THE RING. Jacob was the one actor in the telling left on
+      // the pre-mirror side of the fire: after the seats moved to the south arc
+      // he stood 0.85u from Levi — inside his robe — in the frame that carries
+      // Genesis 37:10 and 37:11, the father's rebuke and the brothers' envy.
+      jac.char.setPosition(JACOB_TELL_MARK.x, JACOB_TELL_MARK.z);
+      jac.pos.x = JACOB_TELL_MARK.x; jac.pos.z = JACOB_TELL_MARK.z;
       ctx.npcs.freeze(jac, true);
       jac.char.turnToward(FIRE.x - jac.pos.x, FIRE.z - jac.pos.z);
     }

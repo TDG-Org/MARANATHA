@@ -158,6 +158,10 @@ export function createDialogue({ signal = null, isPaused = null } = {}) {
     box.style.transform = 'translateX(-50%) translateY(12px)';
     history.length = 0; // conversation over — clear the re-read history
     backBtn.style.visibility = 'hidden';
+    // ▸ is a real button now, so a hidden box left an invisible control called
+    // "Continue" sitting in the tab order for a keyboard or screen-reader user
+    // to land on, doing nothing. Back was already hidden here; this was not.
+    hint.style.visibility = 'hidden';
     if (onKey) { window.removeEventListener('keydown', onKey); onKey = null; }
   };
 
@@ -215,6 +219,7 @@ export function createDialogue({ signal = null, isPaused = null } = {}) {
     choicesEl.textContent = '';
     hint.style.display = 'inline-flex';
     hint.style.alignItems = 'center';
+    hint.style.visibility = 'visible';
     hint.textContent = 'Next ▸'; // a new line always starts live, never mid-re-read
     history.push({ speaker, text, color });
     srLog.textContent = speaker ? `${speaker}: ${text}` : text;

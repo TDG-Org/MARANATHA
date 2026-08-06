@@ -17,6 +17,7 @@ import {
   TELLING_AMBIENT_KEYS,
   TELLING_AMBIENT_SLOTS,
   TELLING_RING_SEATS,
+  TELLING_FIRE,
   tellingRingXZ,
   makeHelpers,
   planDialogueCamera,
@@ -38,6 +39,7 @@ import {
 } from '../src/scenes/joseph3d/beats/camp.js';
 import {
   TELLING_JOSEPH_MARK,
+  JACOB_TELL_MARK,
 } from '../src/scenes/joseph3d/beats/telling.js';
 
 const PORTRAIT = 390 / 844;
@@ -453,15 +455,16 @@ assert.ok(calls[1].distance >= 3.2, 'two-shot bypassed the distance floor');
 
 // The real telling-circle orbit -> Judah reply formerly took a straight chord
 // within ~0.65u of Joseph's head. The arc must remain outside every actor.
-const FIRE = { x: 0, z: -6 };
-const ring = (a) => ({ x: Math.cos(a) * 2.2, y: 0, z: -6 + Math.sin(a) * 2.2 });
+// THE SECOND COPY. The top of this file was de-duplicated against the exported
+// seats; this block, 350 lines further down, kept its own hard-coded circle —
+// so every over-the-shoulder camera in the telling (Judah's scorn, Jacob's
+// rebuke, the closing envy shot) was certified safe against a staging that
+// exists nowhere in the game. One source, everywhere, or the guard drifts again.
+const FIRE = TELLING_FIRE;
 const cast = {
-  joseph: { x: 0.9, y: 0, z: -4.1 },
-  judah: ring(3.4),
-  reuben: ring(4.15),
-  simeon: ring(5.0),
-  levi: ring(5.75),
-  jacob: { x: -2.6, y: 0, z: -4.4 },
+  joseph: { ...TELLING_JOSEPH_MARK, y: 0 },
+  ...Object.fromEntries(TELLING_RING_SEATS.map(([who, angle]) => [who, { ...tellingRingXZ(angle), y: 0 }])),
+  jacob: { ...JACOB_TELL_MARK, y: 0 },
 };
 const authoredReplies = [
   ['joseph', 'judah', 0.4, 3.2, 2.15],
@@ -590,9 +593,14 @@ assert.ok(
     aspect: DESKTOP,
   });
   const speakerBounds = fullHeadBounds(fixturePlan, cast.joseph, 1.65, DESKTOP);
+  // The historical blocker, MIRRORED with the circle it stood in. This spot was
+  // tuned against the pre-mirror staging, so once the cast above started reading
+  // the real marks the fixture stopped reproducing the very block it exists to
+  // prove the guard catches — a fixture that no longer reproduces its bug is a
+  // guard testing nothing.
   const oldWorkerBounds = fullHeadBounds(
     fixturePlan,
-    { x: 0.15, y: 0, z: -4.5 },
+    { x: -0.15, y: 0, z: -7.5 },
     1.65,
     DESKTOP,
   );
