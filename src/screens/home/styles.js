@@ -114,7 +114,150 @@ export const UI_CSS = `
 /* The chapter panel and the era ribbon sit OVER the map, so they have to catch
    the pointer themselves — otherwise a drag started on the blurb would grab the
    road underneath them. Everything else in the overlay stays transparent. */
-.mr-panel, .mr-ribbon-row { pointer-events: auto; }
+.mr-panel, .mr-ribbon-row, .mr-modes, .mr-et-panel { pointer-events: auto; }
+
+/* ---- the two modes ------------------------------------------------------
+   Three states on one screen: the chooser, the Bible story map, END TIMES.
+   Everything here fades on OPACITY only — the regions that are not live are
+   also inert (see index.js), which is what actually takes them out of the
+   tab order and the accessibility tree. No new keyframes: nothing on this
+   screen may start running forever because a card was added to it. */
+.mr-modes { opacity: 0; }
+.mr-home.is-choosing .mr-modes { opacity: 1; }
+.mr-panel, .mr-ribbon-row, [data-roadwrap] { transition: opacity 420ms ease; }
+.mr-home:not(.is-bible) .mr-panel,
+.mr-home:not(.is-bible) .mr-ribbon-row,
+.mr-home:not(.is-bible) [data-roadwrap] { opacity: 0; }
+.mr-et-panel { opacity: 0; }
+.mr-home.is-endtimes .mr-et-panel { opacity: 1; }
+.mr-modes, .mr-et-panel { transition: opacity 420ms ease; }
+
+/* the ash wash END TIMES is read through — one composited layer, no blur */
+.mr-scrim {
+  position: absolute; inset: 0; pointer-events: none; z-index: 1;
+  background: radial-gradient(120% 90% at 50% 40%, rgba(10,12,16,.5) 0%, rgba(6,7,10,.88) 100%);
+  opacity: 0; transition: opacity 520ms ease;
+}
+.mr-home.is-endtimes .mr-scrim { opacity: 1; }
+
+.mr-modes {
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%,-50%);
+  width: min(92vw, calc(880px * var(--u)));
+  display: flex; flex-direction: column; align-items: center;
+  gap: calc(20px * var(--u));
+}
+.mr-modes-prompt {
+  font: 400 max(9.5px, calc(12.5px * var(--u))) 'Segoe UI', system-ui, sans-serif;
+  letter-spacing: .24em; text-transform: uppercase;
+  color: rgba(253,246,227,.6); text-align: center;
+  text-shadow: 0 2px 10px rgba(4,14,22,.8);
+}
+.mr-modes-row { display: flex; gap: calc(20px * var(--u)); width: 100%; align-items: stretch; }
+.mr-mode {
+  flex: 1 1 0; min-width: 0; box-sizing: border-box; min-height: 44px;
+  display: flex; flex-direction: column; align-items: flex-start;
+  gap: calc(7px * var(--u)); text-align: left; cursor: pointer;
+  padding: calc(25px * var(--u)) calc(25px * var(--u)) calc(21px * var(--u));
+  border-radius: calc(16px * var(--u));
+  transition: transform 240ms cubic-bezier(.2,.8,.3,1), box-shadow 300ms ease,
+              background 240ms ease, border-color 240ms ease;
+}
+.mr-mode:hover { transform: translateY(-4px); }
+.mr-mode:active { transform: translateY(-1px); }
+.mr-mode:focus { outline: none; }
+.mr-mode:focus-visible { outline: 3px solid #fff6e6; outline-offset: 4px; }
+
+/* LEFT — the existing warm look, because it opens the world already built */
+.mr-mode-bible {
+  background: linear-gradient(160deg, rgba(54,39,23,.92) 0%, rgba(25,19,13,.93) 100%);
+  border: 1px solid rgba(255,232,190,.34);
+  box-shadow: 0 16px 40px rgba(0,0,0,.34), inset 0 1px 0 rgba(255,246,226,.14);
+}
+.mr-mode-bible:hover {
+  border-color: rgba(255,232,190,.78);
+  box-shadow: 0 20px 46px rgba(0,0,0,.4), 0 0 0 1px rgba(255,210,138,.34), inset 0 1px 0 rgba(255,246,226,.2);
+}
+/* RIGHT — ash and ember. The tonal seed for the mode, nothing more. */
+.mr-mode-end {
+  background: linear-gradient(160deg, rgba(17,19,24,.95) 0%, rgba(8,9,12,.96) 100%);
+  border: 1px solid rgba(198,206,216,.16);
+  box-shadow: 0 16px 40px rgba(0,0,0,.5), inset 0 1px 0 rgba(210,220,232,.07);
+}
+.mr-mode-end:hover {
+  border-color: rgba(214,120,64,.6);
+  box-shadow: 0 20px 46px rgba(0,0,0,.56), 0 0 0 1px rgba(196,88,38,.32), inset 0 1px 0 rgba(210,220,232,.1);
+}
+.mr-mode-kicker {
+  font: 600 max(9.5px, calc(10.5px * var(--u))) 'Segoe UI', system-ui, sans-serif;
+  letter-spacing: .26em; text-transform: uppercase;
+}
+.mr-mode-bible .mr-mode-kicker { color: rgba(255,214,150,.82); }
+.mr-mode-end .mr-mode-kicker { color: rgba(212,146,106,.82); }
+.mr-mode-name { font: 400 calc(33px * var(--u)) Georgia, 'Times New Roman', serif; line-height: 1.08; }
+.mr-mode-bible .mr-mode-name { color: #ffeccd; }
+.mr-mode-end .mr-mode-name { color: #eae6e0; letter-spacing: .07em; }
+.mr-mode-rule { width: calc(42px * var(--u)); height: 2px; margin: calc(5px * var(--u)) 0; }
+.mr-mode-bible .mr-mode-rule { background: #f2b880; }
+.mr-mode-end .mr-mode-rule { background: #b4522a; }
+.mr-mode-line {
+  font: italic 400 max(12px, calc(14.5px * var(--u)))/1.55 Georgia, serif;
+  color: rgba(253,246,227,.84); text-wrap: pretty;
+}
+.mr-mode-end .mr-mode-line { color: rgba(226,228,232,.72); }
+.mr-mode-meta {
+  font: 600 max(9px, calc(10px * var(--u))) 'Segoe UI', system-ui, sans-serif;
+  letter-spacing: .18em; text-transform: uppercase; color: rgba(253,246,227,.46);
+}
+.mr-mode-end .mr-mode-meta { color: rgba(214,218,224,.42); }
+.mr-mode-go {
+  margin-top: calc(9px * var(--u));
+  font: 700 max(11px, calc(12.5px * var(--u))) 'Segoe UI', system-ui, sans-serif;
+  letter-spacing: .16em; text-transform: uppercase;
+}
+.mr-mode-bible .mr-mode-go { color: #ffd28a; }
+.mr-mode-end .mr-mode-go { color: #d98a56; }
+
+/* ---- END TIMES: the placeholder, in the shared panel vocabulary ---- */
+.mr-et-panel {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%);
+  width: min(92vw, calc(560px * var(--u))); box-sizing: border-box;
+  display: flex; flex-direction: column; align-items: flex-start;
+  padding: calc(30px * var(--u));
+  border-radius: calc(18px * var(--u));
+  background: linear-gradient(160deg, rgba(17,19,24,.93) 0%, rgba(8,9,12,.96) 100%);
+  border: 1px solid rgba(198,206,216,.16);
+  box-shadow: 0 24px 60px rgba(0,0,0,.55), inset 0 1px 0 rgba(210,220,232,.07);
+}
+.mr-et-panel .mr-era { background: rgba(212,146,106,.9); color: #17120e; }
+.mr-et-panel .mr-story-title { color: #ece8e2; letter-spacing: .09em; }
+.mr-et-panel .mr-passage { color: rgba(214,218,224,.5); }
+.mr-et-panel .mr-rule { background: #b4522a; }
+.mr-et-panel .mr-blurb { color: rgba(228,230,234,.82); min-height: 0; }
+.mr-et-panel .mr-state { color: rgba(214,218,224,.5); }
+.mr-et-panel .mr-start { margin-top: calc(20px * var(--u)); }
+
+/* ---- back to the chooser ---- */
+.mr-back {
+  position: absolute;
+  /* floored clear of the About/Support links above it, which stop scaling
+     down at u=0.62 while a purely scaled offset keeps shrinking */
+  top: max(calc(70px * var(--u) + env(safe-area-inset-top)), calc(64px + env(safe-area-inset-top)));
+  left: calc(24px * var(--u) + env(safe-area-inset-left));
+  display: inline-flex; align-items: center; min-height: 44px;
+  padding: 10px 16px; box-sizing: border-box;
+  border-radius: calc(11px * var(--u)); cursor: pointer;
+  font: 600 max(10.5px, calc(11.5px * var(--u))) 'Segoe UI', system-ui, sans-serif;
+  letter-spacing: .14em; text-transform: uppercase; color: #fdf6e3;
+  background: rgba(6,18,26,.62); border: 1px solid rgba(255,255,255,.14);
+  opacity: 0;
+  transition: opacity 300ms ease, background 180ms ease, border-color 180ms ease, transform 180ms ease;
+}
+.mr-home:not(.is-choosing) .mr-back { opacity: 1; }
+.mr-back:hover { background: rgba(18,42,51,.85); border-color: rgba(255,232,190,.5); transform: translateX(-2px); }
+.mr-home.is-endtimes .mr-back { background: rgba(14,16,20,.74); border-color: rgba(198,206,216,.18); }
+.mr-home.is-endtimes .mr-back:hover { border-color: rgba(214,120,64,.55); }
+
 
 .mr-titleblock {
   position: absolute; left: 0; right: 0; top: calc(42px * var(--u));
@@ -343,5 +486,37 @@ export const UI_CSS = `
   /* floored below the persistent #volume box: its 44px coarse-pointer button
      reaches ~y52, and 52px*u at u=0.62 put the gear underneath it */
   top: max(calc(52px * var(--u) + env(safe-area-inset-top)), calc(58px + env(safe-area-inset-top)));
+}
+
+/* ---- stacked: the two modes read as a column ---- */
+/* Side by side, the cards are ~46vw each on a phone — a 33px serif title in
+   that column wraps to three lines and the pair overflows a landscape phone.
+   They stack, and the copy tightens with them. */
+.mr-home.is-stacked .mr-modes {
+  width: min(94vw, 460px); gap: calc(13px * var(--u));
+}
+.mr-home.is-stacked .mr-modes-row { flex-direction: column; gap: calc(13px * var(--u)); }
+.mr-home.is-stacked .mr-mode {
+  /* flex:1 1 0 gives the two cards equal WIDTHS while the row is a row.
+     Turned on its side that basis becomes the HEIGHT, and with no free space
+     to grow into both cards collapsed to their 44px minimum — the whole card
+     content, on every phone. Stacked, they size to what is in them. */
+  flex: 0 0 auto;
+  padding: calc(17px * var(--u)) calc(18px * var(--u)) calc(15px * var(--u));
+  gap: calc(4px * var(--u));
+}
+.mr-home.is-stacked .mr-mode-name { font-size: calc(26px * var(--u)); }
+.mr-home.is-stacked .mr-mode-rule { margin: calc(3px * var(--u)) 0; }
+.mr-home.is-stacked .mr-mode-go { margin-top: calc(5px * var(--u)); }
+/* A short landscape phone has no room for the card blurb once both cards are
+   stacked; the name, the meta line and the go label still say what each is. */
+@media (max-height: 460px) {
+  .mr-home.is-stacked .mr-mode-line { display: none; }
+}
+.mr-home.is-stacked .mr-et-panel { width: min(94vw, 460px); padding: calc(21px * var(--u)); }
+.mr-home.is-stacked .mr-back {
+  /* clears the stacked title block, which sits centred at the very top */
+  top: max(calc(56px * var(--u) + env(safe-area-inset-top)), calc(62px + env(safe-area-inset-top)));
+  left: calc(12px + env(safe-area-inset-left));
 }
 `;

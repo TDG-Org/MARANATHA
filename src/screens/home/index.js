@@ -92,6 +92,9 @@ export function buildHome({ app, params = {} }) {
   const quiet = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false;
 
   const isBuilt = (story) => !!(story.sceneKey && app.hasScreen(story.sceneKey));
+  // Said on the Bible card, so the promise on it is the live one rather than a
+  // number that quietly goes stale the next time a scene lands.
+  const builtCount = STORIES.filter(isBuilt).length;
   const atlas = buildAtlas(isBuilt);
   atlas.nodes.forEach((n) => { n.status = statusOf(n.id); });
   const gateNode = atlas.nodes[atlas.reachIndex];
@@ -146,6 +149,13 @@ export function buildHome({ app, params = {} }) {
   band.append(stage);
   root.append(band);
 
+  // The ash veil END TIMES is read through. A flat composited layer rather than
+  // a blur: the vista behind it keeps its shape, and a colour wash costs one
+  // layer where a full-screen convolution costs the whole viewport every frame.
+  const scrim = document.createElement('div');
+  scrim.className = 'mr-scrim';
+  root.append(scrim);
+
   // ---- the road ------------------------------------------------------------
   const roadWrap = stage.querySelector('[data-roadwrap]');
   const road = stage.querySelector('[data-road]');
@@ -178,6 +188,43 @@ export function buildHome({ app, params = {} }) {
     <div class="mr-titleblock">
       <div class="mr-title">MARANATHA</div>
       <div class="mr-tagline"><i></i><span>A Bible game — walk through the Bible</span><i></i></div>
+    </div>
+
+    <button type="button" class="mr-back" data-back>‹&nbsp; All modes</button>
+
+    <div class="mr-modes">
+      <div class="mr-modes-prompt">Choose where to begin</div>
+      <div class="mr-modes-row">
+        <button type="button" class="mr-mode mr-mode-bible" data-mode="bible">
+          <span class="mr-mode-kicker">The true story</span>
+          <span class="mr-mode-name">Bible Stories</span>
+          <span class="mr-mode-rule"></span>
+          <span class="mr-mode-line">Walk through the Bible as it happens, chapter by chapter.</span>
+          <span class="mr-mode-meta">Genesis onward · ${builtCount} ready to play</span>
+          <span class="mr-mode-go">Enter&nbsp; ▸</span>
+        </button>
+        <button type="button" class="mr-mode mr-mode-end" data-mode="endtimes">
+          <span class="mr-mode-kicker">Original story</span>
+          <span class="mr-mode-name">END TIMES</span>
+          <span class="mr-mode-rule"></span>
+          <span class="mr-mode-line">The same world, in a darker light. Being written now.</span>
+          <span class="mr-mode-meta">In development</span>
+          <span class="mr-mode-go">Take a look&nbsp; ▸</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="mr-et-panel">
+      <div class="mr-panel-top">
+        <span class="mr-era">Original story</span>
+      </div>
+      <h1 class="mr-story-title">END TIMES</h1>
+      <div class="mr-passage">Matthew 24 · 1 Thessalonians 4</div>
+      <div class="mr-rule"></div>
+      <p class="mr-blurb">An original story, told in the same world and the same
+        engine — in a darker light. It is being written now.</p>
+      <div class="mr-state">In development — not yet playable.</div>
+      <button type="button" class="mr-start is-locked" disabled>🔒&nbsp; Coming soon</button>
     </div>
 
     <div class="mr-panel">
@@ -634,6 +681,9 @@ export function buildHome({ app, params = {} }) {
   });
 
   ui.addEventListener('click', (e) => {
+    const modeBtn = e.target.closest?.('[data-mode]');
+    if (modeBtn) { Audio.uiClick(); setMode(modeBtn.dataset.mode, true); return; }
+    if (e.target.closest?.('[data-back]')) { Audio.uiClick(); setMode('choose', true); return; }
     const nav = e.target.closest?.('[data-nav]');
     if (nav) { step(nav.dataset.nav === 'next' ? 1 : -1); return; }
     const chip = e.target.closest?.('[data-era]');
@@ -669,6 +719,11 @@ export function buildHome({ app, params = {} }) {
     // window-level handler must stand down with it, or arrows kept stepping
     // chapters (with an audible click) behind the open panel.
     if (root.inert || root.classList.contains('mr-behind-panel')) return;
+    // Escape backs out of a mode the same way the button does.
+    if (e.key === 'Escape' && mode !== 'choose') { e.preventDefault(); setMode('choose', true); return; }
+    // The arrows steer the story map, so they only exist while it is the live
+    // mode — otherwise they stepped chapters, audibly, behind the chooser.
+    if (mode !== 'bible') return;
     if (e.key === 'ArrowRight') { e.preventDefault(); step(1); }
     else if (e.key === 'ArrowLeft') { e.preventDefault(); step(-1); }
   };
@@ -727,16 +782,68 @@ export function buildHome({ app, params = {} }) {
   // watching. Hidden tabs are already stopped by the browser; an UNFOCUSED but
   // visible window is not, and that is exactly the second-monitor case. Both
   // stop here, and the motion picks up where it left off on the way back.
+  //
+  // Two independent reasons to park, kept as separate flags on purpose: an
+  // About panel opened from END TIMES must not un-park the vista when it
+  // closes. A single boolean did exactly that.
   let panelParked = false;
+  let modeParked = false;
   const syncMotion = (forcePark) => {
     if (disposed) return;
     if (typeof forcePark === 'boolean') panelParked = forcePark;
-    root.classList.toggle('mr-still', panelParked || document.hidden || !document.hasFocus());
+    root.classList.toggle('mr-still', panelParked || modeParked || document.hidden || !document.hasFocus());
   };
   document.addEventListener('visibilitychange', syncMotion);
   window.addEventListener('blur', syncMotion);
   window.addEventListener('focus', syncMotion);
   syncMotion();
+
+  // ---- the two modes -------------------------------------------------------
+  // The home opens on the chooser; the story map and the END TIMES card are
+  // both revealed FROM it, and a back control returns to it. One screen, three
+  // states — not three screens: navigating away would dispose this home and
+  // take its music and its painted vista with it.
+  //
+  // Regions outside the live mode are faded AND `inert`. Fading alone leaves
+  // their buttons in the tab order and in the accessibility tree, so a hidden
+  // story map would still answer a keyboard press — the same contract the
+  // pause overlay and the About/Support panels already keep.
+  const modesEl = ui.querySelector('.mr-modes');
+  const etPanel = ui.querySelector('.mr-et-panel');
+  const backBtn = ui.querySelector('[data-back]');
+  const bibleParts = [ui.querySelector('.mr-panel'), ui.querySelector('.mr-ribbon-row'), roadWrap];
+  let mode = null;
+
+  function setMode(next, userInitiated = false) {
+    if (mode === next) return;
+    mode = next;
+    const choosing = next === 'choose';
+    root.classList.toggle('is-choosing', choosing);
+    root.classList.toggle('is-bible', next === 'bible');
+    root.classList.toggle('is-endtimes', next === 'endtimes');
+
+    // ORDER MATTERS, IN BOTH DIRECTIONS. Clear inert first, THEN move focus:
+    // `focus()` on an element still inside an inert subtree is a silent no-op,
+    // so focusing before this ran left the keyboard on the screen wrapper with
+    // nothing selected. And focus has to move at all, because inerting the
+    // region the player just came from drops focus to <body> and strands the
+    // tab order — the same contract the pause overlay and About/Support keep.
+    modesEl.inert = !choosing;
+    etPanel.inert = next !== 'endtimes';
+    backBtn.inert = choosing;
+    for (const el of bibleParts) if (el) el.inert = next !== 'bible';
+    if (userInitiated) {
+      const target = choosing
+        ? modesEl.querySelector('[data-mode]')
+        : next === 'bible' ? (startBtn.disabled ? backBtn : startBtn) : backBtn;
+      target?.focus?.();
+    }
+
+    // END TIMES is a still, dark panel. Park the vista under it rather than
+    // asking the compositor for a hundred layers a frame behind a veil.
+    modeParked = next === 'endtimes';
+    syncMotion();
+  }
 
   // ---- audio ---------------------------------------------------------------
   // Build and prepaint stay silent behind the veil; the soundscape starts only
@@ -766,6 +873,10 @@ export function buildHome({ app, params = {} }) {
     || atlas.nodes.find((n) => n.built)
     || atlas.nodes[0];
   selectStory(current.id, false);
+  // The chooser is the front door. The one exception is a story that failed to
+  // load: the player was already on their way somewhere, and the retry notice
+  // belongs beside the map it came from, not behind a mode card.
+  setMode(params.loadError ? 'bible' : 'choose');
   // Fade in on the next frame so the transition has a starting value. A tab
   // that is still hidden gets no frames, so a timer backs it up — the map must
   // never be left sitting at opacity 0.
