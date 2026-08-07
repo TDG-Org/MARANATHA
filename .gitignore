@@ -41,6 +41,14 @@ TRIED.md
 # local only, and never one `git add -A` away from the public repo.
 .devfleet/
 
+# --- The story bible (LOCAL ONLY, IRREPLACEABLE) ---
+# /story/ is the END TIMES canon: plot, characters, fates, scene scripts.
+# It is private and it is NOT backed up by this repo. Never publish it, and
+# never run `git clean -fd` (or any destructive clean) here — an ignored,
+# untracked folder is exactly what those commands delete. Leading slash =
+# the repo-root folder only.
+/story/
+
 # --- Nate's private control panel + drop zone (LOCAL ONLY) ---
 # Instructions/to-do for Nate now live at nate-drop/NATE.md beside the files.
 # Never published — the public repo shows none of this.
